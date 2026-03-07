@@ -67,10 +67,22 @@ const elements = {
   aircraftSortDirection: document.querySelector('#aircraft-sort-direction'),
   aircraftListMeta: document.querySelector('#aircraft-list-meta'),
   aircraftList: document.querySelector('#aircraft-list'),
+  aircraftRegTransparencyTrigger: document.querySelector('#aircraft-reg-transparency-trigger'),
+  aircraftRegTransparencyModal: document.querySelector('#aircraft-reg-transparency-modal'),
+  aircraftRegTransparencyBackdrop: document.querySelector('#aircraft-reg-transparency-backdrop'),
+  aircraftRegTransparencyClose: document.querySelector('#aircraft-reg-transparency-close'),
+  aircraftRegTransparencySummary: document.querySelector('#aircraft-reg-transparency-summary'),
+  aircraftRegTransparencySearch: document.querySelector('#aircraft-reg-transparency-search'),
+  aircraftRegTransparencyFilter: document.querySelector('#aircraft-reg-transparency-filter'),
+  aircraftRegTransparencyMeta: document.querySelector('#aircraft-reg-transparency-meta'),
+  aircraftRegTransparencyRows: document.querySelector('#aircraft-reg-transparency-rows'),
+  aircraftRegTransparencyPrev: document.querySelector('#aircraft-reg-transparency-prev'),
+  aircraftRegTransparencyNext: document.querySelector('#aircraft-reg-transparency-next'),
+  aircraftRegTransparencyPageLabel: document.querySelector('#aircraft-reg-transparency-page-label'),
 };
 
-const AIRCRAFT_CARD_HEIGHT_MOBILE = 420;
-const AIRCRAFT_CARD_HEIGHT_TABLET_PLUS = 436;
+const AIRCRAFT_CARD_HEIGHT_MOBILE = 460;
+const AIRCRAFT_CARD_HEIGHT_TABLET_PLUS = 500;
 const AIRCRAFT_GRID_GAP = 14;
 const AIRCRAFT_GRID_PADDING = 14;
 const AIRCRAFT_MIN_CARD_WIDTH = 244;
@@ -90,6 +102,22 @@ const MAP_HIGHLIGHT_EXTRA_RADIUS = 1.8;
 const MAP_CODE_LABEL_MIN_ZOOM = 6;
 const MAP_CODE_LABEL_MAX_COUNT = 140;
 const REGION_CODE_PREVIEW_LIMIT = 56;
+const REGISTRATION_MODAL_PAGE_SIZE = 120;
+const REGISTRATION_MODAL_FILTERS = new Set(['all', 'high', 'medium', 'ambiguous', 'low']);
+const REGISTRATION_MODAL_CONFIDENCE_LABELS = {
+  high: 'High',
+  medium: 'Medium',
+  ambiguous: 'Ambiguous',
+  low: 'Low',
+};
+const REGISTRATION_MODAL_STATUS_LABELS = {
+  mapped: 'Mapped',
+  inferred_high_confidence: 'Inferred high confidence',
+  inferred_medium_confidence: 'Inferred medium confidence',
+  ambiguous: 'Ambiguous',
+  unresolved: 'Unresolved',
+  unmapped: 'Unmapped',
+};
 const MAP_REGION_MAX_ZOOM = Object.freeze({
   continent: 5,
   country: 7,
@@ -98,6 +126,7 @@ const MAP_REGION_MAX_ZOOM = Object.freeze({
 
 const state = {
   model: null,
+  references: null,
   activeTab: 'map',
   map: {
     instance: null,
@@ -129,6 +158,9 @@ const state = {
     focusType: null,
     focusCategory: null,
     focusTier: null,
+    expandedFocus: null,
+    focusDetailIndex: null,
+    focusDetailIndexModel: null,
     visibleRows: [],
     renderSignature: '',
     lastRenderedRowsRef: null,
@@ -141,6 +173,10 @@ const state = {
   ui: {
     dataToolsOpen: false,
     bannerDismissTimer: null,
+    registrationModalOpen: false,
+    registrationModalQuery: '',
+    registrationModalConfidence: 'all',
+    registrationModalPage: 1,
   },
 };
 
@@ -318,6 +354,251 @@ function setDataToolsOpen(isOpen) {
   elements.dataToolsMenu.hidden = !isOpen;
 }
 
+function resetRegistrationModalState() {
+  state.ui.registrationModalOpen = false;
+  state.ui.registrationModalQuery = '';
+  state.ui.registrationModalConfidence = 'all';
+  state.ui.registrationModalPage = 1;
+}
+
+function getRegistrationTransparencyRows(model = state.model) {
+  if (!model?.aircraft?.registrationTransparency?.rows) {
+    return [];
+  }
+  return model.aircraft.registrationTransparency.rows;
+}
+
+function registrationConfidenceLabel(value) {
+  return REGISTRATION_MODAL_CONFIDENCE_LABELS[value] || 'Low';
+}
+
+function registrationStatusLabel(value) {
+  return REGISTRATION_MODAL_STATUS_LABELS[value] || 'Unmapped';
+}
+
+function registrationMethodLabel(value) {
+  if (value === 'hex_lookup') {
+    return 'Hex lookup';
+  }
+  if (value === 'hex_lookup_conflict') {
+    return 'Hex lookup (conflict)';
+  }
+  if (value === 'reg_lookup') {
+    return 'Registration fallback';
+  }
+  if (value === 'inferred_high_confidence') {
+    return 'High-confidence inference';
+  }
+  return 'Unmapped';
+}
+
+function buildAircraftModelLabelMap(model) {
+  const labels = new Map();
+  if (!model?.aircraft?.rows?.length) {
+    return labels;
+  }
+  model.aircraft.rows.forEach((row) => {
+    const modelId = String(row.modelId || '').toUpperCase();
+    if (!modelId || labels.has(modelId)) {
+      return;
+    }
+    labels.set(modelId, `${row.manufacturer || 'Unknown'} ${row.name || modelId}`.trim());
+  });
+  return labels;
+}
+
+function renderRegistrationModalTrigger(model = state.model) {
+  const trigger = elements.aircraftRegTransparencyTrigger;
+  if (!trigger) {
+    return;
+  }
+  const rows = getRegistrationTransparencyRows(model);
+  const summary = model?.aircraft?.registrationTransparency?.summary || null;
+  const totalRows = rows.length;
+  const mappedRows = summary?.mappedRows || 0;
+  const lowRows = summary?.confidenceCounts?.low || 0;
+  const ambiguousRows = summary?.confidenceCounts?.ambiguous || 0;
+  const attentionRows = lowRows + ambiguousRows;
+
+  trigger.disabled = totalRows === 0;
+  trigger.classList.toggle('is-attention', attentionRows > 0);
+  trigger.setAttribute('aria-expanded', String(state.ui.registrationModalOpen));
+  if (!totalRows) {
+    trigger.setAttribute('title', 'No unique registration rows available in this export.');
+    return;
+  }
+  trigger.setAttribute(
+    'title',
+    `${formatNumber(mappedRows)} mapped of ${formatNumber(totalRows)} unique registrations. ${formatNumber(attentionRows)} rows are low-confidence or ambiguous.`,
+  );
+}
+
+function filterRegistrationModalRows(rows) {
+  const confidenceFilter = REGISTRATION_MODAL_FILTERS.has(state.ui.registrationModalConfidence)
+    ? state.ui.registrationModalConfidence
+    : 'all';
+  const normalizedQuery = state.ui.registrationModalQuery.trim().toLowerCase();
+  return rows.filter((row) => {
+    if (confidenceFilter !== 'all' && row.confidenceCategory !== confidenceFilter) {
+      return false;
+    }
+    if (!normalizedQuery) {
+      return true;
+    }
+    const haystack = [
+      row.registrationRaw,
+      row.registration,
+      row.aircraftHex,
+      row.mappedModelId,
+      row.lookupHexModelId,
+      row.lookupRegModelId,
+      row.inferenceResolvedTypeCode,
+      row.inferenceStatus,
+      row.inferenceMethod,
+      row.issueLabel,
+      registrationMethodLabel(row.mappingMethod),
+      registrationStatusLabel(row.status),
+      registrationConfidenceLabel(row.confidenceCategory),
+    ]
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(normalizedQuery);
+  });
+}
+
+function renderRegistrationTransparencyModal(model = state.model) {
+  if (!elements.aircraftRegTransparencyModal) {
+    return;
+  }
+  const rows = getRegistrationTransparencyRows(model);
+  const summary = model?.aircraft?.registrationTransparency?.summary || {};
+  const confidenceCounts = summary.confidenceCounts || {};
+  const inferenceStatusCounts = summary.inferenceStatusCounts || {};
+
+  elements.aircraftRegTransparencySummary.innerHTML = `
+    <span class="registration-summary-chip">${formatNumber(summary.mappedRows || 0)} mapped</span>
+    <span class="registration-summary-chip">${formatNumber(summary.unmappedRows || 0)} unmapped</span>
+    <span class="registration-summary-chip is-high">High ${formatNumber(confidenceCounts.high || 0)}</span>
+    <span class="registration-summary-chip is-medium">Medium ${formatNumber(confidenceCounts.medium || 0)}</span>
+    <span class="registration-summary-chip is-ambiguous">Ambiguous ${formatNumber(confidenceCounts.ambiguous || 0)}</span>
+    <span class="registration-summary-chip is-low">Low ${formatNumber(confidenceCounts.low || 0)}</span>
+    <span class="registration-summary-chip">Inference rows ${formatNumber(summary.linkedInferenceRows || 0)}</span>
+    <span class="registration-summary-chip">Inference medium ${formatNumber(inferenceStatusCounts.inferred_medium_confidence || 0)}</span>
+    <span class="registration-summary-chip">Inference ambiguous ${formatNumber(inferenceStatusCounts.ambiguous || 0)}</span>
+  `;
+
+  const filteredRows = filterRegistrationModalRows(rows);
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / REGISTRATION_MODAL_PAGE_SIZE));
+  state.ui.registrationModalPage = Math.min(Math.max(state.ui.registrationModalPage, 1), totalPages);
+  const pageStart = (state.ui.registrationModalPage - 1) * REGISTRATION_MODAL_PAGE_SIZE;
+  const pageRows = filteredRows.slice(pageStart, pageStart + REGISTRATION_MODAL_PAGE_SIZE);
+  const modelLabelMap = buildAircraftModelLabelMap(model);
+
+  if (!filteredRows.length) {
+    elements.aircraftRegTransparencyMeta.textContent = `No rows match the current filters. ${formatNumber(rows.length)} total unique registration rows are available.`;
+    elements.aircraftRegTransparencyRows.innerHTML = `
+      <tr>
+        <td class="aircraft-reg-empty" colspan="5">No matching rows.</td>
+      </tr>
+    `;
+  } else {
+    const shownStart = pageStart + 1;
+    const shownEnd = pageStart + pageRows.length;
+    elements.aircraftRegTransparencyMeta.textContent = `Showing ${formatNumber(shownStart)}-${formatNumber(shownEnd)} of ${formatNumber(filteredRows.length)} filtered rows (${formatNumber(rows.length)} total unique registrations).`;
+    elements.aircraftRegTransparencyRows.innerHTML = pageRows.map((row) => {
+      const registrationDisplay = row.registrationRaw || row.registration || 'Unknown';
+      const hasNormalizedDiff = row.registration && row.registration !== registrationDisplay;
+      const hexDisplay = row.aircraftHex || 'N/A';
+      const aircraftIdDisplay = Number.isFinite(row.aircraftId)
+        ? `aircraftId ${formatNumber(row.aircraftId)}`
+        : 'aircraftId missing';
+      const mappedModelId = row.mappedModelId || '';
+      const mappedModelLabel = mappedModelId ? modelLabelMap.get(mappedModelId) || '' : '';
+      const statusLabel = registrationStatusLabel(row.status);
+      const methodLabel = registrationMethodLabel(row.mappingMethod);
+      const confidenceLabel = registrationConfidenceLabel(row.confidenceCategory);
+      const noteParts = [];
+      if (row.issueLabel) {
+        noteParts.push(row.issueLabel);
+      }
+      if (row.inferenceStatus && row.inferenceStatus !== 'inferred_high_confidence') {
+        noteParts.push(`Inference status: ${registrationStatusLabel(row.inferenceStatus)}.`);
+      }
+      if (row.inferenceResolvedTypeCode && !mappedModelId) {
+        noteParts.push(`Candidate ICAO: ${row.inferenceResolvedTypeCode}.`);
+      }
+      if (row.inferenceCandidateTypes?.length) {
+        noteParts.push(`Candidates: ${row.inferenceCandidateTypes.join(', ')}.`);
+      }
+      if (row.inferenceReviewNote) {
+        noteParts.push(row.inferenceReviewNote);
+      }
+      const inferenceConfidence = Number.isFinite(row.inferenceConfidence)
+        ? `inference ${formatPercent(row.inferenceConfidence * 100, 0)}`
+        : '';
+      return `
+        <tr>
+          <td>
+            <code>${escapeHtml(registrationDisplay)}</code>
+            ${hasNormalizedDiff ? `<span class="aircraft-reg-subtle">normalized: ${escapeHtml(row.registration)}</span>` : ''}
+          </td>
+          <td>
+            <code>${escapeHtml(hexDisplay)}</code>
+            <span class="aircraft-reg-subtle">${escapeHtml(aircraftIdDisplay)}</span>
+          </td>
+          <td>
+            ${mappedModelId
+    ? `<code>${escapeHtml(mappedModelId)}</code>`
+    : '<span class="aircraft-reg-muted">Unmapped</span>'}
+            ${mappedModelLabel ? `<span class="aircraft-reg-subtle">${escapeHtml(mappedModelLabel)}</span>` : ''}
+          </td>
+          <td>
+            <span class="aircraft-reg-confidence is-${escapeHtml(row.confidenceCategory || 'low')}">${escapeHtml(confidenceLabel)}</span>
+            <span class="aircraft-reg-subtle">${escapeHtml(statusLabel)}${inferenceConfidence ? `, ${escapeHtml(inferenceConfidence)}` : ''}</span>
+          </td>
+          <td>
+            <span class="aircraft-reg-method">${escapeHtml(methodLabel)}</span>
+            ${noteParts.length
+    ? `<p class="aircraft-reg-note">${escapeHtml(noteParts.join(' '))}</p>`
+    : ''}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  elements.aircraftRegTransparencyPageLabel.textContent = `Page ${formatNumber(state.ui.registrationModalPage)} of ${formatNumber(totalPages)}`;
+  elements.aircraftRegTransparencyPrev.disabled = state.ui.registrationModalPage <= 1;
+  elements.aircraftRegTransparencyNext.disabled = state.ui.registrationModalPage >= totalPages;
+  renderRegistrationModalTrigger(model);
+}
+
+function setRegistrationModalOpen(isOpen, options = {}) {
+  const restoreFocus = options.restoreFocus !== false;
+  if (!elements.aircraftRegTransparencyModal) {
+    return;
+  }
+  if (isOpen && !state.model) {
+    return;
+  }
+  state.ui.registrationModalOpen = Boolean(isOpen);
+  elements.aircraftRegTransparencyModal.hidden = !state.ui.registrationModalOpen;
+  elements.aircraftRegTransparencyTrigger?.setAttribute('aria-expanded', String(state.ui.registrationModalOpen));
+  document.body.classList.toggle('has-modal-open', state.ui.registrationModalOpen);
+
+  if (state.ui.registrationModalOpen) {
+    syncRegistrationModalControls();
+    renderRegistrationTransparencyModal(state.model);
+    requestAnimationFrame(() => {
+      elements.aircraftRegTransparencySearch?.focus();
+    });
+    return;
+  }
+  if (restoreFocus) {
+    elements.aircraftRegTransparencyTrigger?.focus();
+  }
+}
+
 function clearDashboardPanels() {
   elements.mapLegend.innerHTML = '';
   elements.mapAirportKpi.textContent = '';
@@ -340,6 +621,10 @@ function clearDashboardPanels() {
   elements.aircraftRegPlaceholderPanel.innerHTML = '';
   elements.aircraftListMeta.textContent = '';
   elements.aircraftList.innerHTML = '';
+  elements.aircraftRegTransparencySummary.innerHTML = '';
+  elements.aircraftRegTransparencyMeta.textContent = '';
+  elements.aircraftRegTransparencyRows.innerHTML = '';
+  elements.aircraftRegTransparencyPageLabel.textContent = '';
 }
 
 function parseCompletionSortKey(sortKey) {
@@ -389,6 +674,15 @@ function syncAircraftSortControls() {
   applyDirectionButtonState(elements.aircraftSortDirection, state.aircraft.sortDirection);
 }
 
+function syncRegistrationModalControls() {
+  elements.aircraftRegTransparencySearch.value = state.ui.registrationModalQuery;
+  const safeFilter = REGISTRATION_MODAL_FILTERS.has(state.ui.registrationModalConfidence)
+    ? state.ui.registrationModalConfidence
+    : 'all';
+  state.ui.registrationModalConfidence = safeFilter;
+  elements.aircraftRegTransparencyFilter.value = safeFilter;
+}
+
 function applyCompletionCollapseButtonState(button, isCollapsed) {
   if (!button) {
     return;
@@ -436,16 +730,12 @@ function setMapCompletionCollapsed(panel, isCollapsed) {
   if (panel !== 'continent' && panel !== 'country' && panel !== 'us-state') {
     return;
   }
-  if (isCollapsed) {
-    state.map.continentCollapsed = panel === 'continent';
-    state.map.countryCollapsed = panel === 'country';
-    state.map.usStateCollapsed = panel === 'us-state';
-  } else if (panel === 'continent') {
-    state.map.continentCollapsed = false;
+  if (panel === 'continent') {
+    state.map.continentCollapsed = Boolean(isCollapsed);
   } else if (panel === 'country') {
-    state.map.countryCollapsed = false;
+    state.map.countryCollapsed = Boolean(isCollapsed);
   } else {
-    state.map.usStateCollapsed = false;
+    state.map.usStateCollapsed = Boolean(isCollapsed);
   }
   syncMapCompletionCollapseUi();
   requestAnimationFrame(() => {
@@ -457,6 +747,7 @@ function setMapCompletionCollapsed(panel, isCollapsed) {
 
 function resetToLanding({ clearPersisted = false, clearPersistPreference = false } = {}) {
   state.model = null;
+  state.references = null;
   state.activeTab = 'map';
   state.map.regionPointIndex = null;
   state.map.regionPointIndexModel = null;
@@ -475,12 +766,17 @@ function resetToLanding({ clearPersisted = false, clearPersistPreference = false
   state.aircraft.focusType = null;
   state.aircraft.focusCategory = null;
   state.aircraft.focusTier = null;
+  state.aircraft.expandedFocus = null;
+  state.aircraft.focusDetailIndex = null;
+  state.aircraft.focusDetailIndexModel = null;
   state.aircraft.visibleRows = [];
   state.aircraft.renderSignature = '';
   state.aircraft.lastRenderedRowsRef = null;
   state.aircraft.renderQueued = false;
   state.upload.fileName = '';
   state.upload.text = '';
+  resetRegistrationModalState();
+  setRegistrationModalOpen(false, { restoreFocus: false });
 
   clearMapLayers();
   clearDashboardPanels();
@@ -492,6 +788,8 @@ function resetToLanding({ clearPersisted = false, clearPersistPreference = false
   syncMapCompletionCollapseUi();
   elements.aircraftSearch.value = '';
   syncAircraftSortControls();
+  syncRegistrationModalControls();
+  renderRegistrationModalTrigger(null);
   elements.fileInput.value = '';
   setUploadStatus('Waiting for a collection export.');
 
@@ -549,6 +847,9 @@ function wireDataTools() {
 function setActiveTab(tabId) {
   state.activeTab = tabId;
   const isMap = tabId === 'map';
+  if (isMap && state.ui.registrationModalOpen) {
+    setRegistrationModalOpen(false, { restoreFocus: false });
+  }
   elements.mapTabButton.classList.toggle('is-active', isMap);
   elements.aircraftTabButton.classList.toggle('is-active', !isMap);
   elements.mapTabButton.setAttribute('aria-selected', String(isMap));
@@ -1404,7 +1705,316 @@ function isAircraftFocusSelected(dimension, key) {
   return Boolean(getAircraftFocusValue(dimension) && getAircraftFocusValue(dimension) === key);
 }
 
-function renderAircraftFocusList(rows, options = {}) {
+function isAircraftFocusExpanded(scope, dimension, key) {
+  return Boolean(
+    state.aircraft.expandedFocus
+      && state.aircraft.expandedFocus.scope === scope
+      && state.aircraft.expandedFocus.dimension === dimension
+      && state.aircraft.expandedFocus.key === key,
+  );
+}
+
+function toggleAircraftFocusDetails(model, scope, dimension, key) {
+  if (isAircraftFocusExpanded(scope, dimension, key)) {
+    state.aircraft.expandedFocus = null;
+  } else {
+    state.aircraft.expandedFocus = { scope, dimension, key };
+  }
+  renderAircraftWidgets(model);
+}
+
+function normalizeAircraftFocusKey(dimension, value) {
+  if (dimension === 'type') {
+    return String(value || '').trim().toUpperCase() || 'unknown';
+  }
+  return String(value || '').trim().toLowerCase() || 'unknown';
+}
+
+function normalizeAircraftModelCode(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function buildAircraftModelEntry(code, name) {
+  const normalizedCode = normalizeAircraftModelCode(code);
+  const normalizedName = String(name || '').trim();
+  if (!normalizedCode && !normalizedName) {
+    return null;
+  }
+  return {
+    code: normalizedCode,
+    name: normalizedName,
+  };
+}
+
+function addAircraftModelEntry(bucketMap, key, entry) {
+  if (!entry) {
+    return;
+  }
+  if (!bucketMap.has(key)) {
+    bucketMap.set(key, new Map());
+  }
+  const bucket = bucketMap.get(key);
+  const entryKey = entry.code || entry.name.toUpperCase();
+  if (!entryKey) {
+    return;
+  }
+  if (!bucket.has(entryKey)) {
+    bucket.set(entryKey, entry);
+  }
+}
+
+function sortAircraftModelEntries(entries) {
+  return entries
+    .slice()
+    .sort((left, right) => (left.code || left.name).localeCompare(right.code || right.name) || left.name.localeCompare(right.name));
+}
+
+function formatAircraftModelEntryLine(entry) {
+  if (entry.code && entry.name) {
+    return `${entry.code} - ${entry.name}`;
+  }
+  return entry.code || entry.name || '';
+}
+
+function mapAircraftEntriesToLines(entries) {
+  return entries.map((entry) => formatAircraftModelEntryLine(entry)).filter(Boolean);
+}
+
+function ensureAircraftFocusDetailIndex(model) {
+  if (state.aircraft.focusDetailIndexModel === model && state.aircraft.focusDetailIndex) {
+    return state.aircraft.focusDetailIndex;
+  }
+
+  const observedRows = Array.isArray(model?.aircraft?.rows) ? model.aircraft.rows : [];
+  const referenceRows = Array.isArray(state.references?.referenceModels) ? state.references.referenceModels : [];
+
+  const observedByType = new Map();
+  const observedByCategory = new Map();
+  const observedByTier = new Map();
+  const observedUniverse = new Map();
+  for (const row of observedRows) {
+    const entry = buildAircraftModelEntry(row.icao || row.modelId || row.key, row.name || row.displayName || 'Unknown model');
+    if (!entry) {
+      continue;
+    }
+    const universeKey = entry.code || entry.name.toUpperCase();
+    if (!observedUniverse.has(universeKey)) {
+      observedUniverse.set(universeKey, entry);
+    }
+    addAircraftModelEntry(observedByType, normalizeAircraftFocusKey('type', row.typeKey), entry);
+    addAircraftModelEntry(observedByCategory, normalizeAircraftFocusKey('category', row.dominantCategory), entry);
+    addAircraftModelEntry(observedByTier, normalizeAircraftFocusKey('tier', row.dominantTier), entry);
+  }
+
+  const referenceByType = new Map();
+  const referenceByCategory = new Map();
+  for (const row of referenceRows) {
+    const entry = buildAircraftModelEntry(row.id, row.name || row.manufacturer || 'Unknown model');
+    if (!entry) {
+      continue;
+    }
+    addAircraftModelEntry(referenceByType, normalizeAircraftFocusKey('type', row.type), entry);
+    addAircraftModelEntry(referenceByCategory, normalizeAircraftFocusKey('category', row.cardCategory), entry);
+  }
+
+  const index = {
+    type: new Map(),
+    category: new Map(),
+    tier: new Map(),
+  };
+
+  const typeKeys = new Set([
+    ...model.aircraft.typeProgress.map((row) => row.key),
+    ...referenceByType.keys(),
+    ...observedByType.keys(),
+  ]);
+  for (const key of typeKeys) {
+    const capturedEntries = sortAircraftModelEntries(Array.from((observedByType.get(key) || new Map()).values()));
+    const referenceEntries = sortAircraftModelEntries(Array.from((referenceByType.get(key) || new Map()).values()));
+    const capturedCodes = new Set(capturedEntries.map((entry) => entry.code || entry.name.toUpperCase()));
+    const missingEntries = referenceEntries.filter((entry) => !capturedCodes.has(entry.code || entry.name.toUpperCase()));
+    index.type.set(key, {
+      context: 'reference',
+      capturedEntries,
+      missingEntries,
+      totalCount: referenceEntries.length,
+    });
+  }
+
+  const categoryKeys = new Set([
+    ...model.aircraft.categoryProgress.map((row) => row.key),
+    ...model.aircraft.categoryXp.map((row) => row.key),
+    ...referenceByCategory.keys(),
+    ...observedByCategory.keys(),
+  ]);
+  for (const key of categoryKeys) {
+    const capturedEntries = sortAircraftModelEntries(Array.from((observedByCategory.get(key) || new Map()).values()));
+    const referenceEntries = sortAircraftModelEntries(Array.from((referenceByCategory.get(key) || new Map()).values()));
+    const capturedCodes = new Set(capturedEntries.map((entry) => entry.code || entry.name.toUpperCase()));
+    const missingEntries = referenceEntries.filter((entry) => !capturedCodes.has(entry.code || entry.name.toUpperCase()));
+    index.category.set(key, {
+      context: 'reference',
+      capturedEntries,
+      missingEntries,
+      totalCount: referenceEntries.length,
+    });
+  }
+
+  const universeEntries = sortAircraftModelEntries(Array.from(observedUniverse.values()));
+  const tierKeys = new Set([
+    ...model.aircraft.tierXp.map((row) => row.key),
+    ...observedByTier.keys(),
+  ]);
+  for (const key of tierKeys) {
+    const capturedEntries = sortAircraftModelEntries(Array.from((observedByTier.get(key) || new Map()).values()));
+    const capturedCodes = new Set(capturedEntries.map((entry) => entry.code || entry.name.toUpperCase()));
+    const missingEntries = universeEntries.filter((entry) => !capturedCodes.has(entry.code || entry.name.toUpperCase()));
+    index.tier.set(key, {
+      context: 'deck',
+      capturedEntries,
+      missingEntries,
+      totalCount: universeEntries.length,
+    });
+  }
+
+  state.aircraft.focusDetailIndex = index;
+  state.aircraft.focusDetailIndexModel = model;
+  return index;
+}
+
+function getAircraftFocusDetail(model, dimension, key) {
+  const detailIndex = ensureAircraftFocusDetailIndex(model);
+  const byDimension = detailIndex[dimension];
+  if (!byDimension) {
+    return {
+      context: 'reference',
+      capturedEntries: [],
+      missingEntries: [],
+      totalCount: 0,
+    };
+  }
+  return byDimension.get(key) || {
+    context: dimension === 'tier' ? 'deck' : 'reference',
+    capturedEntries: [],
+    missingEntries: [],
+    totalCount: 0,
+  };
+}
+
+function renderAircraftFocusCodeGroup(dimension, key, scope, entries) {
+  const actionLabel = scope === 'missing' ? 'missing' : 'completed';
+  const emptyMessage = scope === 'missing'
+    ? 'No missing models in this group.'
+    : 'No completed models in this group yet.';
+  const lines = mapAircraftEntriesToLines(entries);
+  return `
+    <section class="region-code-group">
+      <div class="region-code-group-head">
+        <p class="region-code-group-title">${scope === 'missing' ? 'Missing' : 'Completed'} models (${formatNumber(lines.length)})</p>
+        <div class="region-code-actions">
+          <button
+            type="button"
+            class="region-action-button"
+            data-action="copy-aircraft-focus-codes"
+            data-focus-dimension="${escapeHtml(dimension)}"
+            data-focus-key="${escapeHtml(key)}"
+            data-code-scope="${escapeHtml(scope)}"
+            ${lines.length ? '' : 'disabled'}
+          >
+            Copy ${actionLabel}
+          </button>
+          <button
+            type="button"
+            class="region-action-button"
+            data-action="export-aircraft-focus-codes"
+            data-focus-dimension="${escapeHtml(dimension)}"
+            data-focus-key="${escapeHtml(key)}"
+            data-code-scope="${escapeHtml(scope)}"
+            ${lines.length ? '' : 'disabled'}
+          >
+            Export ${actionLabel}
+          </button>
+        </div>
+      </div>
+      ${renderRegionCodeList(lines, emptyMessage)}
+    </section>
+  `;
+}
+
+function renderAircraftFocusDetail(model, dimension, key) {
+  const detail = getAircraftFocusDetail(model, dimension, key);
+  const label = getAircraftFocusLabel(model, dimension, key);
+  const completedCount = detail.capturedEntries.length;
+  const missingCount = detail.missingEntries.length;
+  const summary = detail.context === 'deck'
+    ? `${label}: ${formatNumber(completedCount)} models in this tier, ${formatNumber(missingCount)} models in other tiers from your deck.`
+    : `${label}: ${formatNumber(completedCount)} completed of ${formatNumber(detail.totalCount)} reference models (${formatNumber(missingCount)} missing).`;
+  return `
+    <div class="completion-region-detail">
+      <p class="completion-region-summary">${escapeHtml(summary)}</p>
+      ${renderAircraftFocusCodeGroup(dimension, key, 'missing', detail.missingEntries)}
+      ${renderAircraftFocusCodeGroup(dimension, key, 'completed', detail.capturedEntries)}
+    </div>
+  `;
+}
+
+function buildAircraftFocusCodesPayload(model, dimension, key, scope) {
+  const detail = getAircraftFocusDetail(model, dimension, key);
+  const entries = scope === 'completed' ? detail.capturedEntries : detail.missingEntries;
+  const lines = mapAircraftEntriesToLines(entries);
+  const dimensionLabel = dimension === 'type' ? 'type' : dimension === 'category' ? 'category' : 'tier';
+  const groupLabel = getAircraftFocusLabel(model, dimension, key);
+  const scopeLabel = scope === 'completed' ? 'completed' : 'missing';
+  return {
+    lines,
+    dimensionLabel,
+    groupLabel,
+    scopeLabel,
+  };
+}
+
+async function copyAircraftFocusCodes(model, dimension, key, scope) {
+  const payload = buildAircraftFocusCodesPayload(model, dimension, key, scope);
+  if (!payload.lines.length) {
+    setBanner(`No ${payload.scopeLabel} models are available for ${payload.groupLabel}.`, 'warning');
+    return;
+  }
+  const text = payload.lines.join('\n');
+  try {
+    if (!navigator.clipboard?.writeText) {
+      throw new Error('Clipboard API unavailable');
+    }
+    await navigator.clipboard.writeText(text);
+    setBanner(`Copied ${formatNumber(payload.lines.length)} ${payload.scopeLabel} models for ${payload.groupLabel}.`, 'success', {
+      autoDismissMs: 5000,
+    });
+  } catch {
+    setBanner('Clipboard copy failed in this browser context. Use Export to file instead.', 'warning');
+  }
+}
+
+function exportAircraftFocusCodes(model, dimension, key, scope) {
+  const payload = buildAircraftFocusCodesPayload(model, dimension, key, scope);
+  if (!payload.lines.length) {
+    setBanner(`No ${payload.scopeLabel} models are available for ${payload.groupLabel}.`, 'warning');
+    return;
+  }
+  const content = [
+    `Skyviz ${payload.scopeLabel} aircraft models`,
+    `Dimension: ${payload.dimensionLabel}`,
+    `Group: ${payload.groupLabel}`,
+    `Model count: ${payload.lines.length}`,
+    '',
+    ...payload.lines,
+  ].join('\n');
+  const fileName = `skyviz-aircraft-${payload.scopeLabel}-${payload.dimensionLabel}-${toFileSafeToken(payload.groupLabel)}.txt`;
+  triggerTextDownload(fileName, content);
+  setBanner(`Exported ${formatNumber(payload.lines.length)} ${payload.scopeLabel} models for ${payload.groupLabel}.`, 'success', {
+    autoDismissMs: 5000,
+  });
+}
+
+function renderAircraftFocusList(model, rows, options = {}) {
   const includeZero = Boolean(options.includeZero);
   const visibleRows = rows.filter((row) => includeZero ? row.value >= 0 : row.value > 0);
   if (!visibleRows.length) {
@@ -1417,34 +2027,53 @@ function renderAircraftFocusList(rows, options = {}) {
       ${visibleRows.map((row) => {
     const width = Math.max(0, Math.min((row.value / maxValue) * 100, 100));
     const isSelected = isAircraftFocusSelected(options.focusDimension, row.key);
+    const isExpanded = isAircraftFocusExpanded(options.focusScope || '', options.focusDimension, row.key);
     return `
-          <button
-            type="button"
-            class="bar-row bar-row-button aircraft-focus-button${isSelected ? ' is-selected' : ''}"
-            data-action="toggle-aircraft-focus"
-            data-focus-dimension="${escapeHtml(options.focusDimension)}"
-            data-focus-key="${escapeHtml(row.key)}"
-            aria-pressed="${String(isSelected)}"
-            title="Filter aircraft list by ${escapeHtml(row.label)}"
-          >
-            <div class="bar-row-head">
-              <div>
-                <span class="bar-label">${escapeHtml(row.label)}</span>
-                ${row.meta ? `<span class="bar-meta">${escapeHtml(row.meta)}</span>` : ''}
-              </div>
-              <strong>${escapeHtml(valueFormatter(row.value))}</strong>
+          <article class="bar-row completion-region-row aircraft-focus-row${isSelected ? ' is-selected' : ''}${isExpanded ? ' is-expanded' : ''}">
+            <div class="completion-region-row-top">
+              <button
+                type="button"
+                class="bar-row-button aircraft-focus-button${isSelected ? ' is-selected' : ''}"
+                data-action="toggle-aircraft-focus"
+                data-focus-scope="${escapeHtml(options.focusScope || '')}"
+                data-focus-dimension="${escapeHtml(options.focusDimension)}"
+                data-focus-key="${escapeHtml(row.key)}"
+                aria-pressed="${String(isSelected)}"
+                title="Filter aircraft list by ${escapeHtml(row.label)}"
+              >
+                <div class="bar-row-head">
+                  <div>
+                    <span class="bar-label">${escapeHtml(row.label)}</span>
+                    ${row.meta ? `<span class="bar-meta">${escapeHtml(row.meta)}</span>` : ''}
+                  </div>
+                  <strong>${escapeHtml(valueFormatter(row.value))}</strong>
+                </div>
+                <div class="bar-track">
+                  <div class="bar-fill" style="width:${width.toFixed(2)}%;--bar-color:${row.color || '#103f6e'};"></div>
+                </div>
+              </button>
+              <button
+                type="button"
+                class="region-expand-button"
+                data-action="toggle-aircraft-focus-details"
+                data-focus-scope="${escapeHtml(options.focusScope || '')}"
+                data-focus-dimension="${escapeHtml(options.focusDimension)}"
+                data-focus-key="${escapeHtml(row.key)}"
+                aria-expanded="${String(isExpanded)}"
+                aria-label="${isExpanded ? 'Hide details' : 'Show details'} for ${escapeHtml(row.label)}"
+              >
+                ${isExpanded ? 'Hide' : 'Details'}
+              </button>
             </div>
-            <div class="bar-track">
-              <div class="bar-fill" style="width:${width.toFixed(2)}%;--bar-color:${row.color || '#103f6e'};"></div>
-            </div>
-          </button>
+            ${isExpanded ? renderAircraftFocusDetail(model, options.focusDimension, row.key) : ''}
+          </article>
         `;
   }).join('')}
     </div>
   `;
 }
 
-function renderAircraftFocusPanel(options) {
+function renderAircraftFocusPanel(model, options) {
   return `
     <div class="section-head compact">
       <div>
@@ -1452,12 +2081,13 @@ function renderAircraftFocusPanel(options) {
         <h3>${escapeHtml(options.title)}</h3>
       </div>
     </div>
-    ${renderAircraftFocusList(options.rows, {
+    ${renderAircraftFocusList(model, options.rows, {
       includeZero: options.includeZero,
       maxValue: options.maxValue,
       valueFormatter: options.valueFormatter,
       emptyMessage: options.emptyMessage,
       focusDimension: options.focusDimension,
+      focusScope: options.focusScope,
     })}
   `;
 }
@@ -1488,13 +2118,14 @@ function renderAircraftWidgets(model) {
     color: row.color,
     meta: `${formatPercent((row.value / totalXp) * 100, 1)} of total XP`,
   }));
-  elements.aircraftTierXpPanel.innerHTML = renderAircraftFocusPanel({
+  elements.aircraftTierXpPanel.innerHTML = renderAircraftFocusPanel(model, {
     eyebrow: 'XP',
     title: 'XP by tier',
     rows: tierXpRows,
     valueFormatter: (value) => `${formatCompact(value)} XP`,
     emptyMessage: 'No tier XP data available.',
     focusDimension: 'tier',
+    focusScope: 'tier-xp',
   });
 
   const categoryXpRows = model.aircraft.categoryXp.map((row) => ({
@@ -1504,13 +2135,14 @@ function renderAircraftWidgets(model) {
     color: row.color,
     meta: `${formatPercent((row.value / totalXp) * 100, 1)} of total XP`,
   }));
-  elements.aircraftCategoryXpPanel.innerHTML = renderAircraftFocusPanel({
+  elements.aircraftCategoryXpPanel.innerHTML = renderAircraftFocusPanel(model, {
     eyebrow: 'XP',
     title: 'XP by category',
     rows: categoryXpRows,
     valueFormatter: (value) => `${formatCompact(value)} XP`,
     emptyMessage: 'No category XP data available.',
     focusDimension: 'category',
+    focusScope: 'category-xp',
   });
 
   const typeProgressRows = model.aircraft.typeProgress.map((row) => ({
@@ -1520,7 +2152,7 @@ function renderAircraftWidgets(model) {
     color: row.color,
     meta: `${formatNumber(row.captured)} / ${formatNumber(row.total)} models`,
   }));
-  elements.aircraftTypeProgressPanel.innerHTML = renderAircraftFocusPanel({
+  elements.aircraftTypeProgressPanel.innerHTML = renderAircraftFocusPanel(model, {
     eyebrow: 'Type progress',
     title: 'Progress by type',
     rows: typeProgressRows,
@@ -1529,6 +2161,7 @@ function renderAircraftWidgets(model) {
     maxValue: 100,
     includeZero: true,
     focusDimension: 'type',
+    focusScope: 'type-progress',
   });
 
   const categoryProgressRows = model.aircraft.categoryProgress.map((row) => ({
@@ -1538,7 +2171,7 @@ function renderAircraftWidgets(model) {
     color: row.color,
     meta: `${formatNumber(row.captured)} / ${formatNumber(row.total)} models`,
   }));
-  elements.aircraftCategoryProgressPanel.innerHTML = renderAircraftFocusPanel({
+  elements.aircraftCategoryProgressPanel.innerHTML = renderAircraftFocusPanel(model, {
     eyebrow: 'Category progress',
     title: 'Progress by category',
     rows: categoryProgressRows,
@@ -1547,6 +2180,7 @@ function renderAircraftWidgets(model) {
     maxValue: 100,
     includeZero: true,
     focusDimension: 'category',
+    focusScope: 'category-progress',
   });
 
   elements.aircraftTierCompletionPanel.innerHTML = '';
@@ -1662,6 +2296,20 @@ function renderAircraftCard(row, index, left, top, width, cardHeight) {
   const name = row.name || row.displayName || row.modelId || 'Unknown aircraft';
   const manufacturer = row.manufacturer || 'Unknown manufacturer';
   const icao = row.icao || row.modelId || 'Unknown';
+  const caughtRegistrations = Number.isFinite(row.caughtRegistrations) ? row.caughtRegistrations : null;
+  const possibleRegistrations = Number.isFinite(row.possibleRegistrations) ? row.possibleRegistrations : null;
+  const registrationBadgeText = Number.isFinite(caughtRegistrations) && Number.isFinite(possibleRegistrations)
+    ? `${formatNumber(caughtRegistrations)} / ${formatNumber(possibleRegistrations)} regs`
+    : Number.isFinite(caughtRegistrations)
+      ? `${formatNumber(caughtRegistrations)} regs`
+      : Number.isFinite(possibleRegistrations)
+        ? `? / ${formatNumber(possibleRegistrations)} regs`
+        : 'Regs unavailable';
+  const registrationBadgeTitle = Number.isFinite(caughtRegistrations) && Number.isFinite(possibleRegistrations)
+    ? 'Caught registrations / total possible registrations for this ICAO model.'
+    : Number.isFinite(caughtRegistrations)
+      ? 'Caught registrations. Total possible registrations unavailable for this model.'
+      : 'Caught registrations unavailable (aircraft lookup data is missing or incomplete).';
   return `
     <article
       class="aircraft-card${hasGlow ? ' has-glow' : ''}"
@@ -1687,10 +2335,15 @@ function renderAircraftCard(row, index, left, top, width, cardHeight) {
       </div>
       <div class="aircraft-card-body">
         <div class="aircraft-card-head">
-          <h4 class="aircraft-card-name">${escapeHtml(name)}</h4>
-          <span class="aircraft-card-xp">${formatCompact(row.xp)} XP</span>
+          <div class="aircraft-card-title-block">
+            <p class="aircraft-card-manufacturer">${escapeHtml(manufacturer)}</p>
+            <h4 class="aircraft-card-name">${escapeHtml(name)}</h4>
+          </div>
+          <div class="aircraft-card-badges">
+            <span class="aircraft-card-xp">${formatNumber(row.xp)} XP</span>
+            <span class="aircraft-card-regs" title="${escapeHtml(registrationBadgeTitle)}">${escapeHtml(registrationBadgeText)}</span>
+          </div>
         </div>
-        <p class="aircraft-card-manufacturer">${escapeHtml(manufacturer)}</p>
         <p class="aircraft-card-model">ICAO ${escapeHtml(icao)}</p>
         <dl class="aircraft-card-stats">
           <div class="aircraft-card-stat">
@@ -1850,10 +2503,17 @@ function renderAircraftTab(model) {
   renderAircraftWidgets(model);
   applyAircraftFilters(model);
   renderAircraftList();
+  renderRegistrationModalTrigger(model);
+  if (state.ui.registrationModalOpen) {
+    renderRegistrationTransparencyModal(model);
+  }
 }
 
-function renderDashboard(model) {
+function renderDashboard(model, references = null) {
   state.model = model;
+  if (references) {
+    state.references = references;
+  }
   state.map.regionPointIndex = null;
   state.map.regionPointIndexModel = null;
   state.map.selectedRegion = null;
@@ -1871,9 +2531,14 @@ function renderDashboard(model) {
   state.aircraft.focusType = null;
   state.aircraft.focusCategory = null;
   state.aircraft.focusTier = null;
+  state.aircraft.expandedFocus = null;
+  state.aircraft.focusDetailIndex = null;
+  state.aircraft.focusDetailIndexModel = null;
   state.aircraft.renderSignature = '';
   state.aircraft.lastRenderedRowsRef = null;
   state.aircraft.renderQueued = false;
+  resetRegistrationModalState();
+  setRegistrationModalOpen(false, { restoreFocus: false });
   elements.continentSearch.value = '';
   elements.countrySearch.value = '';
   elements.usStateSearch.value = '';
@@ -1881,6 +2546,7 @@ function renderDashboard(model) {
   syncMapCompletionCollapseUi();
   elements.aircraftSearch.value = '';
   syncAircraftSortControls();
+  syncRegistrationModalControls();
   elements.landingView.hidden = true;
   elements.dashboard.hidden = false;
   setDataToolsOpen(false);
@@ -1905,7 +2571,7 @@ async function tryLoadPersistedUpload(persistedUpload = null) {
     const model = buildDashboardModel(payload, references);
     state.upload.fileName = persisted.fileName;
     state.upload.text = persisted.text;
-    renderDashboard(model);
+    renderDashboard(model, references);
     setUploadStatus(`Loaded saved upload ${persisted.fileName} for ${model.user.name}. Stored only on this device.`);
     setBanner('Loaded from your browser local storage. Skyviz never sent your collection to a server.', 'info', {
       autoDismissMs: 10000,
@@ -1940,7 +2606,7 @@ async function handleFile(file) {
     const model = buildDashboardModel(payload, references);
     state.upload.fileName = file.name;
     state.upload.text = text;
-    renderDashboard(model);
+    renderDashboard(model, references);
     const persisted = persistCurrentUploadIfEnabled();
     setUploadStatus(
       persisted
@@ -1971,7 +2637,7 @@ async function handleExampleView() {
     const model = buildDashboardModel(payload, references);
     state.upload.fileName = 'skyviz_try_now_user.json';
     state.upload.text = text;
-    renderDashboard(model);
+    renderDashboard(model, references);
     const persisted = persistCurrentUploadIfEnabled();
     setUploadStatus(
       persisted
@@ -2184,6 +2850,63 @@ function wireMapCompletionControls() {
 }
 
 function wireAircraftControls() {
+  elements.aircraftRegTransparencyTrigger.addEventListener('click', () => {
+    if (!state.model) {
+      return;
+    }
+    state.ui.registrationModalPage = 1;
+    setRegistrationModalOpen(true);
+  });
+
+  elements.aircraftRegTransparencyClose.addEventListener('click', () => {
+    setRegistrationModalOpen(false);
+  });
+
+  elements.aircraftRegTransparencyBackdrop.addEventListener('click', () => {
+    setRegistrationModalOpen(false);
+  });
+
+  elements.aircraftRegTransparencySearch.addEventListener('input', () => {
+    state.ui.registrationModalQuery = elements.aircraftRegTransparencySearch.value;
+    state.ui.registrationModalPage = 1;
+    if (state.ui.registrationModalOpen) {
+      renderRegistrationTransparencyModal(state.model);
+    }
+  });
+
+  elements.aircraftRegTransparencyFilter.addEventListener('change', () => {
+    const selected = elements.aircraftRegTransparencyFilter.value;
+    state.ui.registrationModalConfidence = REGISTRATION_MODAL_FILTERS.has(selected) ? selected : 'all';
+    state.ui.registrationModalPage = 1;
+    if (state.ui.registrationModalOpen) {
+      renderRegistrationTransparencyModal(state.model);
+    }
+  });
+
+  elements.aircraftRegTransparencyPrev.addEventListener('click', () => {
+    if (!state.ui.registrationModalOpen || state.ui.registrationModalPage <= 1) {
+      return;
+    }
+    state.ui.registrationModalPage -= 1;
+    renderRegistrationTransparencyModal(state.model);
+  });
+
+  elements.aircraftRegTransparencyNext.addEventListener('click', () => {
+    if (!state.ui.registrationModalOpen) {
+      return;
+    }
+    state.ui.registrationModalPage += 1;
+    renderRegistrationTransparencyModal(state.model);
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !state.ui.registrationModalOpen) {
+      return;
+    }
+    event.preventDefault();
+    setRegistrationModalOpen(false);
+  });
+
   elements.aircraftSearch.addEventListener('input', () => {
     if (!state.model) {
       return;
@@ -2224,20 +2947,46 @@ function wireAircraftControls() {
     if (!(target instanceof Element)) {
       return;
     }
-    const button = target.closest('button[data-action="toggle-aircraft-focus"]');
+    const button = target.closest('button[data-action][data-focus-dimension][data-focus-key]');
     if (!button) {
       return;
     }
+    const action = button.dataset.action;
+    const scope = button.dataset.focusScope || '';
     const dimension = button.dataset.focusDimension;
     const key = button.dataset.focusKey;
     if ((dimension !== 'type' && dimension !== 'category' && dimension !== 'tier') || !key) {
       return;
     }
-    toggleAircraftFocus(dimension, key);
-    elements.aircraftList.scrollTop = 0;
-    renderAircraftWidgets(state.model);
-    applyAircraftFilters(state.model);
-    renderAircraftList();
+    if (action === 'toggle-aircraft-focus') {
+      const wasSelected = isAircraftFocusSelected(dimension, key);
+      toggleAircraftFocus(dimension, key);
+      if (wasSelected) {
+        if (isAircraftFocusExpanded(scope, dimension, key)) {
+          state.aircraft.expandedFocus = null;
+        }
+      } else {
+        state.aircraft.expandedFocus = { scope, dimension, key };
+      }
+      elements.aircraftList.scrollTop = 0;
+      renderAircraftWidgets(state.model);
+      applyAircraftFilters(state.model);
+      renderAircraftList();
+      return;
+    }
+    if (action === 'toggle-aircraft-focus-details') {
+      toggleAircraftFocusDetails(state.model, scope, dimension, key);
+      return;
+    }
+    if (action === 'copy-aircraft-focus-codes') {
+      const scope = button.dataset.codeScope === 'completed' ? 'completed' : 'missing';
+      void copyAircraftFocusCodes(state.model, dimension, key, scope);
+      return;
+    }
+    if (action === 'export-aircraft-focus-codes') {
+      const scope = button.dataset.codeScope === 'completed' ? 'completed' : 'missing';
+      exportAircraftFocusCodes(state.model, dimension, key, scope);
+    }
   });
 
   elements.aircraftList.addEventListener('scroll', () => {
@@ -2288,6 +3037,9 @@ async function bootstrap() {
   wireAircraftControls();
   syncCompletionSortControls();
   syncAircraftSortControls();
+  resetRegistrationModalState();
+  syncRegistrationModalControls();
+  renderRegistrationModalTrigger(null);
   syncMapCompletionCollapseUi();
   elements.persistUpload.checked = readPersistPreference();
   const persistedUpload = readPersistedUpload();

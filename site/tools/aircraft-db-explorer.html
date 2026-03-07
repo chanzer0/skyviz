@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Skyviz Aircraft DB Explorer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    >
+    <style>
+      :root {
+        --bg: #edf2ee;
+        --panel: #f8fbf7;
+        --ink: #112533;
+        --muted: #49606f;
+        --line: #c3d0c8;
+        --line-strong: #93a89b;
+        --accent: #0f4a78;
+        --accent-quiet: #deecf8;
+        --good: #1a7b4b;
+        --warn: #965600;
+        --bad: #9d2d2d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 90% 0%, rgba(15, 74, 120, 0.1), transparent 34%),
+          radial-gradient(circle at 0% 100%, rgba(20, 122, 77, 0.12), transparent 30%),
+          var(--bg);
+        color: var(--ink);
+        font-family: "IBM Plex Sans", sans-serif;
+      }
+
+      .shell {
+        width: min(1560px, calc(100vw - 2rem));
+        margin: 1rem auto 1.6rem;
+        display: grid;
+        gap: 0.9rem;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(248, 251, 247, 0.92);
+        box-shadow: 0 14px 34px rgba(17, 37, 51, 0.08);
+        padding: 0.88rem;
+      }
+
+      .hero {
+        display: grid;
+        gap: 0.6rem;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(1.3rem, 2vw, 1.8rem);
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .status {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 0.82rem;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: #fff;
+        padding: 0.48rem 0.55rem;
+      }
+
+      .status.good {
+        color: var(--good);
+        border-color: rgba(26, 123, 75, 0.35);
+      }
+
+      .status.warn {
+        color: var(--warn);
+        border-color: rgba(150, 86, 0, 0.35);
+      }
+
+      .status.bad {
+        color: var(--bad);
+        border-color: rgba(157, 45, 45, 0.35);
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.55rem;
+        align-items: center;
+      }
+
+      .field {
+        display: grid;
+        gap: 0.25rem;
+        min-width: 170px;
+      }
+
+      .field span {
+        font-size: 0.7rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-weight: 700;
+      }
+
+      input,
+      textarea,
+      button {
+        font: inherit;
+      }
+
+      input,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--line-strong);
+        border-radius: 10px;
+        padding: 0.43rem 0.52rem;
+        background: #fff;
+        color: var(--ink);
+      }
+
+      textarea {
+        min-height: 108px;
+        resize: vertical;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 0.83rem;
+      }
+
+      button {
+        border: 1px solid var(--accent);
+        border-radius: 999px;
+        min-height: 2.05rem;
+        padding: 0.25rem 0.74rem;
+        background: linear-gradient(145deg, #0f4a78, #175c90);
+        color: #eff7ff;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+
+      button.secondary {
+        border-color: var(--line-strong);
+        background: #fff;
+        color: var(--ink);
+      }
+
+      .grid {
+        display: grid;
+        gap: 0.85rem;
+      }
+
+      .grid.main {
+        grid-template-columns: minmax(270px, 330px) 1fr;
+      }
+
+      .section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .section-head h2 {
+        margin: 0;
+        font-size: 1rem;
+      }
+
+      .table-list {
+        max-height: 56vh;
+        overflow: auto;
+        display: grid;
+        gap: 0.34rem;
+      }
+
+      .table-item {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 0.44rem 0.5rem;
+        background: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.6rem;
+        cursor: pointer;
+      }
+
+      .table-item.active {
+        border-color: var(--accent);
+        background: var(--accent-quiet);
+      }
+
+      .mono {
+        font-family: "IBM Plex Mono", monospace;
+      }
+
+      .table-wrap {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fff;
+        overflow: auto;
+        max-height: 58vh;
+      }
+
+      table {
+        border-collapse: collapse;
+        min-width: 100%;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid #dbe3dd;
+        padding: 0.42rem 0.5rem;
+        vertical-align: top;
+        text-align: left;
+        font-size: 0.79rem;
+        max-width: 540px;
+        white-space: nowrap;
+      }
+
+      th {
+        position: sticky;
+        top: 0;
+        background: #edf3ee;
+        z-index: 1;
+        font-size: 0.72rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .pill {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 0.16rem 0.56rem;
+        background: #fff;
+        font-size: 0.72rem;
+        color: var(--muted);
+      }
+
+      .lookup-grid {
+        display: grid;
+        gap: 0.7rem;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        align-items: end;
+      }
+
+      .query-output {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fff;
+        max-height: 36vh;
+        overflow: auto;
+        padding: 0.48rem;
+        display: grid;
+        gap: 0.6rem;
+      }
+
+      .query-result + .query-result {
+        border-top: 1px dashed var(--line);
+        padding-top: 0.55rem;
+      }
+
+      .empty {
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      @media (max-width: 980px) {
+        .grid.main {
+          grid-template-columns: 1fr;
+        }
+
+        .table-list {
+          max-height: 36vh;
+        }
+
+        .table-wrap {
+          max-height: 42vh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <section class="panel hero">
+        <h1>Aircraft Database Explorer</h1>
+        <p>Private local browser tool. Pick a SQLite file and inspect tables, run SQL, and test `aircraftId` hex mapping. Nothing is uploaded.</p>
+        <div class="controls">
+          <label class="field">
+            <span>SQLite file</span>
+            <input id="db-file" type="file" accept=".db,.sqlite,.sqlite3,application/octet-stream">
+          </label>
+          <span class="pill mono" id="db-meta">No file loaded</span>
+        </div>
+        <div id="status" class="status warn">Load `aircraft_data.db` to begin.</div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <h2>Quick Lookup</h2>
+          <button id="lookup-reset" class="secondary" type="button">Clear</button>
+        </div>
+        <div class="lookup-grid">
+          <label class="field">
+            <span>Registration</span>
+            <input id="lookup-reg" type="text" placeholder="N934AN">
+          </label>
+          <label class="field">
+            <span>AircraftId (decimal)</span>
+            <input id="lookup-aircraft-id" type="text" placeholder="11334802">
+          </label>
+          <label class="field">
+            <span>ICAO hex (transponder)</span>
+            <input id="lookup-hex" type="text" placeholder="ACF492">
+          </label>
+          <label class="field">
+            <span>Hex from aircraftId</span>
+            <input id="lookup-computed-hex" type="text" readonly>
+          </label>
+          <label class="field">
+            <span>Decimal from hex</span>
+            <input id="lookup-computed-decimal" type="text" readonly>
+          </label>
+          <div class="controls">
+            <button id="lookup-run" type="button">Run Lookup</button>
+          </div>
+        </div>
+        <div class="table-wrap" id="lookup-output-wrap" style="margin-top:0.75rem;">
+          <div id="lookup-output" class="empty" style="padding:0.62rem;">No lookup run yet.</div>
+        </div>
+      </section>
+
+      <section class="grid main">
+        <article class="panel">
+          <div class="section-head">
+            <h2>Tables</h2>
+            <span class="pill mono" id="table-count">0 tables</span>
+          </div>
+          <label class="field">
+            <span>Filter table names</span>
+            <input id="table-filter" type="search" placeholder="aircraft">
+          </label>
+          <div id="table-list" class="table-list"></div>
+        </article>
+
+        <article class="panel">
+          <div class="section-head">
+            <h2 id="browse-title">Table Browser</h2>
+            <div class="controls">
+              <button id="page-prev" class="secondary" type="button">Prev</button>
+              <span class="pill mono" id="page-meta">Page 0 / 0</span>
+              <button id="page-next" class="secondary" type="button">Next</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <div id="table-preview" class="empty" style="padding:0.62rem;">Load a file and select a table.</div>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <h2>SQL Runner</h2>
+          <button id="query-run" type="button">Run SQL</button>
+        </div>
+        <textarea id="query-input" spellcheck="false">SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;</textarea>
+        <div id="query-output" class="query-output" style="margin-top:0.72rem;">
+          <div class="empty">Run a query to see results.</div>
+        </div>
+      </section>
+    </div>
+
+    <script type="module">
+      const elements = {
+        dbFile: document.querySelector("#db-file"),
+        dbMeta: document.querySelector("#db-meta"),
+        status: document.querySelector("#status"),
+        tableFilter: document.querySelector("#table-filter"),
+        tableCount: document.querySelector("#table-count"),
+        tableList: document.querySelector("#table-list"),
+        browseTitle: document.querySelector("#browse-title"),
+        pageMeta: document.querySelector("#page-meta"),
+        pagePrev: document.querySelector("#page-prev"),
+        pageNext: document.querySelector("#page-next"),
+        tablePreview: document.querySelector("#table-preview"),
+        lookupReg: document.querySelector("#lookup-reg"),
+        lookupAircraftId: document.querySelector("#lookup-aircraft-id"),
+        lookupHex: document.querySelector("#lookup-hex"),
+        lookupComputedHex: document.querySelector("#lookup-computed-hex"),
+        lookupComputedDecimal: document.querySelector("#lookup-computed-decimal"),
+        lookupRun: document.querySelector("#lookup-run"),
+        lookupReset: document.querySelector("#lookup-reset"),
+        lookupOutput: document.querySelector("#lookup-output"),
+        queryInput: document.querySelector("#query-input"),
+        queryRun: document.querySelector("#query-run"),
+        queryOutput: document.querySelector("#query-output"),
+      };
+
+      const PAGE_SIZE = 100;
+      const SQL_JS_BASE_URL = "https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist";
+      const SQL_JS_SCRIPT_URL = `${SQL_JS_BASE_URL}/sql-wasm.js`;
+      const state = {
+        SQL: null,
+        db: null,
+        dbName: "",
+        tables: [],
+        selectedTable: "",
+        selectedTableTotalRows: 0,
+        pageIndex: 0,
+      };
+
+      function loadSqlJsScript() {
+        if (typeof window.initSqlJs === "function") {
+          return Promise.resolve(window.initSqlJs);
+        }
+        return new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = SQL_JS_SCRIPT_URL;
+          script.async = true;
+          script.onload = () => {
+            if (typeof window.initSqlJs === "function") {
+              resolve(window.initSqlJs);
+              return;
+            }
+            reject(new Error("sql.js loaded but initSqlJs is unavailable."));
+          };
+          script.onerror = () => reject(new Error("Failed to load sql.js runtime script."));
+          document.head.appendChild(script);
+        });
+      }
+
+      function setStatus(message, tone = "warn") {
+        elements.status.textContent = message;
+        elements.status.className = `status ${tone}`;
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function normalizeReg(value) {
+        return String(value ?? "")
+          .trim()
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, "");
+      }
+
+      function toAircraftHex(value) {
+        if (value === null || value === undefined || value === "") {
+          return "";
+        }
+        const number = Number(value);
+        if (!Number.isFinite(number) || number < 0) {
+          return "";
+        }
+        const rounded = Math.trunc(number);
+        const hex = rounded.toString(16).toUpperCase();
+        return hex.length < 6 ? hex.padStart(6, "0") : hex;
+      }
+
+      function hexToDecimal(value) {
+        const cleaned = String(value ?? "").trim().toUpperCase().replace(/[^A-F0-9]/g, "");
+        if (!cleaned) {
+          return "";
+        }
+        const parsed = Number.parseInt(cleaned, 16);
+        if (!Number.isFinite(parsed)) {
+          return "";
+        }
+        return String(parsed);
+      }
+
+      function safeIdentifier(name) {
+        return String(name).replace(/\]/g, "]]");
+      }
+
+      function runPrepared(sql, params = []) {
+        const statement = state.db.prepare(sql);
+        statement.bind(params);
+        const rows = [];
+        while (statement.step()) {
+          rows.push(statement.getAsObject());
+        }
+        statement.free();
+        return rows;
+      }
+
+      function renderRowsTable(rows) {
+        if (!rows.length) {
+          return '<div class="empty" style="padding:0.62rem;">No rows.</div>';
+        }
+        const columns = Object.keys(rows[0]);
+        const head = columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("");
+        const body = rows.map((row) => (
+          `<tr>${columns.map((column) => `<td class=\"mono\">${escapeHtml(row[column])}</td>`).join("")}</tr>`
+        )).join("");
+        return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+      }
+
+      function refreshPagerUi() {
+        if (!state.selectedTable) {
+          elements.pageMeta.textContent = "Page 0 / 0";
+          elements.pagePrev.disabled = true;
+          elements.pageNext.disabled = true;
+          return;
+        }
+        const totalPages = Math.max(Math.ceil(state.selectedTableTotalRows / PAGE_SIZE), 1);
+        const pageNumber = state.pageIndex + 1;
+        elements.pageMeta.textContent = `Page ${pageNumber} / ${totalPages} (${state.selectedTableTotalRows.toLocaleString("en-US")} rows)`;
+        elements.pagePrev.disabled = pageNumber <= 1;
+        elements.pageNext.disabled = pageNumber >= totalPages;
+      }
+
+      function renderTableList() {
+        const query = elements.tableFilter.value.trim().toLowerCase();
+        const filtered = query
+          ? state.tables.filter((table) => table.name.toLowerCase().includes(query))
+          : state.tables.slice();
+
+        elements.tableCount.textContent = `${filtered.length.toLocaleString("en-US")} tables`;
+        if (!filtered.length) {
+          elements.tableList.innerHTML = '<div class="empty">No matching tables.</div>';
+          return;
+        }
+
+        elements.tableList.innerHTML = filtered.map((table) => `
+          <button class="table-item${state.selectedTable === table.name ? " active" : ""}" type="button" data-table="${escapeHtml(table.name)}">
+            <strong class="mono">${escapeHtml(table.name)}</strong>
+            <span class="pill mono">${Number(table.rows).toLocaleString("en-US")}</span>
+          </button>
+        `).join("");
+      }
+
+      function browseTable(tableName, pageIndex = 0) {
+        if (!state.db) {
+          return;
+        }
+        const safeTable = safeIdentifier(tableName);
+        const countRows = runPrepared(`SELECT COUNT(*) AS count FROM [${safeTable}]`);
+        state.selectedTableTotalRows = Number(countRows[0]?.count || 0);
+        const maxPage = Math.max(Math.ceil(state.selectedTableTotalRows / PAGE_SIZE) - 1, 0);
+        state.pageIndex = Math.min(Math.max(pageIndex, 0), maxPage);
+        state.selectedTable = tableName;
+
+        const offset = state.pageIndex * PAGE_SIZE;
+        const rows = runPrepared(`SELECT * FROM [${safeTable}] LIMIT ${PAGE_SIZE} OFFSET ${offset}`);
+        elements.browseTitle.textContent = `Table Browser - ${tableName}`;
+        elements.tablePreview.innerHTML = renderRowsTable(rows);
+        refreshPagerUi();
+        renderTableList();
+      }
+
+      function loadTables() {
+        const tables = runPrepared(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+        );
+        state.tables = tables.map((row) => {
+          const name = String(row.name);
+          const safeTable = safeIdentifier(name);
+          const count = runPrepared(`SELECT COUNT(*) AS count FROM [${safeTable}]`);
+          return {
+            name,
+            rows: Number(count[0]?.count || 0),
+          };
+        });
+
+        renderTableList();
+        if (state.tables.length) {
+          browseTable(state.tables[0].name, 0);
+        } else {
+          elements.tablePreview.innerHTML = '<div class="empty" style="padding:0.62rem;">No tables found.</div>';
+        }
+      }
+
+      function runLookup() {
+        if (!state.db) {
+          setStatus("Load a database first.", "warn");
+          return;
+        }
+        const reg = normalizeReg(elements.lookupReg.value);
+        const aircraftIdRaw = elements.lookupAircraftId.value.trim();
+        const computedHex = toAircraftHex(aircraftIdRaw);
+        const hex = String(elements.lookupHex.value || computedHex).trim().toUpperCase();
+        elements.lookupComputedHex.value = computedHex || "";
+        elements.lookupComputedDecimal.value = hexToDecimal(hex);
+
+        const clauses = [];
+        const params = [];
+        if (hex) {
+          clauses.push("upper(icao) = ?");
+          params.push(hex);
+        }
+        if (reg) {
+          clauses.push("upper(replace(replace(replace(reg,'-',''),' ',''),'.','')) = ?");
+          params.push(reg);
+        }
+        if (!clauses.length) {
+          elements.lookupOutput.innerHTML = '<div class="empty" style="padding:0.62rem;">Enter registration, aircraftId, or ICAO hex.</div>';
+          return;
+        }
+
+        const sql = `
+          SELECT
+            icao,
+            reg,
+            icaotype,
+            manufacturer,
+            model,
+            ownop
+          FROM aircraft_database_sheet1
+          WHERE ${clauses.join(" OR ")}
+          LIMIT 60
+        `;
+        const rows = runPrepared(sql, params);
+        elements.lookupOutput.innerHTML = renderRowsTable(rows);
+      }
+
+      function runQuery() {
+        if (!state.db) {
+          setStatus("Load a database first.", "warn");
+          return;
+        }
+        const text = elements.queryInput.value.trim();
+        if (!text) {
+          return;
+        }
+        try {
+          const resultSets = state.db.exec(text);
+          if (!resultSets.length) {
+            elements.queryOutput.innerHTML = '<div class="empty">Statement executed (no result rows).</div>';
+            return;
+          }
+
+          elements.queryOutput.innerHTML = resultSets.map((set, index) => {
+            const rows = set.values.map((values) => {
+              const row = {};
+              set.columns.forEach((column, columnIndex) => {
+                row[column] = values[columnIndex];
+              });
+              return row;
+            });
+            return `
+              <div class="query-result">
+                <strong class="mono">Result ${index + 1} - ${rows.length.toLocaleString("en-US")} rows</strong>
+                <div class="table-wrap" style="margin-top:0.45rem; max-height:26vh;">
+                  ${renderRowsTable(rows)}
+                </div>
+              </div>
+            `;
+          }).join("");
+        } catch (error) {
+          elements.queryOutput.innerHTML = `<div class="empty">Query error: ${escapeHtml(error.message || error)}</div>`;
+        }
+      }
+
+      async function loadDatabaseFile(file) {
+        try {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          state.db?.close();
+          state.db = new state.SQL.Database(bytes);
+          state.dbName = file.name;
+          elements.dbMeta.textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+          setStatus("Database loaded. Browse tables or run SQL.", "good");
+          state.selectedTable = "";
+          state.selectedTableTotalRows = 0;
+          state.pageIndex = 0;
+          loadTables();
+        } catch (error) {
+          setStatus(`Could not read database: ${error.message || error}`, "bad");
+        }
+      }
+
+      async function bootstrap() {
+        try {
+          const initSqlJs = await loadSqlJsScript();
+          state.SQL = await initSqlJs({
+            locateFile: (file) => `${SQL_JS_BASE_URL}/${file}`,
+          });
+          setStatus("Ready. Load a SQLite file to start.", "warn");
+        } catch (error) {
+          setStatus(`Could not load SQL engine: ${error.message || error}`, "bad");
+          return;
+        }
+
+        elements.dbFile.addEventListener("change", () => {
+          const file = elements.dbFile.files?.[0];
+          if (!file) {
+            return;
+          }
+          void loadDatabaseFile(file);
+        });
+
+        elements.tableFilter.addEventListener("input", renderTableList);
+        elements.tableList.addEventListener("click", (event) => {
+          const target = event.target;
+          if (!(target instanceof Element)) {
+            return;
+          }
+          const button = target.closest("button[data-table]");
+          if (!button) {
+            return;
+          }
+          const tableName = button.getAttribute("data-table");
+          if (!tableName) {
+            return;
+          }
+          browseTable(tableName, 0);
+        });
+
+        elements.pagePrev.addEventListener("click", () => {
+          if (!state.selectedTable) {
+            return;
+          }
+          browseTable(state.selectedTable, state.pageIndex - 1);
+        });
+
+        elements.pageNext.addEventListener("click", () => {
+          if (!state.selectedTable) {
+            return;
+          }
+          browseTable(state.selectedTable, state.pageIndex + 1);
+        });
+
+        elements.lookupAircraftId.addEventListener("input", () => {
+          const hex = toAircraftHex(elements.lookupAircraftId.value.trim());
+          elements.lookupComputedHex.value = hex;
+        });
+        elements.lookupHex.addEventListener("input", () => {
+          elements.lookupComputedDecimal.value = hexToDecimal(elements.lookupHex.value.trim());
+        });
+        elements.lookupRun.addEventListener("click", runLookup);
+        elements.lookupReset.addEventListener("click", () => {
+          elements.lookupReg.value = "";
+          elements.lookupAircraftId.value = "";
+          elements.lookupHex.value = "";
+          elements.lookupComputedHex.value = "";
+          elements.lookupComputedDecimal.value = "";
+          elements.lookupOutput.innerHTML = '<div class="empty" style="padding:0.62rem;">No lookup run yet.</div>';
+        });
+
+        elements.queryRun.addEventListener("click", runQuery);
+      }
+
+      void bootstrap();
+    </script>
+  </body>
+</html>

@@ -11,6 +11,20 @@ DEFAULT_BASE_URL = 'https://api.skycards.oldapes.com'
 DEFAULT_CLIENT_VERSION = '2.0.24'
 DEFAULT_TIMEOUT_SECONDS = 30
 DATASETS = ('models', 'airports')
+OPTIONAL_MANIFEST_DATASETS = {
+    'modelRegistrationCounts': {
+        'file': 'model_registration_counts.json',
+        'rows_key': 'countsByModelId',
+    },
+    'aircraftLookup': {
+        'file': 'aircraft_lookup.json',
+        'rows_key': 'byAircraftHex',
+    },
+    'aircraftLookupResolved': {
+        'file': 'aircraft_lookup_resolved.json',
+        'rows_key': 'byAircraftHex',
+    },
+}
 
 
 def utc_now_iso() -> str:
@@ -56,6 +70,28 @@ def build_manifest(base_url: str, client_version: str, payloads: dict[str, dict]
         'generatedAt': utc_now_iso(),
         'datasets': datasets,
     }
+
+
+def add_optional_manifest_datasets(manifest: dict, out_dir: Path) -> None:
+    datasets = manifest.setdefault('datasets', {})
+    for manifest_key, config in OPTIONAL_MANIFEST_DATASETS.items():
+        path = out_dir / config['file']
+        if not path.exists():
+            continue
+        with path.open('r', encoding='utf-8') as handle:
+            payload = json.load(handle)
+        rows_payload = payload.get(config['rows_key'])
+        if isinstance(rows_payload, dict):
+            rows = len(rows_payload)
+        elif isinstance(rows_payload, list):
+            rows = len(rows_payload)
+        else:
+            rows = 0
+        datasets[manifest_key] = {
+            'updatedAt': payload.get('generatedAt') or payload.get('updatedAt'),
+            'rows': rows,
+            'path': f"./{config['file']}",
+        }
 
 
 def parse_args() -> argparse.Namespace:
@@ -108,7 +144,9 @@ def main() -> int:
         if path.exists():
             with path.open('r', encoding='utf-8') as handle:
                 existing_payloads[dataset] = json.load(handle)
-    write_json(out_dir / 'manifest.json', build_manifest(args.base_url, args.client_version, existing_payloads))
+    manifest = build_manifest(args.base_url, args.client_version, existing_payloads)
+    add_optional_manifest_datasets(manifest, out_dir)
+    write_json(out_dir / 'manifest.json', manifest)
     print(f"wrote manifest: {out_dir / 'manifest.json'}")
     return 0
 

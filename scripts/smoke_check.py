@@ -45,7 +45,6 @@ def check_sample_collection() -> None:
         'xp',
         'cards',
         'unlockedAirportIds',
-        'uniqueRegs',
     }
     missing = sorted(required_keys - set(payload))
     if missing:
@@ -54,8 +53,9 @@ def check_sample_collection() -> None:
         raise SystemExit('smoke_check: sample payload has no cards')
     if not isinstance(payload.get('unlockedAirportIds'), list):
         raise SystemExit('smoke_check: unlockedAirportIds is not a list')
-    if not isinstance(payload.get('uniqueRegs'), list):
-        raise SystemExit('smoke_check: uniqueRegs is not a list')
+    if not isinstance(payload.get('uniqueRegs'), list) and not isinstance(payload.get('caughtRegistrations'), list):
+        raise SystemExit('smoke_check: payload has neither uniqueRegs nor caughtRegistrations array')
+    caught_rows = payload.get('caughtRegistrations') if isinstance(payload.get('caughtRegistrations'), list) else payload['uniqueRegs']
     first_card = payload['cards'][0]
     for field in ('modelId', 'manufacturer', 'name', 'tier', 'category'):
         if field not in first_card:
@@ -65,7 +65,7 @@ def check_sample_collection() -> None:
         f'path={sample_path.relative_to(REPO_ROOT)}',
         f"cards={len(payload['cards'])}",
         f"airports={len(payload['unlockedAirportIds'])}",
-        f"unique_regs={len(payload['uniqueRegs'])}",
+        f'unique_regs={len(caught_rows)}',
     )
 
 
@@ -73,6 +73,9 @@ def check_reference_data() -> None:
     manifest = _load_json(REPO_ROOT / 'site' / 'data' / 'reference' / 'manifest.json')
     models = _load_json(REPO_ROOT / 'site' / 'data' / 'reference' / 'models.json')
     airports = _load_json(REPO_ROOT / 'site' / 'data' / 'reference' / 'airports.json')
+    model_registration_counts_path = REPO_ROOT / 'site' / 'data' / 'reference' / 'model_registration_counts.json'
+    aircraft_lookup_path = REPO_ROOT / 'site' / 'data' / 'reference' / 'aircraft_lookup.json'
+    aircraft_lookup_resolved_path = REPO_ROOT / 'site' / 'data' / 'reference' / 'aircraft_lookup_resolved.json'
 
     if 'datasets' not in manifest:
         raise SystemExit('smoke_check: manifest missing datasets')
@@ -85,6 +88,21 @@ def check_reference_data() -> None:
         f"models={len(models['rows'])}",
         f"airports={len(airports['rows'])}",
     )
+    if model_registration_counts_path.exists():
+        model_registration_counts = _load_json(model_registration_counts_path)
+        if not isinstance(model_registration_counts.get('countsByModelId'), dict):
+            raise SystemExit('smoke_check: model_registration_counts.json countsByModelId missing')
+        print('reference registration counts:', f"models={len(model_registration_counts['countsByModelId'])}")
+    if aircraft_lookup_path.exists():
+        aircraft_lookup = _load_json(aircraft_lookup_path)
+        if not isinstance(aircraft_lookup.get('byAircraftHex'), dict):
+            raise SystemExit('smoke_check: aircraft_lookup.json byAircraftHex missing')
+        print('reference aircraft lookup:', f"hex_rows={len(aircraft_lookup['byAircraftHex'])}")
+    if aircraft_lookup_resolved_path.exists():
+        aircraft_lookup_resolved = _load_json(aircraft_lookup_resolved_path)
+        if not isinstance(aircraft_lookup_resolved.get('byAircraftHex'), dict):
+            raise SystemExit('smoke_check: aircraft_lookup_resolved.json byAircraftHex missing')
+        print('reference aircraft lookup (resolved):', f"hex_rows={len(aircraft_lookup_resolved['byAircraftHex'])}")
 
 
 def main() -> int:

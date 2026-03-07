@@ -351,9 +351,23 @@
           <div class="aircraft-layout">
             <article class="panel aircraft-list-panel">
               <div class="section-head aircraft-list-head">
-                <div>
-                  <p class="eyebrow">Aircraft</p>
-                  <h3>Aircraft deck</h3>
+                <div class="aircraft-list-title-wrap">
+                  <div>
+                    <p class="eyebrow">Aircraft</p>
+                    <h3>Aircraft deck</h3>
+                  </div>
+                  <button
+                    id="aircraft-reg-transparency-trigger"
+                    class="aircraft-caution-button"
+                    type="button"
+                    aria-haspopup="dialog"
+                    aria-expanded="false"
+                    aria-controls="aircraft-reg-transparency-modal"
+                    title="Registration mapping transparency"
+                  >
+                    <span class="aircraft-caution-icon" aria-hidden="true">&#9888;</span>
+                    <span class="sr-only">Open registration mapping transparency details</span>
+                  </button>
                 </div>
                 <div class="aircraft-list-controls">
                   <label class="control-field">
@@ -403,6 +417,82 @@
           </div>
         </section>
       </main>
+
+      <div id="aircraft-reg-transparency-modal" class="aircraft-reg-modal" hidden>
+        <div id="aircraft-reg-transparency-backdrop" class="aircraft-reg-modal-backdrop" aria-hidden="true"></div>
+        <section
+          class="aircraft-reg-modal-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="aircraft-reg-transparency-title"
+        >
+          <header class="aircraft-reg-modal-head">
+            <div>
+              <p class="eyebrow">Data caution</p>
+              <h3 id="aircraft-reg-transparency-title">Registration mapping transparency</h3>
+            </div>
+            <button
+              id="aircraft-reg-transparency-close"
+              class="aircraft-reg-modal-close"
+              type="button"
+              aria-label="Close registration mapping transparency modal"
+            >
+              Close
+            </button>
+          </header>
+          <p class="aircraft-reg-modal-copy">
+            Unique registration tracking is approximate. Some rows map cleanly from aircraft transponder hex values, while others rely on weaker registration fallback or unresolved inference.
+          </p>
+          <p class="aircraft-reg-modal-copy is-warning">
+            Card-level registration badges may be understated or slightly off when rows remain medium-confidence, low-confidence, or ambiguous.
+          </p>
+          <div id="aircraft-reg-transparency-summary" class="aircraft-reg-modal-summary"></div>
+          <div class="aircraft-reg-modal-controls">
+            <label class="control-field">
+              <span>Search</span>
+              <input
+                id="aircraft-reg-transparency-search"
+                type="search"
+                placeholder="Registration, hex, ICAO, method"
+              >
+            </label>
+            <label class="control-field">
+              <span>Confidence</span>
+              <select id="aircraft-reg-transparency-filter">
+                <option value="all">All confidence levels</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="ambiguous">Ambiguous</option>
+                <option value="low">Low / unresolved</option>
+              </select>
+            </label>
+          </div>
+          <p id="aircraft-reg-transparency-meta" class="aircraft-reg-modal-meta"></p>
+          <div class="aircraft-reg-modal-table-wrap">
+            <table class="aircraft-reg-modal-table">
+              <thead>
+                <tr>
+                  <th scope="col">Registration</th>
+                  <th scope="col">Transponder hex</th>
+                  <th scope="col">Mapped ICAO</th>
+                  <th scope="col">Confidence</th>
+                  <th scope="col">Method / notes</th>
+                </tr>
+              </thead>
+              <tbody id="aircraft-reg-transparency-rows"></tbody>
+            </table>
+          </div>
+          <footer class="aircraft-reg-modal-pagination">
+            <button id="aircraft-reg-transparency-prev" class="region-action-button" type="button">
+              Previous
+            </button>
+            <p id="aircraft-reg-transparency-page-label" class="aircraft-reg-page-label"></p>
+            <button id="aircraft-reg-transparency-next" class="region-action-button" type="button">
+              Next
+            </button>
+          </footer>
+        </section>
+      </div>
 
       <footer class="site-footer" role="contentinfo">
         <div class="site-footer-grid">

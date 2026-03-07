@@ -25,6 +25,15 @@ jobs:
           python-version: '3.11'
       - name: Refresh reference data
         run: python scripts/refresh_reference_data.py
+      - name: Refresh model registration counts
+        run: python scripts/refresh_model_registration_counts.py
+      - name: Build aircraft lookup (optional)
+        run: |
+          if [ -f aircraft_data.db ]; then
+            python scripts/build_aircraft_lookup_from_db.py --db-path aircraft_data.db
+          else
+            echo "aircraft_data.db not present; skipping aircraft lookup build."
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

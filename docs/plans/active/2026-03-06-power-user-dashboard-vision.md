@@ -205,13 +205,12 @@ Expanded row should show:
   - an official image URL resolver, or
   - a deliberate placeholder strategy for phase 1
 
-### Known gap: unique registrations per aircraft
+### Resolved follow-up: unique registrations per aircraft
 
-- The sample export contains `uniqueRegs[].aircraftId`, but the current dashboard model and committed reference snapshots do not provide a direct `aircraftId -> modelId` join.
-- That means a reliable per-aircraft "unique registrations caught" metric is not available from the current local contract.
-- Options:
-  - omit that field in phase 1
-  - find an official mapping source and extend the committed reference contract
+- `uniqueRegs[].aircraftId` decodes to decimal ICAO transponder IDs (hex in `aircraft_data.db` column `icao`).
+- The mapping path is now `aircraftId (decimal) -> hex ICAO -> aircraft_lookup.byAircraftHex -> modelId (ICAO type)`.
+- Total possible registrations per model are sourced from `GET /models/count/{icao}` and stored in `model_registration_counts.json`.
+- The aircraft deck can now show a registration badge per card (`caught / total possible`) when lookup and count snapshots are available.
 
 ## Component model
 
