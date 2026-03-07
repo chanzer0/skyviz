@@ -1,0 +1,450 @@
+{
+  "id": "skyviz-example-user",
+  "name": "Skyviz Example Deck",
+  "xp": 575000,
+  "cards": [
+    {
+      "id": "example-card-1",
+      "modelId": "A320",
+      "manufacturer": "AIRBUS",
+      "name": "A320",
+      "xp": 58988,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 13,
+      "tier": "cyber",
+      "category": "common",
+      "season": 1
+    },
+    {
+      "id": "example-card-2",
+      "modelId": "A321",
+      "manufacturer": "AIRBUS",
+      "name": "A321",
+      "xp": 42062,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 4,
+      "tier": "cyber",
+      "category": "common",
+      "season": 1
+    },
+    {
+      "id": "example-card-3",
+      "modelId": "A319",
+      "manufacturer": "AIRBUS",
+      "name": "A319",
+      "xp": 34012,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 6,
+      "tier": "cyber",
+      "category": "uncommon",
+      "season": 1
+    },
+    {
+      "id": "example-card-4",
+      "modelId": "A20N",
+      "manufacturer": "AIRBUS",
+      "name": "A320neo",
+      "xp": 25986,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 5,
+      "tier": "cyber",
+      "category": "common",
+      "season": 1
+    },
+    {
+      "id": "example-card-5",
+      "modelId": "A21N",
+      "manufacturer": "AIRBUS",
+      "name": "A321neo",
+      "xp": 35453,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 6,
+      "tier": "cyber",
+      "category": "common",
+      "season": 1
+    },
+    {
+      "id": "example-card-6",
+      "modelId": "B738",
+      "manufacturer": "BOEING",
+      "name": "737-800",
+      "xp": 75526,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 18,
+      "tier": "cyber",
+      "category": "common",
+      "season": 1
+    },
+    {
+      "id": "example-card-7",
+      "modelId": "B737",
+      "manufacturer": "BOEING",
+      "name": "737-700",
+      "xp": 48452,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 5,
+      "tier": "cyber",
+      "category": "uncommon",
+      "season": 1
+    },
+    {
+      "id": "example-card-8",
+      "modelId": "B739",
+      "manufacturer": "BOEING",
+      "name": "737-900",
+      "xp": 24525,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 4,
+      "tier": "cyber",
+      "category": "uncommon",
+      "season": 1
+    },
+    {
+      "id": "example-card-9",
+      "modelId": "B39M",
+      "manufacturer": "BOEING",
+      "name": "737 MAX\u00a09",
+      "xp": 21520,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 2,
+      "tier": "cyber",
+      "category": "uncommon",
+      "season": 1
+    },
+    {
+      "id": "example-card-10",
+      "modelId": "B38M",
+      "manufacturer": "BOEING",
+      "name": "737 MAX\u00a08",
+      "xp": 60722,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 6,
+      "tier": "cyber",
+      "category": "common",
+      "season": 1
+    },
+    {
+      "id": "example-card-11",
+      "modelId": "B744",
+      "manufacturer": "BOEING",
+      "name": "747-400",
+      "xp": 21675,
+      "coverage": 99,
+      "cloudiness": 0,
+      "glowCount": 4,
+      "tier": "cyber",
+      "category": "uncommon",
+      "season": 1
+    },
+    {
+      "id": "example-card-12",
+      "modelId": "B772",
+      "manufacturer": "BOEING",
+      "name": "777-200",
+      "xp": 8108,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 2,
+      "tier": "gold",
+      "category": "uncommon",
+      "season": 1
+    },
+    {
+      "id": "example-card-13",
+      "modelId": "B77W",
+      "manufacturer": "BOEING",
+      "name": "777-300ER",
+      "xp": 47283,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 6,
+      "tier": "cyber",
+      "category": "common",
+      "season": 1
+    },
+    {
+      "id": "example-card-14",
+      "modelId": "B788",
+      "manufacturer": "BOEING",
+      "name": "787-8 Dreamliner",
+      "xp": 10544,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 2,
+      "tier": "platinum",
+      "category": "uncommon",
+      "season": 1
+    },
+    {
+      "id": "example-card-15",
+      "modelId": "B789",
+      "manufacturer": "BOEING",
+      "name": "787-9 Dreamliner",
+      "xp": 17803,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 2,
+      "tier": "platinum",
+      "category": "common",
+      "season": 1
+    },
+    {
+      "id": "example-card-16",
+      "modelId": "B763",
+      "manufacturer": "BOEING",
+      "name": "767-300",
+      "xp": 12123,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 1,
+      "tier": "platinum",
+      "category": "uncommon",
+      "season": 1
+    },
+    {
+      "id": "example-card-17",
+      "modelId": "E190",
+      "manufacturer": "EMBRAER",
+      "name": "E190",
+      "xp": 4744,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 0,
+      "tier": "gold",
+      "category": "uncommon",
+      "season": 1
+    },
+    {
+      "id": "example-card-18",
+      "modelId": "E195",
+      "manufacturer": "EMBRAER",
+      "name": "E195",
+      "xp": 2855,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 0,
+      "tier": "gold",
+      "category": "scarce",
+      "season": 1
+    },
+    {
+      "id": "example-card-19",
+      "modelId": "CRJ9",
+      "manufacturer": "BOMBARDIER",
+      "name": "CRJ-900 Regional\u00a0Jet",
+      "xp": 19739,
+      "coverage": 100,
+      "cloudiness": 0,
+      "glowCount": 0,
+      "tier": "cyber",
+      "category": "uncommon",
+      "season": 1
+    },
+    {
+      "id": "example-card-20",
+      "modelId": "AT76",
+      "manufacturer": "ATR",
+      "name": "72-600",
+      "xp": 2880,
+      "coverage": 99,
+      "cloudiness": 0,
+      "glowCount": 0,
+      "tier": "gold",
+      "category": "uncommon",
+      "season": 1
+    }
+  ],
+  "unlockedAirportIds": [
+    "1598",
+    "1878",
+    "2625",
+    "208",
+    "1942",
+    "598",
+    "141",
+    "1105",
+    "916",
+    "1366",
+    "3182",
+    "1386",
+    "2505",
+    "3370",
+    "3147",
+    "3129",
+    "824",
+    "828",
+    "4164",
+    "2087"
+  ],
+  "uniqueRegs": [
+    {
+      "reg": "SKY-CARDS"
+    },
+    {
+      "reg": "N934AN",
+      "aircraftId": 11334802
+    },
+    {
+      "reg": "N3733Z",
+      "aircraftId": 10764745
+    },
+    {
+      "reg": "N3255J",
+      "aircraftId": 10716147
+    },
+    {
+      "reg": "N585NN",
+      "aircraftId": 10979764
+    },
+    {
+      "reg": "N242NN",
+      "aircraftId": 10631334
+    },
+    {
+      "reg": "N862FD",
+      "aircraftId": 11261638
+    },
+    {
+      "reg": "N167UP",
+      "aircraftId": 10554751
+    },
+    {
+      "reg": "N746CC",
+      "aircraftId": 11143433
+    },
+    {
+      "reg": "N586NW",
+      "aircraftId": 10980723
+    },
+    {
+      "reg": "N950SF",
+      "aircraftId": 11351613
+    },
+    {
+      "reg": "N1709A",
+      "aircraftId": 10558657
+    },
+    {
+      "reg": "N249WN",
+      "aircraftId": 10638191
+    },
+    {
+      "reg": "N372UP",
+      "aircraftId": 10763529
+    },
+    {
+      "reg": "N380UP",
+      "aircraftId": 10771738
+    },
+    {
+      "reg": "N463UP",
+      "aircraftId": 10856080
+    },
+    {
+      "reg": "64-14848",
+      "aircraftId": 11403715
+    },
+    {
+      "reg": "N774AX",
+      "aircraftId": 11171833
+    },
+    {
+      "reg": "B-LXJ",
+      "aircraftId": 7901744
+    },
+    {
+      "reg": "N287LS",
+      "aircraftId": 10676487
+    },
+    {
+      "reg": "N255CM",
+      "aircraftId": 10644047
+    },
+    {
+      "reg": "N1049A",
+      "aircraftId": 10491684
+    },
+    {
+      "reg": "N131DD",
+      "aircraftId": 10518327
+    },
+    {
+      "reg": "N938SH",
+      "aircraftId": 11339001
+    },
+    {
+      "reg": "G-CBKD",
+      "aircraftId": 4211854
+    },
+    {
+      "reg": "G-IDID",
+      "aircraftId": 4212225
+    },
+    {
+      "reg": "G-VSOZ",
+      "aircraftId": 4221650
+    },
+    {
+      "reg": "N609LH",
+      "aircraftId": 11004336
+    },
+    {
+      "reg": "N703TX",
+      "aircraftId": 11100530
+    },
+    {
+      "reg": "N404CD",
+      "aircraftId": 10795955
+    },
+    {
+      "reg": "N678QS",
+      "aircraftId": 11074271
+    },
+    {
+      "reg": "N125TR",
+      "aircraftId": 10512382
+    },
+    {
+      "reg": "N855ED",
+      "aircraftId": 11254355
+    },
+    {
+      "reg": "N888HH",
+      "aircraftId": 11287620
+    },
+    {
+      "reg": "N603AT",
+      "aircraftId": 10998390
+    },
+    {
+      "reg": "N650CW",
+      "aircraftId": 11046145
+    },
+    {
+      "reg": "N783DC",
+      "aircraftId": 11181049
+    },
+    {
+      "reg": "N932JS",
+      "aircraftId": 11333104
+    },
+    {
+      "reg": "N130DU",
+      "aircraftId": 10517391
+    },
+    {
+      "reg": "N591NW",
+      "aircraftId": 10986079
+    }
+  ]
+}

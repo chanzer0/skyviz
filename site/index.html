@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Skyviz</title>
+    <meta
+      name="description"
+      content="Upload a Skycards export and explore an interactive map plus aircraft analytics in a browser-only dashboard."
+    >
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;500;700&family=DM+Serif+Display:ital@0;1&display=swap"
+      rel="stylesheet"
+    >
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    >
+    <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#dashboard">Skip to dashboard</a>
+    <div class="page-shell" id="page-top">
+      <section id="boot-loader" class="boot-loader" aria-live="polite">
+        <article class="boot-card">
+          <p class="eyebrow">Private startup</p>
+          <h1>Skyviz</h1>
+          <p id="boot-status" class="boot-status">Preparing your private local workspace...</p>
+          <div class="boot-progress" aria-hidden="true">
+            <span class="boot-progress-fill"></span>
+          </div>
+        </article>
+      </section>
+
+      <section id="landing-view" class="landing-view" aria-labelledby="landing-title" hidden>
+        <div class="landing-flow">
+          <header class="landing-hero-head">
+            <h1 id="landing-title">Skyviz</h1>
+            <p class="landing-subhead">Your collection stays yours. Skyviz never uploads your data to any server.</p>
+            <p class="eyebrow landing-privacy-kicker">Private by default</p>
+          </header>
+
+          <article class="landing-card">
+            <p class="landing-lede">
+              Skyviz is a free, open-source alternative built for collectors who want control. Your file is processed locally in your browser only, and you can choose whether to keep a copy on this device.
+            </p>
+
+            <section class="landing-step" aria-labelledby="step-start-title">
+              <p class="landing-step-kicker">Step 1</p>
+              <h2 id="step-start-title" class="landing-step-title">Start your private dashboard</h2>
+
+              <label class="upload-cta" id="dropzone" for="file-input">
+                <input id="file-input" type="file" accept=".json,application/json" aria-describedby="upload-support">
+                <span class="upload-cta-title">Upload JSON export</span>
+                <span class="upload-cta-subtitle">Drop file here or click to choose</span>
+              </label>
+
+              <div class="try-now">
+                <button id="view-example" class="view-example-button" type="button">View Example Dashboard</button>
+                <p class="try-now-copy">
+                  No upload required. Try a built-in sample deck with 20 popular airports and 20 popular aircraft models (about 575k XP).
+                </p>
+              </div>
+
+              <p class="landing-support" id="upload-support">
+                Expected after upload: two private local views, <strong>Map</strong> and <strong>Aircraft</strong>. Accepted input: Skycards export JSON (for local testing, use <code>skycards_user.json</code>).
+              </p>
+            </section>
+
+            <section class="landing-step" aria-labelledby="step-storage-title">
+              <p class="landing-step-kicker">Step 2 (optional)</p>
+              <h2 id="step-storage-title" class="landing-step-title">Keep a local copy on this device</h2>
+
+              <label class="persist-choice">
+                <input id="persist-upload" type="checkbox">
+                <span>
+                  Save this upload in <strong>browser local storage on this device</strong>. Skyviz does not upload, share, or store your collection on any remote server.
+                </span>
+              </label>
+            </section>
+
+            <section class="landing-step export-guide" aria-labelledby="export-guide-title">
+              <p class="landing-step-kicker">Step 3</p>
+              <h2 id="export-guide-title">Need your Skycards export JSON first?</h2>
+              <ol>
+                <li>
+                  Open the guide:
+                  <a href="https://github.com/mfkp/skycards-export" target="_blank" rel="noopener noreferrer">
+                    github.com/mfkp/skycards-export
+                  </a>
+                </li>
+                <li>
+                  Run one of the official export scripts:
+                  <div class="export-guide-snippet">
+                    <strong>Windows PowerShell</strong>
+                    <code>Invoke-WebRequest -Uri https://raw.githubusercontent.com/mfkp/skycards-export/main/skycards_export.ps1 -OutFile skycards_export.ps1</code>
+                    <code>powershell -ExecutionPolicy Bypass -File .\skycards_export.ps1</code>
+                  </div>
+                  <div class="export-guide-snippet">
+                    <strong>macOS / Linux / Git Bash</strong>
+                    <code>curl -O https://raw.githubusercontent.com/mfkp/skycards-export/main/skycards_export.sh</code>
+                    <code>chmod +x skycards_export.sh</code>
+                    <code>./skycards_export.sh</code>
+                  </div>
+                </li>
+                <li>
+                  The script saves <code>skycards_user.json</code> in your current folder. Upload that file here.
+                </li>
+              </ol>
+            </section>
+          </article>
+        </div>
+      </section>
+
+      <section id="message-banner" class="message-banner is-hidden" aria-live="polite"></section>
+
+      <main id="dashboard" class="dashboard-app" hidden tabindex="-1">
+        <div class="dashboard-tabs-shell">
+          <div class="dashboard-tabs-tools">
+            <nav class="dashboard-tabs" role="tablist" aria-label="Dashboard tabs">
+              <button
+                id="tab-map-button"
+                class="dashboard-tab-button is-active"
+                type="button"
+                role="tab"
+                aria-selected="true"
+                aria-controls="tab-map"
+                data-tab="map"
+              >
+                Map
+              </button>
+              <button
+                id="tab-aircraft-button"
+                class="dashboard-tab-button"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="tab-aircraft"
+                data-tab="aircraft"
+              >
+                Aircraft
+              </button>
+            </nav>
+            <div class="data-tools">
+              <button
+                id="data-tools-trigger"
+                class="data-tools-trigger"
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded="false"
+                aria-controls="data-tools-menu"
+                title="Data tools"
+              >
+                <span aria-hidden="true">&#9881;</span>
+                <span class="sr-only">Data tools</span>
+              </button>
+              <div id="data-tools-menu" class="data-tools-menu" role="menu" hidden>
+                <button id="data-tools-upload" class="data-tools-item" type="button" role="menuitem">
+                  Upload new file
+                </button>
+                <button id="data-tools-clear" class="data-tools-item is-danger" type="button" role="menuitem">
+                  Clear current + saved data
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <section
+          id="tab-map"
+          class="dashboard-tab-panel"
+          role="tabpanel"
+          aria-labelledby="tab-map-button"
+        >
+          <div class="map-layout">
+            <article class="panel map-panel">
+              <div class="section-head compact">
+                <div>
+                  <p class="eyebrow">Map</p>
+                  <h3>Airport capture map</h3>
+                </div>
+              </div>
+              <p class="panel-kpi-line" id="map-airport-kpi"></p>
+              <div id="map-canvas" class="leaflet-map" aria-label="Airport capture map"></div>
+              <div id="map-legend" class="map-legend"></div>
+            </article>
+
+            <div id="map-side" class="map-side">
+              <article id="continent-panel" class="panel completion-panel">
+                <div class="section-head compact completion-panel-head">
+                  <div>
+                    <p class="eyebrow">Continents</p>
+                    <h3>Continent completion</h3>
+                  </div>
+                  <button
+                    id="continent-collapse-toggle"
+                    class="panel-collapse-button"
+                    type="button"
+                    aria-controls="continent-panel-body"
+                    aria-expanded="true"
+                  >
+                    Collapse
+                  </button>
+                </div>
+                <div id="continent-panel-body" class="completion-panel-body">
+                  <p class="panel-kpi-line" id="continent-kpi"></p>
+                  <div class="completion-controls">
+                    <label class="control-field completion-control">
+                      <span>Search</span>
+                      <input id="continent-search" type="search" placeholder="Search continents">
+                    </label>
+                    <label class="control-field completion-control">
+                      <span>Sort by</span>
+                      <div class="completion-sort-row">
+                        <select id="continent-sort">
+                          <option value="percent">% complete</option>
+                          <option value="total">Total airports</option>
+                          <option value="captured">Captured airports</option>
+                          <option value="name">Name (alphabetical)</option>
+                        </select>
+                        <button
+                          id="continent-sort-direction"
+                          class="completion-direction-button"
+                          type="button"
+                          aria-label="Sort descending"
+                          title="Sort descending"
+                        >
+                          &#8595;
+                        </button>
+                      </div>
+                    </label>
+                  </div>
+                  <p class="completion-meta" id="continent-progress-meta"></p>
+                  <div id="continent-progress" class="completion-progress-list"></div>
+                </div>
+              </article>
+
+              <article id="country-panel" class="panel completion-panel">
+                <div class="section-head compact completion-panel-head">
+                  <div>
+                    <p class="eyebrow">Countries</p>
+                    <h3>Country completion</h3>
+                  </div>
+                  <button
+                    id="country-collapse-toggle"
+                    class="panel-collapse-button"
+                    type="button"
+                    aria-controls="country-panel-body"
+                    aria-expanded="true"
+                  >
+                    Collapse
+                  </button>
+                </div>
+                <div id="country-panel-body" class="completion-panel-body">
+                  <p class="panel-kpi-line" id="country-kpi"></p>
+                  <div class="completion-controls">
+                    <label class="control-field completion-control">
+                      <span>Search</span>
+                      <input id="country-search" type="search" placeholder="Search countries">
+                    </label>
+                    <label class="control-field completion-control">
+                      <span>Sort by</span>
+                      <div class="completion-sort-row">
+                        <select id="country-sort">
+                          <option value="percent">% complete</option>
+                          <option value="total">Total airports</option>
+                          <option value="captured">Captured airports</option>
+                          <option value="name">Name (alphabetical)</option>
+                        </select>
+                        <button
+                          id="country-sort-direction"
+                          class="completion-direction-button"
+                          type="button"
+                          aria-label="Sort descending"
+                          title="Sort descending"
+                        >
+                          &#8595;
+                        </button>
+                      </div>
+                    </label>
+                  </div>
+                  <p class="completion-meta" id="country-progress-meta"></p>
+                  <div id="country-progress" class="completion-progress-list"></div>
+                </div>
+              </article>
+
+              <article id="us-state-panel" class="panel completion-panel">
+                <div class="section-head compact completion-panel-head">
+                  <div>
+                    <p class="eyebrow">US States</p>
+                    <h3>US state completion</h3>
+                  </div>
+                  <button
+                    id="us-state-collapse-toggle"
+                    class="panel-collapse-button"
+                    type="button"
+                    aria-controls="us-state-panel-body"
+                    aria-expanded="true"
+                  >
+                    Collapse
+                  </button>
+                </div>
+                <div id="us-state-panel-body" class="completion-panel-body">
+                  <p class="panel-kpi-line" id="us-state-kpi"></p>
+                  <div class="completion-controls">
+                    <label class="control-field completion-control">
+                      <span>Search</span>
+                      <input id="us-state-search" type="search" placeholder="Search US states">
+                    </label>
+                    <label class="control-field completion-control">
+                      <span>Sort by</span>
+                      <div class="completion-sort-row">
+                        <select id="us-state-sort">
+                          <option value="percent">% complete</option>
+                          <option value="total">Total airports</option>
+                          <option value="captured">Captured airports</option>
+                          <option value="name">Name (alphabetical)</option>
+                        </select>
+                        <button
+                          id="us-state-sort-direction"
+                          class="completion-direction-button"
+                          type="button"
+                          aria-label="Sort descending"
+                          title="Sort descending"
+                        >
+                          &#8595;
+                        </button>
+                      </div>
+                    </label>
+                  </div>
+                  <p class="completion-meta" id="us-state-progress-meta"></p>
+                  <div id="us-state-progress" class="completion-progress-list"></div>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section
+          id="tab-aircraft"
+          class="dashboard-tab-panel"
+          role="tabpanel"
+          aria-labelledby="tab-aircraft-button"
+          hidden
+        >
+          <div class="aircraft-layout">
+            <article class="panel aircraft-list-panel">
+              <div class="section-head aircraft-list-head">
+                <div>
+                  <p class="eyebrow">Aircraft</p>
+                  <h3>Aircraft deck</h3>
+                </div>
+                <div class="aircraft-list-controls">
+                  <label class="control-field">
+                    <span>Search</span>
+                    <input id="aircraft-search" type="search" placeholder="Model or manufacturer">
+                  </label>
+                  <label class="control-field">
+                    <span>Sort by</span>
+                    <div class="completion-sort-row">
+                      <select id="aircraft-sort">
+                        <option value="xp">XP</option>
+                        <option value="glow">Glow count</option>
+                        <option value="coverage">Coverage %</option>
+                        <option value="name">Name</option>
+                        <option value="speed">Max speed</option>
+                      </select>
+                      <button
+                        id="aircraft-sort-direction"
+                        class="completion-direction-button"
+                        type="button"
+                        aria-label="Sort descending"
+                        title="Sort descending"
+                      >
+                        &#8595;
+                      </button>
+                    </div>
+                  </label>
+                </div>
+              </div>
+              <p class="aircraft-list-meta" id="aircraft-list-meta"></p>
+              <div id="aircraft-list" class="virtualized-list" role="list" aria-label="Aircraft deck"></div>
+            </article>
+
+            <div id="aircraft-side" class="aircraft-side">
+              <article class="panel" id="aircraft-type-progress-panel"></article>
+              <article class="panel" id="aircraft-category-progress-panel"></article>
+              <article class="panel" id="aircraft-category-xp-panel"></article>
+              <article class="panel" id="aircraft-tier-xp-panel"></article>
+            </div>
+          </div>
+
+          <div class="aircraft-hidden-panels" hidden>
+            <article id="aircraft-overview-panel"></article>
+            <article id="aircraft-tier-completion-panel"></article>
+            <article id="aircraft-image-placeholder-panel"></article>
+            <article id="aircraft-reg-placeholder-panel"></article>
+          </div>
+        </section>
+      </main>
+
+      <footer class="site-footer" role="contentinfo">
+        <div class="site-footer-grid">
+          <section class="site-footer-block">
+            <h2 class="site-footer-brand">Skyviz</h2>
+            <p class="site-footer-copy">
+              Open-source, browser-first dashboard for private collection analysis.
+            </p>
+          </section>
+
+          <nav class="site-footer-block" aria-label="Footer quick links">
+            <h2 class="site-footer-heading">Quick links</h2>
+            <ul class="site-footer-links">
+              <li><a href="#page-top">Back to top</a></li>
+              <li><a href="#dashboard">Jump to dashboard</a></li>
+              <li>
+                <a href="https://github.com/mfkp/skycards-export" target="_blank" rel="noopener noreferrer">
+                  Skycards export guide
+                </a>
+              </li>
+            </ul>
+          </nav>
+
+          <section class="site-footer-block">
+            <h2 class="site-footer-heading">Privacy</h2>
+            <p class="site-footer-copy">
+              No account, no backend, and no remote upload path. Optional saved data stays on your current device and can be cleared at any time.
+            </p>
+          </section>
+        </div>
+        <div class="site-footer-meta">
+          <p>2026 Skyviz</p>
+          <p>Built for GitHub Pages with browser-local processing.</p>
+        </div>
+      </footer>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
+
