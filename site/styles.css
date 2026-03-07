@@ -1247,10 +1247,32 @@ code {
   gap: 0.42rem;
 }
 
+.aircraft-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.5rem;
+}
+
 .aircraft-card-name {
   margin: 0;
   font-size: clamp(1.06rem, 1.95vw, 1.3rem);
   line-height: 1;
+}
+
+.aircraft-card-xp {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 63, 112, 0.24);
+  padding: 0.14rem 0.48rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #0f3f70;
+  background: rgba(236, 243, 255, 0.84);
+  white-space: nowrap;
 }
 
 .aircraft-card-manufacturer {

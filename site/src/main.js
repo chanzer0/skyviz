@@ -1686,7 +1686,10 @@ function renderAircraftCard(row, index, left, top, width, cardHeight) {
         ${hasGlow ? `<span class="aircraft-card-glow-count">x${formatNumber(row.glowCount)} glows</span>` : ''}
       </div>
       <div class="aircraft-card-body">
-        <h4 class="aircraft-card-name">${escapeHtml(name)}</h4>
+        <div class="aircraft-card-head">
+          <h4 class="aircraft-card-name">${escapeHtml(name)}</h4>
+          <span class="aircraft-card-xp">${formatCompact(row.xp)} XP</span>
+        </div>
         <p class="aircraft-card-manufacturer">${escapeHtml(manufacturer)}</p>
         <p class="aircraft-card-model">ICAO ${escapeHtml(icao)}</p>
         <dl class="aircraft-card-stats">
