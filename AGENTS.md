@@ -47,6 +47,7 @@ This file routes context. Durable knowledge lives in `docs/`.
 - `python scripts/repo_hygiene_check.py`
 - Preview locally with `python -m http.server 4173 --directory site`
 - Use a browser pass for meaningful UI changes when the environment supports it.
+- For visual bug fixes, reproduce the issue with Playwright before edits and confirm the fix with Playwright after edits; if Playwright cannot run, say so explicitly.
 
 ## Response Expectations
 

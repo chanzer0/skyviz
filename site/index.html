@@ -494,6 +494,62 @@
         </section>
       </div>
 
+      <div id="aircraft-model-regs-modal" class="aircraft-model-modal" hidden>
+        <div id="aircraft-model-regs-backdrop" class="aircraft-model-modal-backdrop" aria-hidden="true"></div>
+        <section
+          class="aircraft-model-modal-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="aircraft-model-regs-title"
+        >
+          <header class="aircraft-model-modal-head">
+            <div>
+              <p class="eyebrow">Aircraft regs</p>
+              <h3 id="aircraft-model-regs-title">Caught registrations</h3>
+            </div>
+            <button
+              id="aircraft-model-regs-close"
+              class="aircraft-model-modal-close"
+              type="button"
+              aria-label="Close caught registrations modal"
+            >
+              Close
+            </button>
+          </header>
+          <p id="aircraft-model-regs-summary" class="aircraft-model-modal-copy"></p>
+          <p class="aircraft-model-modal-disclaimer">
+            Unique registration tracking is approximate. Some rows map cleanly from aircraft transponder hex values, while others rely on weaker registration fallback or unresolved inference.
+          </p>
+          <p class="aircraft-model-modal-disclaimer is-warning">
+            Card-level registration badges may be understated or slightly off when rows remain medium-confidence, low-confidence, or ambiguous.
+          </p>
+          <div id="aircraft-model-regs-breakdown" class="aircraft-model-modal-breakdown"></div>
+          <p id="aircraft-model-regs-meta" class="aircraft-model-modal-meta"></p>
+          <div class="aircraft-model-modal-table-wrap">
+            <table class="aircraft-model-modal-table">
+              <thead>
+                <tr>
+                  <th scope="col">Registration</th>
+                  <th scope="col">Transponder hex</th>
+                  <th scope="col">Confidence</th>
+                  <th scope="col">Method</th>
+                </tr>
+              </thead>
+              <tbody id="aircraft-model-regs-rows"></tbody>
+            </table>
+          </div>
+          <footer class="aircraft-model-modal-pagination">
+            <button id="aircraft-model-regs-prev" class="region-action-button" type="button">
+              Previous
+            </button>
+            <p id="aircraft-model-regs-page-label" class="aircraft-model-page-label"></p>
+            <button id="aircraft-model-regs-next" class="region-action-button" type="button">
+              Next
+            </button>
+          </footer>
+        </section>
+      </div>
+
       <footer class="site-footer" role="contentinfo">
         <div class="site-footer-grid">
           <section class="site-footer-block">

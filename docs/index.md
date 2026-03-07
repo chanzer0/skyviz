@@ -22,6 +22,6 @@ This directory is the system of record for durable repository knowledge.
 ## Update map
 
 - App structure changes: update `docs/architecture.md`.
-- Process changes: update `docs/agentic-workflows.md` and `AGENTS.md`.
+- Process changes: update `docs/agentic-workflows.md`, `docs/golden-principles.md`, and `AGENTS.md`.
 - New durable reasoning: add or update a decision record in `docs/decisions/`.
 - Significant multi-step work: add or update a plan in `docs/plans/`.

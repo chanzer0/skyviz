@@ -20,7 +20,9 @@ These are the repository invariants and follow-through rules that should survive
 
 - Prefer `python scripts/smoke_check.py` for the default offline validation pass.
 - Use `python scripts/repo_hygiene_check.py` to verify the repo scaffolding is intact.
+- For visual bug fixes, reproduce the issue with Playwright before edits and confirm the fix with Playwright after edits.
 - Only claim live Skycards fetches or browser validation when those flows were actually exercised.
+- If Playwright could not run, say so explicitly and do not claim visual bug confirmation.
 
 ## Documentation rules
 

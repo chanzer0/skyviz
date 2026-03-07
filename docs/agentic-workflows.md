@@ -19,6 +19,13 @@ This repository is meant to be maintained by agents and humans using the same re
 5. Run the offline checks and report any live validation that was not possible.
 6. Record durable architectural or workflow decisions in `docs/decisions/` when the reasoning will matter later.
 
+## Visual bug validation
+
+- Reproduce the bug in Playwright before changing code.
+- Re-run the same Playwright flow after edits to confirm the fix.
+- Capture Playwright evidence (snapshot and/or screenshot) when possible.
+- If Playwright cannot run, state that limitation explicitly and do not claim browser confirmation.
+
 ## What agents should produce
 
 Agents may update any repository artifact that helps the product ship and stay maintainable:
