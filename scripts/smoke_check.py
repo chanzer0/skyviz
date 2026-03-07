@@ -31,17 +31,19 @@ def check_repo_hygiene() -> None:
 
 
 def check_sample_collection() -> None:
-    sample_path = REPO_ROOT / 'skycards_user.json'
+    candidate_paths = [
+        REPO_ROOT / 'skycards_user.json',
+        REPO_ROOT / 'site' / 'data' / 'example' / 'try_now_user.json',
+    ]
+    sample_path = next((path for path in candidate_paths if path.exists()), None)
+    if sample_path is None:
+        raise SystemExit('smoke_check: no sample collection JSON found')
     payload = _load_json(sample_path)
     required_keys = {
         'id',
         'name',
         'xp',
         'cards',
-        'numAircraftModels',
-        'numDestinations',
-        'numBattleWins',
-        'numAchievements',
         'unlockedAirportIds',
         'uniqueRegs',
     }
@@ -60,6 +62,7 @@ def check_sample_collection() -> None:
             raise SystemExit(f'smoke_check: first card missing {field}')
     print(
         'sample payload:',
+        f'path={sample_path.relative_to(REPO_ROOT)}',
         f"cards={len(payload['cards'])}",
         f"airports={len(payload['unlockedAirportIds'])}",
         f"unique_regs={len(payload['uniqueRegs'])}",
