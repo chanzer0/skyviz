@@ -191,151 +191,53 @@
             </article>
 
             <div id="map-side" class="map-side">
-              <article id="continent-panel" class="panel completion-panel">
-                <div class="section-head compact completion-panel-head">
+              <article id="map-drill-panel" class="panel map-drill-panel">
+                <div class="section-head compact map-drill-head">
                   <div>
-                    <p class="eyebrow">Continents</p>
-                    <h3>Continent completion</h3>
+                    <p id="map-drill-eyebrow" class="eyebrow">Drill-down explorer</p>
+                    <h3 id="map-drill-title">Airport completion explorer</h3>
                   </div>
-                  <button
-                    id="continent-collapse-toggle"
-                    class="panel-collapse-button"
-                    type="button"
-                    aria-controls="continent-panel-body"
-                    aria-expanded="true"
-                  >
-                    Collapse
-                  </button>
                 </div>
-                <div id="continent-panel-body" class="completion-panel-body">
-                  <p class="panel-kpi-line" id="continent-kpi"></p>
-                  <div class="completion-controls">
-                    <label class="control-field completion-control">
-                      <span>Search</span>
-                      <input id="continent-search" type="search" placeholder="Search continents">
-                    </label>
-                    <label class="control-field completion-control">
-                      <span>Sort by</span>
-                      <div class="completion-sort-row">
-                        <select id="continent-sort">
-                          <option value="percent">% complete</option>
-                          <option value="total">Total airports</option>
-                          <option value="captured">Captured airports</option>
-                          <option value="name">Name (alphabetical)</option>
-                        </select>
-                        <button
-                          id="continent-sort-direction"
-                          class="completion-direction-button"
-                          type="button"
-                          aria-label="Sort descending"
-                          title="Sort descending"
-                        >
-                          &#8595;
-                        </button>
-                      </div>
-                    </label>
-                  </div>
-                  <p class="completion-meta" id="continent-progress-meta"></p>
-                  <div id="continent-progress" class="completion-progress-list"></div>
+                <p id="map-drill-helper" class="map-drill-helper">
+                  Click a continent to drill into countries. Click United States to drill into US states.
+                </p>
+                <div class="map-drill-nav-shell">
+                  <div
+                    id="map-drill-nav"
+                    class="map-drill-nav"
+                    role="navigation"
+                    aria-label="Map drill-down navigation"
+                  ></div>
                 </div>
-              </article>
-
-              <article id="country-panel" class="panel completion-panel">
-                <div class="section-head compact completion-panel-head">
-                  <div>
-                    <p class="eyebrow">Countries</p>
-                    <h3>Country completion</h3>
-                  </div>
-                  <button
-                    id="country-collapse-toggle"
-                    class="panel-collapse-button"
-                    type="button"
-                    aria-controls="country-panel-body"
-                    aria-expanded="true"
-                  >
-                    Collapse
-                  </button>
+                <p class="panel-kpi-line" id="map-drill-kpi"></p>
+                <div class="completion-controls">
+                  <label class="control-field completion-control">
+                    <span>Search</span>
+                    <input id="map-drill-search" type="search" placeholder="Search continents">
+                  </label>
+                  <label class="control-field completion-control">
+                    <span>Sort by</span>
+                    <div class="completion-sort-row">
+                      <select id="map-drill-sort">
+                        <option value="percent">% complete</option>
+                        <option value="total">Total airports</option>
+                        <option value="captured">Captured airports</option>
+                        <option value="name">Name (alphabetical)</option>
+                      </select>
+                      <button
+                        id="map-drill-sort-direction"
+                        class="completion-direction-button"
+                        type="button"
+                        aria-label="Sort descending"
+                        title="Sort descending"
+                      >
+                        &#8595;
+                      </button>
+                    </div>
+                  </label>
                 </div>
-                <div id="country-panel-body" class="completion-panel-body">
-                  <p class="panel-kpi-line" id="country-kpi"></p>
-                  <div class="completion-controls">
-                    <label class="control-field completion-control">
-                      <span>Search</span>
-                      <input id="country-search" type="search" placeholder="Search countries">
-                    </label>
-                    <label class="control-field completion-control">
-                      <span>Sort by</span>
-                      <div class="completion-sort-row">
-                        <select id="country-sort">
-                          <option value="percent">% complete</option>
-                          <option value="total">Total airports</option>
-                          <option value="captured">Captured airports</option>
-                          <option value="name">Name (alphabetical)</option>
-                        </select>
-                        <button
-                          id="country-sort-direction"
-                          class="completion-direction-button"
-                          type="button"
-                          aria-label="Sort descending"
-                          title="Sort descending"
-                        >
-                          &#8595;
-                        </button>
-                      </div>
-                    </label>
-                  </div>
-                  <p class="completion-meta" id="country-progress-meta"></p>
-                  <div id="country-progress" class="completion-progress-list"></div>
-                </div>
-              </article>
-
-              <article id="us-state-panel" class="panel completion-panel">
-                <div class="section-head compact completion-panel-head">
-                  <div>
-                    <p class="eyebrow">US States</p>
-                    <h3>US state completion</h3>
-                  </div>
-                  <button
-                    id="us-state-collapse-toggle"
-                    class="panel-collapse-button"
-                    type="button"
-                    aria-controls="us-state-panel-body"
-                    aria-expanded="true"
-                  >
-                    Collapse
-                  </button>
-                </div>
-                <div id="us-state-panel-body" class="completion-panel-body">
-                  <p class="panel-kpi-line" id="us-state-kpi"></p>
-                  <div class="completion-controls">
-                    <label class="control-field completion-control">
-                      <span>Search</span>
-                      <input id="us-state-search" type="search" placeholder="Search US states">
-                    </label>
-                    <label class="control-field completion-control">
-                      <span>Sort by</span>
-                      <div class="completion-sort-row">
-                        <select id="us-state-sort">
-                          <option value="percent">% complete</option>
-                          <option value="total">Total airports</option>
-                          <option value="captured">Captured airports</option>
-                          <option value="name">Name (alphabetical)</option>
-                        </select>
-                        <button
-                          id="us-state-sort-direction"
-                          class="completion-direction-button"
-                          type="button"
-                          aria-label="Sort descending"
-                          title="Sort descending"
-                        >
-                          &#8595;
-                        </button>
-                      </div>
-                    </label>
-                  </div>
-                  <p class="completion-meta" id="us-state-progress-meta"></p>
-                  <div id="us-state-progress" class="completion-progress-list"></div>
-                </div>
+                <p class="completion-meta" id="map-drill-progress-meta"></p>
+                <div id="map-drill-progress" class="completion-progress-list"></div>
               </article>
             </div>
           </div>
@@ -356,18 +258,6 @@
                     <p class="eyebrow">Aircraft</p>
                     <h3>Aircraft deck</h3>
                   </div>
-                  <button
-                    id="aircraft-reg-transparency-trigger"
-                    class="aircraft-caution-button"
-                    type="button"
-                    aria-haspopup="dialog"
-                    aria-expanded="false"
-                    aria-controls="aircraft-reg-transparency-modal"
-                    title="Registration mapping transparency"
-                  >
-                    <span class="aircraft-caution-icon" aria-hidden="true">&#9888;</span>
-                    <span class="sr-only">Open registration mapping transparency details</span>
-                  </button>
                 </div>
                 <div class="aircraft-list-controls">
                   <label class="control-field">
@@ -380,9 +270,16 @@
                       <select id="aircraft-sort">
                         <option value="xp">XP</option>
                         <option value="glow">Glow count</option>
-                        <option value="coverage">Coverage %</option>
+                        <option value="registrations">Registrations caught</option>
+                        <option value="coverage">Framing %</option>
+                        <option value="cloud">Cloud %</option>
+                        <option value="firstFlight">First flight</option>
+                        <option value="rarity">Rarity</option>
+                        <option value="wingspan">Wingspan</option>
                         <option value="name">Name</option>
                         <option value="speed">Max speed</option>
+                        <option value="seats">Seats</option>
+                        <option value="weight">Weight</option>
                       </select>
                       <button
                         id="aircraft-sort-direction"
@@ -397,6 +294,7 @@
                   </label>
                 </div>
               </div>
+              <div id="aircraft-deck-metrics" class="aircraft-deck-metrics" aria-live="polite"></div>
               <p class="aircraft-list-meta" id="aircraft-list-meta"></p>
               <div id="aircraft-list" class="virtualized-list" role="list" aria-label="Aircraft deck"></div>
             </article>
@@ -404,7 +302,7 @@
             <div id="aircraft-side" class="aircraft-side">
               <article class="panel" id="aircraft-type-progress-panel"></article>
               <article class="panel" id="aircraft-category-progress-panel"></article>
-              <article class="panel" id="aircraft-category-xp-panel"></article>
+              <article class="panel" id="aircraft-tier-glow-panel"></article>
               <article class="panel" id="aircraft-tier-xp-panel"></article>
             </div>
           </div>
@@ -428,8 +326,8 @@
         >
           <header class="aircraft-reg-modal-head">
             <div>
-              <p class="eyebrow">Data caution</p>
-              <h3 id="aircraft-reg-transparency-title">Registration mapping transparency</h3>
+              <p class="eyebrow">Registration QA</p>
+              <h3 id="aircraft-reg-transparency-title">Registration mapping</h3>
             </div>
             <button
               id="aircraft-reg-transparency-close"
@@ -440,12 +338,33 @@
               Close
             </button>
           </header>
-          <p class="aircraft-reg-modal-copy">
-            Unique registration tracking is approximate. Some rows map cleanly from aircraft transponder hex values, while others rely on weaker registration fallback or unresolved inference.
-          </p>
           <p class="aircraft-reg-modal-copy is-warning">
-            Card-level registration badges may be understated or slightly off when rows remain medium-confidence, low-confidence, or ambiguous.
+            Mapping is approximate. High-confidence rows are locked; medium, ambiguous, and low rows can be manually overridden.
           </p>
+          <section class="aircraft-reg-manual-storage" aria-label="Manual registration mapping storage">
+            <p class="aircraft-reg-manual-copy">
+              Manual mappings are stored in this browser only. Export backups after edits so you can re-import if local storage is cleared.
+            </p>
+            <p id="aircraft-reg-manual-storage-meta" class="aircraft-reg-manual-meta"></p>
+            <div class="aircraft-reg-manual-toolbar">
+              <button id="aircraft-reg-manual-export" class="region-action-button" type="button">
+                Export manual mappings
+              </button>
+              <button id="aircraft-reg-manual-import-trigger" class="region-action-button" type="button">
+                Import mappings
+              </button>
+              <button id="aircraft-reg-manual-clear" class="region-action-button" type="button">
+                Clear manual mappings
+              </button>
+              <input
+                id="aircraft-reg-manual-import-input"
+                type="file"
+                accept="application/json,.json"
+                hidden
+              >
+            </div>
+            <datalist id="aircraft-reg-model-options"></datalist>
+          </section>
           <div id="aircraft-reg-transparency-summary" class="aircraft-reg-modal-summary"></div>
           <div class="aircraft-reg-modal-controls">
             <label class="control-field">
@@ -460,6 +379,7 @@
               <span>Confidence</span>
               <select id="aircraft-reg-transparency-filter">
                 <option value="all">All confidence levels</option>
+                <option value="manual">Manual override</option>
                 <option value="high">High</option>
                 <option value="medium">Medium</option>
                 <option value="ambiguous">Ambiguous</option>
@@ -477,6 +397,7 @@
                   <th scope="col">Mapped ICAO</th>
                   <th scope="col">Confidence</th>
                   <th scope="col">Method / notes</th>
+                  <th scope="col">Manual mapping</th>
                 </tr>
               </thead>
               <tbody id="aircraft-reg-transparency-rows"></tbody>

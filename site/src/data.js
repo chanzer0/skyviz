@@ -121,7 +121,7 @@ const ENGINE_TYPE_LABELS = {
 };
 
 const PROGRESS_PALETTE = ['#0f3f70', '#168392', '#ec7f35', '#7e9e4d', '#cb5162', '#587b9f', '#8b8fa0', '#c27b42'];
-const REGISTRATION_CONFIDENCE_ORDER = ['high', 'medium', 'low', 'ambiguous'];
+const REGISTRATION_CONFIDENCE_ORDER = ['manual', 'high', 'medium', 'low', 'ambiguous'];
 const INFERENCE_STATUS_CONFIDENCE_MAP = {
   inferred_high_confidence: 'high',
   inferred_medium_confidence: 'medium',
@@ -241,6 +241,15 @@ function normalizeRegistration(value) {
     .replace(/[^A-Z0-9]/g, '');
 }
 
+function buildRegistrationMappingKey(aircraftHex, registration) {
+  const normalizedHex = sanitizeText(aircraftHex).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const normalizedRegistration = normalizeRegistration(registration);
+  if (!normalizedHex && !normalizedRegistration) {
+    return '';
+  }
+  return `${normalizedHex}|${normalizedRegistration}`;
+}
+
 function aircraftIdToHex(value) {
   const number = asNumber(value);
   if (!Number.isFinite(number) || number < 0) {
@@ -315,6 +324,7 @@ function normalizeInferenceStatus(value) {
 
 function emptyConfidenceCounts() {
   return {
+    manual: 0,
     high: 0,
     medium: 0,
     low: 0,
@@ -448,6 +458,9 @@ function isStandardTransponderHex(value) {
 }
 
 function issueLabelFromCode(issueCode) {
+  if (issueCode === 'manual_override') {
+    return 'Mapped with a manual override saved in this browser.';
+  }
   if (issueCode === 'hex_reg_conflict') {
     return 'Hex and registration lookups disagree.';
   }
@@ -649,7 +662,32 @@ function getCaughtRegistrationRows(payload) {
   return asArray(payload?.uniqueRegs);
 }
 
-function buildCaughtRegistrationModelCounts(payload, references) {
+function resolveManualRegistrationMapping(manualMappings, aircraftHex, registration) {
+  if (!(manualMappings instanceof Map) || !manualMappings.size) {
+    return null;
+  }
+  const compositeKey = buildRegistrationMappingKey(aircraftHex, registration);
+  if (compositeKey && manualMappings.has(compositeKey)) {
+    return manualMappings.get(compositeKey);
+  }
+  const normalizedRegistration = normalizeRegistration(registration);
+  if (normalizedRegistration) {
+    const registrationKey = `|${normalizedRegistration}`;
+    if (manualMappings.has(registrationKey)) {
+      return manualMappings.get(registrationKey);
+    }
+  }
+  const normalizedHex = sanitizeText(aircraftHex).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (normalizedHex) {
+    const hexOnlyKey = `${normalizedHex}|`;
+    if (manualMappings.has(hexOnlyKey)) {
+      return manualMappings.get(hexOnlyKey);
+    }
+  }
+  return null;
+}
+
+function buildCaughtRegistrationModelCounts(payload, references, options = {}) {
   const rows = getCaughtRegistrationRows(payload);
   const byModelId = new Map();
   const transparencyRows = [];
@@ -657,6 +695,9 @@ function buildCaughtRegistrationModelCounts(payload, references) {
   const lookupByHex = references.aircraftLookupByHex || new Map();
   const lookupByReg = references.aircraftLookupByReg || new Map();
   const inferredMappingsIndex = references.inferredMappingsIndex || null;
+  const manualMappings = options.manualRegistrationMappings instanceof Map
+    ? options.manualRegistrationMappings
+    : new Map();
   const lookupAvailable = lookupByHex.size > 0 || lookupByReg.size > 0;
   const stats = {
     totalRows: 0,
@@ -669,6 +710,7 @@ function buildCaughtRegistrationModelCounts(payload, references) {
     usedHexLookupRows: 0,
     usedRegLookupRows: 0,
     usedInferredRows: 0,
+    usedManualRows: 0,
     conflictRows: 0,
     linkedInferenceRows: 0,
     confidenceCounts: emptyConfidenceCounts(),
@@ -681,7 +723,8 @@ function buildCaughtRegistrationModelCounts(payload, references) {
     const aircraftId = Number.isFinite(numericAircraftId) ? Math.trunc(numericAircraftId) : null;
     const normalizedReg = normalizeRegistration(row?.reg);
     const registrationRaw = sanitizeText(row?.reg);
-    const rowKey = aircraftHex || normalizedReg ? `${aircraftHex}|${normalizedReg}` : `row-${index}`;
+    const mappingKey = buildRegistrationMappingKey(aircraftHex, normalizedReg);
+    const rowKey = mappingKey || `row-${index}`;
     stats.totalRows += 1;
     if (seenRows.has(rowKey)) {
       return;
@@ -710,40 +753,54 @@ function buildCaughtRegistrationModelCounts(payload, references) {
       ? normalizeCode(lookupByReg.get(normalizedReg))
       : '';
     const hasLookupConflict = Boolean(hexModelId && regModelId && hexModelId !== regModelId);
+    const manualEntry = resolveManualRegistrationMapping(manualMappings, aircraftHex, normalizedReg);
+    const manualModelId = normalizeCode(
+      typeof manualEntry === 'string'
+        ? manualEntry
+        : manualEntry?.modelId,
+    );
 
-    let mappedModelId = '';
-    let mappingMethod = 'none';
+    let autoMappedModelId = '';
+    let autoMappingMethod = 'none';
     if (hexModelId) {
-      mappedModelId = hexModelId;
-      mappingMethod = hasLookupConflict ? 'hex_lookup_conflict' : 'hex_lookup';
+      autoMappedModelId = hexModelId;
+      autoMappingMethod = hasLookupConflict ? 'hex_lookup_conflict' : 'hex_lookup';
       stats.usedHexLookupRows += 1;
     } else if (regModelId) {
-      mappedModelId = regModelId;
-      mappingMethod = 'reg_lookup';
+      autoMappedModelId = regModelId;
+      autoMappingMethod = 'reg_lookup';
       stats.usedRegLookupRows += 1;
     } else if (
       inferenceEntry?.status === 'inferred_high_confidence'
       && inferenceEntry?.resolvedTypeCode
     ) {
-      mappedModelId = normalizeCode(inferenceEntry.resolvedTypeCode);
-      mappingMethod = 'inferred_high_confidence';
+      autoMappedModelId = normalizeCode(inferenceEntry.resolvedTypeCode);
+      autoMappingMethod = 'inferred_high_confidence';
       stats.usedInferredRows += 1;
     }
+    const manualOverrideApplied = Boolean(manualModelId);
+    const mappedModelId = manualOverrideApplied ? manualModelId : autoMappedModelId;
+    const mappingMethod = manualOverrideApplied ? 'manual_override' : autoMappingMethod;
 
     let confidenceCategory = 'low';
     let status = 'unmapped';
     let issueCode = '';
-    if (hasLookupConflict) {
+    if (manualOverrideApplied) {
+      confidenceCategory = 'manual';
+      status = 'mapped';
+      issueCode = 'manual_override';
+      stats.usedManualRows += 1;
+    } else if (hasLookupConflict) {
       confidenceCategory = 'ambiguous';
       status = 'ambiguous';
       issueCode = 'hex_reg_conflict';
       stats.conflictRows += 1;
     } else if (mappedModelId) {
       status = 'mapped';
-      if (mappingMethod === 'reg_lookup') {
+      if (autoMappingMethod === 'reg_lookup') {
         confidenceCategory = 'medium';
         issueCode = 'registration_fallback';
-      } else if (mappingMethod === 'inferred_high_confidence') {
+      } else if (autoMappingMethod === 'inferred_high_confidence') {
         confidenceCategory = 'high';
         issueCode = 'inferred_high_confidence';
       } else {
@@ -785,7 +842,10 @@ function buildCaughtRegistrationModelCounts(payload, references) {
       registration: normalizedReg,
       aircraftId,
       aircraftHex,
+      manualMappingKey: mappingKey,
       mappedModelId,
+      autoMappedModelId,
+      manualOverrideModelId: manualOverrideApplied ? manualModelId : '',
       lookupHexModelId: hexModelId,
       lookupRegModelId: regModelId,
       mappingMethod,
@@ -846,7 +906,7 @@ export function parseUserCollection(text, fileName = 'upload') {
   return payload;
 }
 
-export function buildDashboardModel(payload, references) {
+export function buildDashboardModel(payload, references, options = {}) {
   const cards = asArray(payload.cards).map((card, index) => {
     const model = references.modelsById.get(normalizeCode(card.modelId));
     const manufacturer = sanitizeText(card.manufacturer) || sanitizeText(model?.manufacturer) || 'Unknown';
@@ -889,7 +949,9 @@ export function buildDashboardModel(payload, references) {
       modelMatched: Boolean(model),
     };
   });
-  const caughtRegistrationCounts = buildCaughtRegistrationModelCounts(payload, references);
+  const caughtRegistrationCounts = buildCaughtRegistrationModelCounts(payload, references, {
+    manualRegistrationMappings: options.manualRegistrationMappings,
+  });
 
   const distinctModelIds = unique(cards.map((card) => card.modelId).filter(Boolean));
   const capturedAirportIds = new Set();
@@ -947,6 +1009,7 @@ export function buildDashboardModel(payload, references) {
   const manufacturerCounts = countBy(cards, (card) => card.manufacturer || 'Unknown');
   const typeCounts = countBy(cards, (card) => card.aircraftType || 'unknown');
   const tierXpMap = sumBy(cards, (card) => card.tier, (card) => card.xp);
+  const tierGlowMap = sumBy(cards, (card) => card.tier, (card) => card.glowCount);
   const categoryXpMap = sumBy(cards, (card) => card.category, (card) => card.xp);
 
   const tierCompletion = TIER_ORDER
@@ -965,6 +1028,7 @@ export function buildDashboardModel(payload, references) {
     });
 
   const tierXp = orderedSeries(tierXpMap, TIER_ORDER, TIER_COLORS, formatLabel, (value) => `${Math.round(value).toLocaleString('en-US')} XP`);
+  const tierGlow = orderedSeries(tierGlowMap, TIER_ORDER, TIER_COLORS, formatLabel, (value) => `${Math.round(value).toLocaleString('en-US')} glows`);
   const categoryXp = orderedSeries(categoryXpMap, CATEGORY_ORDER, CATEGORY_COLORS, formatLabel, (value) => `${Math.round(value).toLocaleString('en-US')} XP`);
   const topManufacturers = rankedSeries(manufacturerCounts, 8, palette, (key) => key);
   const aircraftTypeMix = orderedSeries(typeCounts, TYPE_ORDER, TYPE_COLORS, (key) => TYPE_LABELS[key] || TYPE_LABELS.unknown);
@@ -990,6 +1054,8 @@ export function buildDashboardModel(payload, references) {
         cardCount: 0,
         coverageTotal: 0,
         coverageCount: 0,
+        cloudinessTotal: 0,
+        cloudinessCount: 0,
         fullCoverageCards: 0,
         tierCounts: new Map(),
         categoryCounts: new Map(),
@@ -1020,6 +1086,10 @@ export function buildDashboardModel(payload, references) {
         row.fullCoverageCards += 1;
       }
     }
+    if (Number.isFinite(card.cloudiness)) {
+      row.cloudinessTotal += card.cloudiness;
+      row.cloudinessCount += 1;
+    }
     row.tierCounts.set(card.tier, (row.tierCounts.get(card.tier) || 0) + 1);
     row.categoryCounts.set(card.category, (row.categoryCounts.get(card.category) || 0) + 1);
     if (Number.isFinite(card.season)) {
@@ -1043,9 +1113,11 @@ export function buildDashboardModel(payload, references) {
     .map((row) => {
       const dominantTier = topKeyFromMap(row.tierCounts);
       const dominantCategory = topKeyFromMap(row.categoryCounts);
-      const avgCoverage = row.coverageCount ? row.coverageTotal / row.coverageCount : 0;
+      const avgCoverage = row.coverageCount ? row.coverageTotal / row.coverageCount : null;
+      const avgCloudiness = row.cloudinessCount ? row.cloudinessTotal / row.cloudinessCount : null;
       const fullCoverageRate = row.cardCount ? (row.fullCoverageCards / row.cardCount) * 100 : 0;
-      const caughtRegistrations = caughtRegistrationCounts.stats.lookupAvailable
+      const hasMappedRows = caughtRegistrationCounts.stats.mappedRows > 0;
+      const caughtRegistrations = (caughtRegistrationCounts.stats.lookupAvailable || hasMappedRows)
         ? (caughtRegistrationCounts.byModelId.get(row.modelId) || 0)
         : null;
       const possibleRegistrationsRaw = references.modelRegistrationCountsByModelId.get(row.modelId);
@@ -1073,6 +1145,7 @@ export function buildDashboardModel(payload, references) {
         glowCount: row.glowCount,
         cardCount: row.cardCount,
         avgCoverage,
+        avgCloudiness,
         fullCoverageRate,
         dominantTier,
         dominantTierLabel: formatLabel(dominantTier),
@@ -1127,6 +1200,7 @@ export function buildDashboardModel(payload, references) {
     usedHexLookupRows: caughtRegistrationCounts.stats.usedHexLookupRows,
     usedRegLookupRows: caughtRegistrationCounts.stats.usedRegLookupRows,
     usedInferredRows: caughtRegistrationCounts.stats.usedInferredRows,
+    usedManualRows: caughtRegistrationCounts.stats.usedManualRows,
     conflictRows: caughtRegistrationCounts.stats.conflictRows,
     confidenceCounts: REGISTRATION_CONFIDENCE_ORDER.reduce((accumulator, key) => {
       accumulator[key] = caughtRegistrationCounts.stats.confidenceCounts?.[key] || 0;
@@ -1168,7 +1242,7 @@ export function buildDashboardModel(payload, references) {
       averageAircraftXp: average(aircraftRows.map((row) => row.xp)),
       totalCaughtRegistrations: caughtRegistrationCounts.stats.uniqueRows,
       mappedCaughtRegistrations: caughtRegistrationCounts.stats.mappedRows,
-      caughtRegistrationMappingRate: caughtRegistrationCounts.stats.lookupAvailable && caughtRegistrationCounts.stats.uniqueRows
+      caughtRegistrationMappingRate: caughtRegistrationCounts.stats.uniqueRows
         ? (caughtRegistrationCounts.stats.mappedRows / caughtRegistrationCounts.stats.uniqueRows) * 100
         : null,
       modelsWithCaughtRegistrations: aircraftRows.filter((row) => row.caughtRegistrations > 0).length,
@@ -1191,6 +1265,7 @@ export function buildDashboardModel(payload, references) {
       topManufacturers,
       aircraftTypeMix,
       tierXp,
+      tierGlow,
       categoryXp,
       tierCompletion,
       categoryProgress,
@@ -1198,9 +1273,11 @@ export function buildDashboardModel(payload, references) {
       placeholders: {
         imageResolver: 'Aircraft image resolver uses tier CDN paths with model alias fallback from reference metadata.',
         uniqueRegistrations: !caughtRegistrationCounts.stats.lookupAvailable
-          ? 'Caught registrations are present, but aircraft lookup reference data is unavailable.'
+          ? caughtRegistrationCounts.stats.usedManualRows
+            ? `${caughtRegistrationCounts.stats.mappedRows.toLocaleString('en-US')} of ${caughtRegistrationCounts.stats.uniqueRows.toLocaleString('en-US')} unique registrations mapped with browser-local manual overrides (lookup data unavailable).`
+            : 'Caught registrations are present, but aircraft lookup reference data is unavailable.'
           : caughtRegistrationCounts.stats.uniqueRows
-          ? `${caughtRegistrationCounts.stats.mappedRows.toLocaleString('en-US')} of ${caughtRegistrationCounts.stats.uniqueRows.toLocaleString('en-US')} unique registrations mapped via aircraftId/reg lookup.`
+          ? `${caughtRegistrationCounts.stats.mappedRows.toLocaleString('en-US')} of ${caughtRegistrationCounts.stats.uniqueRows.toLocaleString('en-US')} unique registrations mapped via lookup, inference, or manual overrides.`
           : 'No caught registrations found in this export payload.',
       },
       registrationStats: caughtRegistrationCounts.stats,

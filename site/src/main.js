@@ -26,36 +26,20 @@ const elements = {
   mapCanvas: document.querySelector('#map-canvas'),
   mapLegend: document.querySelector('#map-legend'),
   mapAirportKpi: document.querySelector('#map-airport-kpi'),
-  continentPanel: document.querySelector('#continent-panel'),
-  continentPanelBody: document.querySelector('#continent-panel-body'),
-  continentCollapseToggle: document.querySelector('#continent-collapse-toggle'),
-  continentKpi: document.querySelector('#continent-kpi'),
-  continentProgress: document.querySelector('#continent-progress'),
-  continentSearch: document.querySelector('#continent-search'),
-  continentSort: document.querySelector('#continent-sort'),
-  continentSortDirection: document.querySelector('#continent-sort-direction'),
-  continentProgressMeta: document.querySelector('#continent-progress-meta'),
-  countryPanel: document.querySelector('#country-panel'),
-  countryPanelBody: document.querySelector('#country-panel-body'),
-  countryCollapseToggle: document.querySelector('#country-collapse-toggle'),
-  countryKpi: document.querySelector('#country-kpi'),
-  countryProgress: document.querySelector('#country-progress'),
-  countrySearch: document.querySelector('#country-search'),
-  countrySort: document.querySelector('#country-sort'),
-  countrySortDirection: document.querySelector('#country-sort-direction'),
-  countryProgressMeta: document.querySelector('#country-progress-meta'),
-  usStatePanel: document.querySelector('#us-state-panel'),
-  usStatePanelBody: document.querySelector('#us-state-panel-body'),
-  usStateCollapseToggle: document.querySelector('#us-state-collapse-toggle'),
-  usStateKpi: document.querySelector('#us-state-kpi'),
-  usStateProgress: document.querySelector('#us-state-progress'),
-  usStateSearch: document.querySelector('#us-state-search'),
-  usStateSort: document.querySelector('#us-state-sort'),
-  usStateSortDirection: document.querySelector('#us-state-sort-direction'),
-  usStateProgressMeta: document.querySelector('#us-state-progress-meta'),
+  mapDrillPanel: document.querySelector('#map-drill-panel'),
+  mapDrillEyebrow: document.querySelector('#map-drill-eyebrow'),
+  mapDrillTitle: document.querySelector('#map-drill-title'),
+  mapDrillHelper: document.querySelector('#map-drill-helper'),
+  mapDrillNav: document.querySelector('#map-drill-nav'),
+  mapDrillKpi: document.querySelector('#map-drill-kpi'),
+  mapDrillSearch: document.querySelector('#map-drill-search'),
+  mapDrillSort: document.querySelector('#map-drill-sort'),
+  mapDrillSortDirection: document.querySelector('#map-drill-sort-direction'),
+  mapDrillProgressMeta: document.querySelector('#map-drill-progress-meta'),
+  mapDrillProgress: document.querySelector('#map-drill-progress'),
   aircraftOverviewPanel: document.querySelector('#aircraft-overview-panel'),
   aircraftTierXpPanel: document.querySelector('#aircraft-tier-xp-panel'),
-  aircraftCategoryXpPanel: document.querySelector('#aircraft-category-xp-panel'),
+  aircraftTierGlowPanel: document.querySelector('#aircraft-tier-glow-panel'),
   aircraftTypeProgressPanel: document.querySelector('#aircraft-type-progress-panel'),
   aircraftCategoryProgressPanel: document.querySelector('#aircraft-category-progress-panel'),
   aircraftTierCompletionPanel: document.querySelector('#aircraft-tier-completion-panel'),
@@ -65,15 +49,21 @@ const elements = {
   aircraftSearch: document.querySelector('#aircraft-search'),
   aircraftSort: document.querySelector('#aircraft-sort'),
   aircraftSortDirection: document.querySelector('#aircraft-sort-direction'),
+  aircraftDeckMetrics: document.querySelector('#aircraft-deck-metrics'),
   aircraftListMeta: document.querySelector('#aircraft-list-meta'),
   aircraftList: document.querySelector('#aircraft-list'),
-  aircraftRegTransparencyTrigger: document.querySelector('#aircraft-reg-transparency-trigger'),
   aircraftRegTransparencyModal: document.querySelector('#aircraft-reg-transparency-modal'),
   aircraftRegTransparencyBackdrop: document.querySelector('#aircraft-reg-transparency-backdrop'),
   aircraftRegTransparencyClose: document.querySelector('#aircraft-reg-transparency-close'),
   aircraftRegTransparencySummary: document.querySelector('#aircraft-reg-transparency-summary'),
   aircraftRegTransparencySearch: document.querySelector('#aircraft-reg-transparency-search'),
   aircraftRegTransparencyFilter: document.querySelector('#aircraft-reg-transparency-filter'),
+  aircraftRegModelOptions: document.querySelector('#aircraft-reg-model-options'),
+  aircraftRegManualStorageMeta: document.querySelector('#aircraft-reg-manual-storage-meta'),
+  aircraftRegManualExport: document.querySelector('#aircraft-reg-manual-export'),
+  aircraftRegManualImportTrigger: document.querySelector('#aircraft-reg-manual-import-trigger'),
+  aircraftRegManualImportInput: document.querySelector('#aircraft-reg-manual-import-input'),
+  aircraftRegManualClear: document.querySelector('#aircraft-reg-manual-clear'),
   aircraftRegTransparencyMeta: document.querySelector('#aircraft-reg-transparency-meta'),
   aircraftRegTransparencyRows: document.querySelector('#aircraft-reg-transparency-rows'),
   aircraftRegTransparencyPrev: document.querySelector('#aircraft-reg-transparency-prev'),
@@ -92,17 +82,20 @@ const elements = {
   aircraftModelRegsPageLabel: document.querySelector('#aircraft-model-regs-page-label'),
 };
 
-const AIRCRAFT_CARD_HEIGHT_MOBILE = 460;
-const AIRCRAFT_CARD_HEIGHT_TABLET_PLUS = 500;
+const AIRCRAFT_CARD_HEIGHT_MOBILE = 364;
+const AIRCRAFT_CARD_HEIGHT_TABLET_PLUS = 370;
 const AIRCRAFT_GRID_GAP = 14;
 const AIRCRAFT_GRID_PADDING = 14;
 const AIRCRAFT_MIN_CARD_WIDTH = 244;
 const AIRCRAFT_VIRTUAL_OVERSCAN_ROWS = 2;
 const AIRCRAFT_IMAGE_BASE_URL = 'https://cdn.skycards.oldapes.com/assets/models/images/1';
 const AIRCRAFT_IMAGE_TIERS = ['paper', 'bronze', 'silver', 'gold', 'platinum', 'cyber'];
+const AIRCRAFT_XP_TIERS = new Set([...AIRCRAFT_IMAGE_TIERS, 'unknown']);
 const AIRCRAFT_IMAGE_SIZE_ORDER = ['md'];
 const PERSISTED_UPLOAD_KEY = 'skyviz.persistedUpload.v1';
 const PERSIST_PREFERENCE_KEY = 'skyviz.persistUploadPreference.v1';
+const MANUAL_REGISTRATION_MAPPINGS_KEY = 'skyviz.manualRegistrationMappings.v1';
+const MANUAL_REGISTRATION_MAPPINGS_EXPORT_SCHEMA = 'skyviz.manualRegistrationMappings.v1';
 const EXAMPLE_DECK_PATH = './data/example/try_now_user.json';
 const COMPLETION_SORT_CATEGORIES = new Set(['percent', 'total', 'captured', 'name']);
 const COMPLETION_SORT_DIRECTIONS = new Set(['asc', 'desc']);
@@ -112,11 +105,13 @@ const MAP_MAX_MARKER_RADIUS = 10.5;
 const MAP_HIGHLIGHT_EXTRA_RADIUS = 1.8;
 const MAP_CODE_LABEL_MIN_ZOOM = 6;
 const MAP_CODE_LABEL_MAX_COUNT = 140;
+const MAP_DRILL_LEVELS = Object.freeze(['continent', 'country', 'us-state']);
 const REGION_CODE_PREVIEW_LIMIT = 56;
 const REGISTRATION_MODAL_PAGE_SIZE = 120;
 const MODEL_REGISTRATION_MODAL_PAGE_SIZE = 120;
-const REGISTRATION_MODAL_FILTERS = new Set(['all', 'high', 'medium', 'ambiguous', 'low']);
+const REGISTRATION_MODAL_FILTERS = new Set(['all', 'manual', 'high', 'medium', 'ambiguous', 'low']);
 const REGISTRATION_MODAL_CONFIDENCE_LABELS = {
+  manual: 'Manual override',
   high: 'High',
   medium: 'Medium',
   ambiguous: 'Ambiguous',
@@ -139,6 +134,7 @@ const MAP_REGION_MAX_ZOOM = Object.freeze({
 const state = {
   model: null,
   references: null,
+  manualRegistrationMappings: new Map(),
   activeTab: 'map',
   map: {
     instance: null,
@@ -153,15 +149,16 @@ const state = {
     regionPointIndexModel: null,
     selectedRegion: null,
     expandedRegion: null,
+    drillLevel: 'continent',
+    drillContinentKey: '',
+    drillCountryKey: '',
+    pendingDrillTransition: 'none',
     continentQuery: '',
     continentSort: 'total_desc',
-    continentCollapsed: false,
     countryQuery: '',
     countrySort: 'total_desc',
-    countryCollapsed: false,
     usStateQuery: '',
     usStateSort: 'total_desc',
-    usStateCollapsed: false,
   },
   aircraft: {
     query: '',
@@ -189,6 +186,9 @@ const state = {
     registrationModalQuery: '',
     registrationModalConfidence: 'all',
     registrationModalPage: 1,
+    registrationManualEditKey: '',
+    registrationManualEditModelId: '',
+    registrationModelOptionsSignature: '',
     modelRegsModalOpen: false,
     modelRegsModalModelId: null,
     modelRegsModalFocusModelId: null,
@@ -343,6 +343,138 @@ function writePersistedUpload(upload) {
   }
 }
 
+function normalizeManualRegistration(value) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+function normalizeManualMappingModelId(value) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+function buildManualRegistrationMappingKey(aircraftHex, registration) {
+  const normalizedHex = normalizeManualRegistration(aircraftHex);
+  const normalizedRegistration = normalizeManualRegistration(registration);
+  if (!normalizedHex && !normalizedRegistration) {
+    return '';
+  }
+  return `${normalizedHex}|${normalizedRegistration}`;
+}
+
+function normalizeManualRegistrationMappingEntry(entry) {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+  const aircraftHex = normalizeManualRegistration(
+    entry.aircraftHex || entry.hex || entry.transponderHex || entry.lookupHex,
+  );
+  const registration = normalizeManualRegistration(
+    entry.registration || entry.registrationRaw || entry.reg,
+  );
+  const modelId = normalizeManualMappingModelId(
+    entry.modelId || entry.mappedModelId || entry.icao || entry.typeCode || entry.resolvedTypeCode,
+  );
+  const key = buildManualRegistrationMappingKey(aircraftHex, registration);
+  if (!key || !modelId) {
+    return null;
+  }
+  const updatedAt = Number(entry.updatedAt);
+  return {
+    key,
+    aircraftHex,
+    registration,
+    modelId,
+    updatedAt: Number.isFinite(updatedAt) ? Math.trunc(updatedAt) : Date.now(),
+  };
+}
+
+function serializeManualRegistrationMappings(map) {
+  if (!(map instanceof Map) || !map.size) {
+    return [];
+  }
+  return Array.from(map.values())
+    .map((entry) => normalizeManualRegistrationMappingEntry(entry))
+    .filter(Boolean)
+    .sort((left, right) => left.key.localeCompare(right.key));
+}
+
+function readManualRegistrationMappings() {
+  const map = new Map();
+  try {
+    const raw = window.localStorage.getItem(MANUAL_REGISTRATION_MAPPINGS_KEY);
+    if (!raw) {
+      return map;
+    }
+    const parsed = JSON.parse(raw);
+    const sourceRows = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.mappings)
+        ? parsed.mappings
+        : [];
+    sourceRows.forEach((entry) => {
+      const normalizedEntry = normalizeManualRegistrationMappingEntry(entry);
+      if (!normalizedEntry) {
+        return;
+      }
+      map.set(normalizedEntry.key, normalizedEntry);
+    });
+  } catch {
+    return map;
+  }
+  return map;
+}
+
+function writeManualRegistrationMappings(map) {
+  try {
+    const serialized = serializeManualRegistrationMappings(map);
+    if (!serialized.length) {
+      window.localStorage.removeItem(MANUAL_REGISTRATION_MAPPINGS_KEY);
+      return true;
+    }
+    window.localStorage.setItem(
+      MANUAL_REGISTRATION_MAPPINGS_KEY,
+      JSON.stringify({
+        schema: MANUAL_REGISTRATION_MAPPINGS_EXPORT_SCHEMA,
+        savedAt: Date.now(),
+        mappings: serialized,
+      }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearManualRegistrationMappings() {
+  try {
+    window.localStorage.removeItem(MANUAL_REGISTRATION_MAPPINGS_KEY);
+  } catch {
+    // no-op: storage may be unavailable or blocked
+  }
+}
+
+function buildDashboardModelWithManualMappings(payload, references) {
+  return buildDashboardModel(payload, references, {
+    manualRegistrationMappings: state.manualRegistrationMappings,
+  });
+}
+
+function rebuildDashboardModelFromCurrentUpload() {
+  if (!state.upload.text || !state.references) {
+    return false;
+  }
+  const payload = parseUserCollection(state.upload.text, state.upload.fileName || 'local upload');
+  state.model = buildDashboardModelWithManualMappings(payload, state.references);
+  renderMapTab(state.model);
+  renderAircraftTab(state.model);
+  return true;
+}
+
 function persistCurrentUploadIfEnabled() {
   if (!elements.persistUpload.checked) {
     clearPersistedUpload();
@@ -375,6 +507,9 @@ function resetRegistrationModalState() {
   state.ui.registrationModalQuery = '';
   state.ui.registrationModalConfidence = 'all';
   state.ui.registrationModalPage = 1;
+  state.ui.registrationManualEditKey = '';
+  state.ui.registrationManualEditModelId = '';
+  state.ui.registrationModelOptionsSignature = '';
 }
 
 function resetModelRegsModalState() {
@@ -398,6 +533,226 @@ function getRegistrationTransparencyRows(model = state.model) {
   return model.aircraft.registrationTransparency.rows;
 }
 
+function getRegistrationRowByRowKey(model, rowKey) {
+  const normalizedRowKey = String(rowKey || '');
+  if (!normalizedRowKey) {
+    return null;
+  }
+  return getRegistrationTransparencyRows(model).find((row) => row.rowKey === normalizedRowKey) || null;
+}
+
+function canManualMapRegistrationRow(row) {
+  if (!row?.manualMappingKey) {
+    return false;
+  }
+  if (row.mappingMethod === 'manual_override') {
+    return true;
+  }
+  return row.confidenceCategory !== 'high';
+}
+
+function clearManualRegistrationEditState() {
+  state.ui.registrationManualEditKey = '';
+  state.ui.registrationManualEditModelId = '';
+}
+
+function beginManualRegistrationMappingEdit(row) {
+  if (!row || !row.rowKey || !canManualMapRegistrationRow(row)) {
+    return;
+  }
+  const suggestedModelId = row.manualOverrideModelId
+    || row.mappedModelId
+    || row.lookupHexModelId
+    || row.lookupRegModelId
+    || row.inferenceResolvedTypeCode
+    || '';
+  state.ui.registrationManualEditKey = row.rowKey;
+  state.ui.registrationManualEditModelId = suggestedModelId;
+  renderRegistrationTransparencyModal(state.model);
+  requestAnimationFrame(() => {
+    const input = elements.aircraftRegTransparencyRows?.querySelector('input[data-action="manual-reg-mapping-input"]');
+    input?.focus();
+    input?.select();
+  });
+}
+
+function renderRegistrationModelOptions() {
+  const optionsTarget = elements.aircraftRegModelOptions;
+  if (!optionsTarget) {
+    return;
+  }
+  const models = Array.isArray(state.references?.referenceModels)
+    ? state.references.referenceModels
+    : [];
+  const signature = `${models.length}|${state.references?.manifest?.datasets?.models?.updatedAt || ''}`;
+  if (state.ui.registrationModelOptionsSignature === signature) {
+    return;
+  }
+  state.ui.registrationModelOptionsSignature = signature;
+  if (!models.length) {
+    optionsTarget.innerHTML = '';
+    return;
+  }
+  optionsTarget.innerHTML = models
+    .map((row) => {
+      const modelId = String(row?.id || '').trim().toUpperCase();
+      if (!modelId) {
+        return '';
+      }
+      const manufacturer = String(row?.manufacturer || '').trim();
+      const name = String(row?.name || '').trim();
+      const label = [manufacturer, name].filter(Boolean).join(' ');
+      return `<option value="${escapeHtml(modelId)}" label="${escapeHtml(label || modelId)}"></option>`;
+    })
+    .filter(Boolean)
+    .join('');
+}
+
+function updateManualMappingStorageMeta(model = state.model) {
+  if (!elements.aircraftRegManualStorageMeta) {
+    return;
+  }
+  const storedCount = state.manualRegistrationMappings.size;
+  const appliedCount = Number(model?.aircraft?.registrationTransparency?.summary?.usedManualRows) || 0;
+  if (!storedCount) {
+    elements.aircraftRegManualStorageMeta.textContent = 'No manual mappings are currently saved in this browser.';
+    return;
+  }
+  const storedLabel = storedCount === 1 ? 'mapping' : 'mappings';
+  const appliesLabel = appliedCount === 1 ? 'entry applies' : 'entries apply';
+  elements.aircraftRegManualStorageMeta.textContent = `${formatNumber(storedCount)} manual ${storedLabel} saved in browser local storage. ${formatNumber(appliedCount)} ${appliesLabel} to this dashboard.`;
+}
+
+function persistManualRegistrationMappingsWithNotice() {
+  const saved = writeManualRegistrationMappings(state.manualRegistrationMappings);
+  if (saved) {
+    return true;
+  }
+  setBanner(
+    'Manual mappings could not be written to local storage. They remain in-memory for this session only, so export now.',
+    'warning',
+  );
+  return false;
+}
+
+function applyManualRegistrationMapping(row, modelIdInput = '') {
+  if (!row || !row.manualMappingKey || !state.references?.modelsById) {
+    return;
+  }
+  const selectedModelId = normalizeManualMappingModelId(modelIdInput);
+  if (!selectedModelId) {
+    setBanner('Enter an ICAO model ID before saving a manual mapping.', 'warning');
+    return;
+  }
+  if (!state.references.modelsById.has(selectedModelId)) {
+    setBanner(`"${selectedModelId}" was not found in the current Skycards models reference snapshot.`, 'warning');
+    return;
+  }
+  state.manualRegistrationMappings.set(row.manualMappingKey, {
+    key: row.manualMappingKey,
+    aircraftHex: normalizeManualRegistration(row.aircraftHex),
+    registration: normalizeManualRegistration(row.registration),
+    modelId: selectedModelId,
+    updatedAt: Date.now(),
+  });
+  persistManualRegistrationMappingsWithNotice();
+  clearManualRegistrationEditState();
+  rebuildDashboardModelFromCurrentUpload();
+  state.ui.registrationModalPage = 1;
+  if (state.ui.registrationModalOpen) {
+    renderRegistrationTransparencyModal(state.model);
+  }
+  setBanner(`Manual mapping saved for ${row.registrationRaw || row.registration || row.manualMappingKey}: ${selectedModelId}.`, 'success', {
+    autoDismissMs: 6000,
+  });
+}
+
+function clearManualRegistrationMappingForRow(row) {
+  if (!row?.manualMappingKey) {
+    return;
+  }
+  if (!state.manualRegistrationMappings.has(row.manualMappingKey)) {
+    return;
+  }
+  state.manualRegistrationMappings.delete(row.manualMappingKey);
+  persistManualRegistrationMappingsWithNotice();
+  clearManualRegistrationEditState();
+  rebuildDashboardModelFromCurrentUpload();
+  state.ui.registrationModalPage = 1;
+  if (state.ui.registrationModalOpen) {
+    renderRegistrationTransparencyModal(state.model);
+  }
+  setBanner(`Removed manual mapping for ${row.registrationRaw || row.registration || row.manualMappingKey}.`, 'info', {
+    autoDismissMs: 6000,
+  });
+}
+
+function exportManualRegistrationMappings() {
+  const mappings = serializeManualRegistrationMappings(state.manualRegistrationMappings);
+  if (!mappings.length) {
+    setBanner('No manual mappings are saved yet. Add at least one override before exporting.', 'warning');
+    return;
+  }
+  const content = JSON.stringify({
+    schema: MANUAL_REGISTRATION_MAPPINGS_EXPORT_SCHEMA,
+    exportedAt: Date.now(),
+    mappingCount: mappings.length,
+    mappings,
+  }, null, 2);
+  triggerTextDownload('skyviz-manual-registration-mappings.json', content);
+  setBanner(`Exported ${formatNumber(mappings.length)} manual registration mapping rows.`, 'success', {
+    autoDismissMs: 6000,
+  });
+}
+
+function importManualRegistrationMappingsFromText(text, fileName = 'manual mappings') {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error(`${fileName} is not valid JSON.`);
+  }
+  const sourceRows = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(parsed?.mappings)
+      ? parsed.mappings
+      : [];
+  if (!sourceRows.length) {
+    throw new Error(`${fileName} does not contain any manual mapping rows.`);
+  }
+  let importedCount = 0;
+  let skippedCount = 0;
+  sourceRows.forEach((entry) => {
+    const normalizedEntry = normalizeManualRegistrationMappingEntry(entry);
+    if (!normalizedEntry) {
+      skippedCount += 1;
+      return;
+    }
+    if (state.references?.modelsById && !state.references.modelsById.has(normalizedEntry.modelId)) {
+      skippedCount += 1;
+      return;
+    }
+    state.manualRegistrationMappings.set(normalizedEntry.key, normalizedEntry);
+    importedCount += 1;
+  });
+  if (!importedCount) {
+    throw new Error(`${fileName} had no valid rows for the current reference dataset.`);
+  }
+  persistManualRegistrationMappingsWithNotice();
+  rebuildDashboardModelFromCurrentUpload();
+  state.ui.registrationModalPage = 1;
+  if (state.ui.registrationModalOpen) {
+    renderRegistrationTransparencyModal(state.model);
+  }
+  setBanner(
+    skippedCount
+      ? `Imported ${formatNumber(importedCount)} mapping rows and skipped ${formatNumber(skippedCount)} invalid rows.`
+      : `Imported ${formatNumber(importedCount)} manual mapping rows.`,
+    'success',
+    { autoDismissMs: 7000 },
+  );
+}
+
 function registrationConfidenceLabel(value) {
   return REGISTRATION_MODAL_CONFIDENCE_LABELS[value] || 'Low';
 }
@@ -407,6 +762,9 @@ function registrationStatusLabel(value) {
 }
 
 function registrationMethodLabel(value) {
+  if (value === 'manual_override') {
+    return 'Manual override';
+  }
   if (value === 'hex_lookup') {
     return 'Hex lookup';
   }
@@ -445,8 +803,12 @@ function getAircraftModelRowByModelId(model, modelId) {
   return model.aircraft.rows.find((row) => String(row.modelId || '').toUpperCase() === normalizedModelId) || null;
 }
 
+function getRegistrationModalTriggerElement() {
+  return document.querySelector('#aircraft-reg-transparency-trigger');
+}
+
 function renderRegistrationModalTrigger(model = state.model) {
-  const trigger = elements.aircraftRegTransparencyTrigger;
+  const trigger = getRegistrationModalTriggerElement();
   if (!trigger) {
     return;
   }
@@ -488,6 +850,8 @@ function filterRegistrationModalRows(rows) {
       row.registration,
       row.aircraftHex,
       row.mappedModelId,
+      row.autoMappedModelId,
+      row.manualOverrideModelId,
       row.lookupHexModelId,
       row.lookupRegModelId,
       row.inferenceResolvedTypeCode,
@@ -508,19 +872,37 @@ function renderRegistrationTransparencyModal(model = state.model) {
   if (!elements.aircraftRegTransparencyModal) {
     return;
   }
+  renderRegistrationModelOptions();
   const rows = getRegistrationTransparencyRows(model);
   const summary = model?.aircraft?.registrationTransparency?.summary || {};
   const confidenceCounts = summary.confidenceCounts || {};
   const inferenceStatusCounts = summary.inferenceStatusCounts || {};
   const modelLabelMap = buildAircraftModelLabelMap(model);
+  updateManualMappingStorageMeta(model);
+  const activeConfidenceFilter = REGISTRATION_MODAL_FILTERS.has(state.ui.registrationModalConfidence)
+    ? state.ui.registrationModalConfidence
+    : 'all';
+  const confidenceFilterChip = (key, label, count, extraClass = '') => `
+    <button
+      type="button"
+      class="registration-summary-chip is-filter${extraClass ? ` ${extraClass}` : ''}${activeConfidenceFilter === key ? ' is-active' : ''}"
+      data-action="set-registration-confidence-filter"
+      data-confidence-filter="${escapeHtml(key)}"
+      aria-pressed="${String(activeConfidenceFilter === key)}"
+    >
+      ${escapeHtml(label)} ${formatNumber(count)}
+    </button>
+  `;
 
   elements.aircraftRegTransparencySummary.innerHTML = `
     <span class="registration-summary-chip">${formatNumber(summary.mappedRows || 0)} mapped</span>
     <span class="registration-summary-chip">${formatNumber(summary.unmappedRows || 0)} unmapped</span>
-    <span class="registration-summary-chip is-high">High ${formatNumber(confidenceCounts.high || 0)}</span>
-    <span class="registration-summary-chip is-medium">Medium ${formatNumber(confidenceCounts.medium || 0)}</span>
-    <span class="registration-summary-chip is-ambiguous">Ambiguous ${formatNumber(confidenceCounts.ambiguous || 0)}</span>
-    <span class="registration-summary-chip is-low">Low ${formatNumber(confidenceCounts.low || 0)}</span>
+    ${confidenceFilterChip('manual', 'Manual', confidenceCounts.manual || 0, 'is-manual')}
+    ${confidenceFilterChip('high', 'High', confidenceCounts.high || 0, 'is-high')}
+    ${confidenceFilterChip('medium', 'Medium', confidenceCounts.medium || 0, 'is-medium')}
+    ${confidenceFilterChip('ambiguous', 'Ambiguous', confidenceCounts.ambiguous || 0, 'is-ambiguous')}
+    ${confidenceFilterChip('low', 'Low', confidenceCounts.low || 0, 'is-low')}
+    <span class="registration-summary-chip">Manual applied ${formatNumber(summary.usedManualRows || 0)}</span>
     <span class="registration-summary-chip">Inference rows ${formatNumber(summary.linkedInferenceRows || 0)}</span>
     <span class="registration-summary-chip">Inference medium ${formatNumber(inferenceStatusCounts.inferred_medium_confidence || 0)}</span>
     <span class="registration-summary-chip">Inference ambiguous ${formatNumber(inferenceStatusCounts.ambiguous || 0)}</span>
@@ -536,7 +918,7 @@ function renderRegistrationTransparencyModal(model = state.model) {
     elements.aircraftRegTransparencyMeta.textContent = `No rows match the current filters. ${formatNumber(rows.length)} total unique registration rows are available.`;
     elements.aircraftRegTransparencyRows.innerHTML = `
       <tr>
-        <td class="aircraft-reg-empty" colspan="5">No matching rows.</td>
+        <td class="aircraft-reg-empty" colspan="6">No matching rows.</td>
       </tr>
     `;
   } else {
@@ -555,9 +937,79 @@ function renderRegistrationTransparencyModal(model = state.model) {
       const statusLabel = registrationStatusLabel(row.status);
       const methodLabel = registrationMethodLabel(row.mappingMethod);
       const confidenceLabel = registrationConfidenceLabel(row.confidenceCategory);
+      const manualMappingAllowed = canManualMapRegistrationRow(row);
+      const hasManualOverride = row.mappingMethod === 'manual_override' && Boolean(row.manualOverrideModelId);
+      const isManualEditing = state.ui.registrationManualEditKey === row.rowKey;
+      const manualEditModelId = isManualEditing
+        ? state.ui.registrationManualEditModelId
+        : '';
+      const manualCellHtml = manualMappingAllowed
+        ? isManualEditing
+          ? `
+            <div class="aircraft-reg-manual-actions">
+              <input
+                type="text"
+                class="aircraft-reg-manual-input"
+                data-action="manual-reg-mapping-input"
+                data-row-key="${escapeHtml(row.rowKey)}"
+                list="aircraft-reg-model-options"
+                placeholder="ICAO model ID"
+                value="${escapeHtml(manualEditModelId)}"
+              >
+              <div class="aircraft-reg-manual-action-row">
+                <button
+                  type="button"
+                  class="region-action-button"
+                  data-action="save-manual-reg-mapping"
+                  data-row-key="${escapeHtml(row.rowKey)}"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  class="region-action-button"
+                  data-action="cancel-manual-reg-mapping"
+                  data-row-key="${escapeHtml(row.rowKey)}"
+                >
+                  Cancel
+                </button>
+              </div>
+              <span class="aircraft-reg-subtle">Use an ICAO model ID from the reference list.</span>
+            </div>
+          `
+          : `
+            <div class="aircraft-reg-manual-actions">
+              <button
+                type="button"
+                class="region-action-button"
+                data-action="set-manual-reg-mapping"
+                data-row-key="${escapeHtml(row.rowKey)}"
+              >
+                ${hasManualOverride ? 'Edit' : 'Set'} mapping
+              </button>
+              <button
+                type="button"
+                class="region-action-button"
+                data-action="clear-manual-reg-mapping"
+                data-row-key="${escapeHtml(row.rowKey)}"
+                ${hasManualOverride ? '' : 'disabled'}
+              >
+                Clear
+              </button>
+              <span class="aircraft-reg-subtle">
+                ${hasManualOverride ? `Manual ICAO: ${escapeHtml(row.manualOverrideModelId)}` : 'No manual override set.'}
+              </span>
+            </div>
+          `
+        : '<span class="aircraft-reg-manual-static">Locked: high-confidence auto mapping.</span>';
+      const safeManualCellHtml = String(manualCellHtml || '').trim()
+        || '<span class="aircraft-reg-manual-static">Manual mapping unavailable for this row.</span>';
       const noteParts = [];
       if (row.issueLabel) {
         noteParts.push(row.issueLabel);
+      }
+      if (hasManualOverride && row.autoMappedModelId && row.autoMappedModelId !== row.manualOverrideModelId) {
+        noteParts.push(`Auto candidate: ${row.autoMappedModelId}.`);
       }
       if (row.inferenceStatus && row.inferenceStatus !== 'inferred_high_confidence') {
         noteParts.push(`Inference status: ${registrationStatusLabel(row.inferenceStatus)}.`);
@@ -600,6 +1052,9 @@ function renderRegistrationTransparencyModal(model = state.model) {
     ? `<p class="aircraft-reg-note">${escapeHtml(noteParts.join(' '))}</p>`
     : ''}
           </td>
+          <td class="aircraft-reg-manual-cell">
+            ${safeManualCellHtml}
+          </td>
         </tr>
       `;
     }).join('');
@@ -613,6 +1068,7 @@ function renderRegistrationTransparencyModal(model = state.model) {
 
 function setRegistrationModalOpen(isOpen, options = {}) {
   const restoreFocus = options.restoreFocus !== false;
+  const trigger = getRegistrationModalTriggerElement();
   if (!elements.aircraftRegTransparencyModal) {
     return;
   }
@@ -622,9 +1078,12 @@ function setRegistrationModalOpen(isOpen, options = {}) {
   if (isOpen && state.ui.modelRegsModalOpen) {
     setModelRegsModalOpen(false, { restoreFocus: false });
   }
+  if (!isOpen) {
+    clearManualRegistrationEditState();
+  }
   state.ui.registrationModalOpen = Boolean(isOpen);
   elements.aircraftRegTransparencyModal.hidden = !state.ui.registrationModalOpen;
-  elements.aircraftRegTransparencyTrigger?.setAttribute('aria-expanded', String(state.ui.registrationModalOpen));
+  trigger?.setAttribute('aria-expanded', String(state.ui.registrationModalOpen));
   syncGlobalModalBodyLock();
 
   if (state.ui.registrationModalOpen) {
@@ -636,7 +1095,7 @@ function setRegistrationModalOpen(isOpen, options = {}) {
     return;
   }
   if (restoreFocus) {
-    elements.aircraftRegTransparencyTrigger?.focus();
+    trigger?.focus();
   }
 }
 
@@ -688,6 +1147,7 @@ function renderModelRegistrationsModal(model = state.model) {
     : null;
   const caughtCount = rows.length;
   const confidenceCounts = {
+    manual: 0,
     high: 0,
     medium: 0,
     ambiguous: 0,
@@ -705,6 +1165,7 @@ function renderModelRegistrationsModal(model = state.model) {
   elements.aircraftModelRegsTitle.textContent = `Caught registrations for ${titleModelId}`;
   elements.aircraftModelRegsSummary.textContent = summary;
   elements.aircraftModelRegsBreakdown.innerHTML = `
+    <span class="registration-summary-chip is-manual">Manual ${formatNumber(confidenceCounts.manual)}</span>
     <span class="registration-summary-chip is-high">High ${formatNumber(confidenceCounts.high)}</span>
     <span class="registration-summary-chip is-medium">Medium ${formatNumber(confidenceCounts.medium)}</span>
     <span class="registration-summary-chip is-ambiguous">Ambiguous ${formatNumber(confidenceCounts.ambiguous)}</span>
@@ -798,26 +1259,27 @@ function setModelRegsModalOpen(isOpen, options = {}) {
 function clearDashboardPanels() {
   elements.mapLegend.innerHTML = '';
   elements.mapAirportKpi.textContent = '';
-  elements.continentKpi.textContent = '';
-  elements.countryKpi.textContent = '';
-  elements.usStateKpi.textContent = '';
-  elements.continentProgress.innerHTML = '';
-  elements.countryProgress.innerHTML = '';
-  elements.usStateProgress.innerHTML = '';
-  elements.continentProgressMeta.textContent = '';
-  elements.countryProgressMeta.textContent = '';
-  elements.usStateProgressMeta.textContent = '';
+  elements.mapDrillEyebrow.textContent = 'Drill-down explorer';
+  elements.mapDrillTitle.textContent = 'Airport completion explorer';
+  elements.mapDrillHelper.textContent = 'Click a continent to drill into countries. Click United States to drill into US states.';
+  elements.mapDrillNav.innerHTML = '';
+  elements.mapDrillKpi.textContent = '';
+  elements.mapDrillProgress.innerHTML = '';
+  elements.mapDrillProgressMeta.textContent = '';
   elements.aircraftOverviewPanel.innerHTML = '';
   elements.aircraftTierXpPanel.innerHTML = '';
-  elements.aircraftCategoryXpPanel.innerHTML = '';
+  elements.aircraftTierGlowPanel.innerHTML = '';
   elements.aircraftTypeProgressPanel.innerHTML = '';
   elements.aircraftCategoryProgressPanel.innerHTML = '';
   elements.aircraftTierCompletionPanel.innerHTML = '';
   elements.aircraftImagePlaceholderPanel.innerHTML = '';
   elements.aircraftRegPlaceholderPanel.innerHTML = '';
+  elements.aircraftDeckMetrics.innerHTML = '';
   elements.aircraftListMeta.textContent = '';
   elements.aircraftList.innerHTML = '';
   elements.aircraftRegTransparencySummary.innerHTML = '';
+  elements.aircraftRegModelOptions.innerHTML = '';
+  elements.aircraftRegManualStorageMeta.textContent = '';
   elements.aircraftRegTransparencyMeta.textContent = '';
   elements.aircraftRegTransparencyRows.innerHTML = '';
   elements.aircraftRegTransparencyPageLabel.textContent = '';
@@ -859,16 +1321,79 @@ function applyDirectionButtonState(button, direction) {
   button.setAttribute('title', isAscending ? 'Sort ascending' : 'Sort descending');
 }
 
+function normalizeMapDrillLevel(level) {
+  return MAP_DRILL_LEVELS.includes(level) ? level : 'continent';
+}
+
+function getMapDrillDepth(level = state.map.drillLevel) {
+  const safeLevel = normalizeMapDrillLevel(level);
+  return MAP_DRILL_LEVELS.indexOf(safeLevel) + 1;
+}
+
+function getMapCompletionState(level = state.map.drillLevel) {
+  const safeLevel = normalizeMapDrillLevel(level);
+  if (safeLevel === 'country') {
+    return {
+      query: state.map.countryQuery,
+      sort: state.map.countrySort,
+    };
+  }
+  if (safeLevel === 'us-state') {
+    return {
+      query: state.map.usStateQuery,
+      sort: state.map.usStateSort,
+    };
+  }
+  return {
+    query: state.map.continentQuery,
+    sort: state.map.continentSort,
+  };
+}
+
+function setMapCompletionQuery(level, value) {
+  const safeLevel = normalizeMapDrillLevel(level);
+  if (safeLevel === 'country') {
+    state.map.countryQuery = value;
+    return;
+  }
+  if (safeLevel === 'us-state') {
+    state.map.usStateQuery = value;
+    return;
+  }
+  state.map.continentQuery = value;
+}
+
+function setMapCompletionSort(level, sortKey) {
+  const safeLevel = normalizeMapDrillLevel(level);
+  if (safeLevel === 'country') {
+    state.map.countrySort = sortKey;
+    return;
+  }
+  if (safeLevel === 'us-state') {
+    state.map.usStateSort = sortKey;
+    return;
+  }
+  state.map.continentSort = sortKey;
+}
+
+function getMapSearchPlaceholder(level = state.map.drillLevel) {
+  const safeLevel = normalizeMapDrillLevel(level);
+  if (safeLevel === 'country') {
+    return 'Search countries';
+  }
+  if (safeLevel === 'us-state') {
+    return 'Search US states';
+  }
+  return 'Search continents';
+}
+
 function syncCompletionSortControls() {
-  const continentSort = parseCompletionSortKey(state.map.continentSort);
-  const countrySort = parseCompletionSortKey(state.map.countrySort);
-  const usStateSort = parseCompletionSortKey(state.map.usStateSort);
-  elements.continentSort.value = continentSort.category;
-  elements.countrySort.value = countrySort.category;
-  elements.usStateSort.value = usStateSort.category;
-  applyDirectionButtonState(elements.continentSortDirection, continentSort.direction);
-  applyDirectionButtonState(elements.countrySortDirection, countrySort.direction);
-  applyDirectionButtonState(elements.usStateSortDirection, usStateSort.direction);
+  const completionState = getMapCompletionState();
+  const sortState = parseCompletionSortKey(completionState.sort);
+  elements.mapDrillSearch.value = completionState.query;
+  elements.mapDrillSearch.placeholder = getMapSearchPlaceholder();
+  elements.mapDrillSort.value = sortState.category;
+  applyDirectionButtonState(elements.mapDrillSortDirection, sortState.direction);
 }
 
 function syncAircraftSortControls() {
@@ -885,69 +1410,99 @@ function syncRegistrationModalControls() {
   elements.aircraftRegTransparencyFilter.value = safeFilter;
 }
 
-function applyCompletionCollapseButtonState(button, isCollapsed) {
-  if (!button) {
-    return;
-  }
-  button.textContent = isCollapsed ? 'Expand' : 'Collapse';
-  button.setAttribute('aria-expanded', String(!isCollapsed));
-  button.setAttribute('aria-label', isCollapsed ? 'Expand panel' : 'Collapse panel');
-}
-
-function isDesktopMapLayout() {
-  return window.matchMedia('(min-width: 1025px)').matches;
-}
-
-function applyDefaultMapCompletionCollapseState() {
-  if (isDesktopMapLayout()) {
-    state.map.continentCollapsed = true;
-    state.map.countryCollapsed = false;
-    state.map.usStateCollapsed = false;
-    return;
-  }
-  state.map.continentCollapsed = false;
-  state.map.countryCollapsed = false;
-  state.map.usStateCollapsed = false;
-}
-
-function syncMapCompletionCollapseUi() {
-  const continentCollapsed = state.map.continentCollapsed;
-  const countryCollapsed = state.map.countryCollapsed;
-  const usStateCollapsed = state.map.usStateCollapsed;
-  elements.continentPanel.classList.toggle('is-collapsed', continentCollapsed);
-  elements.countryPanel.classList.toggle('is-collapsed', countryCollapsed);
-  elements.usStatePanel.classList.toggle('is-collapsed', usStateCollapsed);
-  elements.mapSide.classList.toggle('continent-collapsed', continentCollapsed);
-  elements.mapSide.classList.toggle('country-collapsed', countryCollapsed);
-  elements.mapSide.classList.toggle('us-state-collapsed', usStateCollapsed);
-  elements.continentPanelBody.hidden = continentCollapsed;
-  elements.countryPanelBody.hidden = countryCollapsed;
-  elements.usStatePanelBody.hidden = usStateCollapsed;
-  applyCompletionCollapseButtonState(elements.continentCollapseToggle, continentCollapsed);
-  applyCompletionCollapseButtonState(elements.countryCollapseToggle, countryCollapsed);
-  applyCompletionCollapseButtonState(elements.usStateCollapseToggle, usStateCollapsed);
-}
-
-function setMapCompletionCollapsed(panel, isCollapsed) {
-  if (panel !== 'continent' && panel !== 'country' && panel !== 'us-state') {
-    return;
-  }
-  if (panel === 'continent') {
-    state.map.continentCollapsed = Boolean(isCollapsed);
-  } else if (panel === 'country') {
-    state.map.countryCollapsed = Boolean(isCollapsed);
+function setMapDrillLevel(level, options = {}) {
+  const previousLevel = normalizeMapDrillLevel(state.map.drillLevel);
+  const safeLevel = normalizeMapDrillLevel(level);
+  const rawContinentKey = String(options.continentKey ?? state.map.drillContinentKey ?? '')
+    .trim()
+    .toUpperCase();
+  const rawCountryKey = String(options.countryKey ?? state.map.drillCountryKey ?? '')
+    .trim()
+    .toUpperCase();
+  const disableTransition = options.disableTransition === true;
+  if (disableTransition) {
+    state.map.pendingDrillTransition = 'none';
   } else {
-    state.map.usStateCollapsed = Boolean(isCollapsed);
-  }
-  syncMapCompletionCollapseUi();
-  requestAnimationFrame(() => {
-    if (state.map.instance) {
-      state.map.instance.invalidateSize();
+    const previousDepth = getMapDrillDepth(previousLevel);
+    const nextDepth = getMapDrillDepth(safeLevel);
+    if (nextDepth > previousDepth) {
+      state.map.pendingDrillTransition = 'forward';
+    } else if (nextDepth < previousDepth) {
+      state.map.pendingDrillTransition = 'backward';
+    } else {
+      state.map.pendingDrillTransition = 'none';
     }
+  }
+  state.map.drillLevel = safeLevel;
+  if (safeLevel === 'continent') {
+    state.map.drillContinentKey = '';
+    state.map.drillCountryKey = '';
+  } else if (safeLevel === 'country') {
+    state.map.drillContinentKey = rawContinentKey;
+    state.map.drillCountryKey = '';
+  } else {
+    state.map.drillContinentKey = rawContinentKey || 'NA';
+    state.map.drillCountryKey = rawCountryKey || 'US';
+  }
+  syncCompletionSortControls();
+}
+
+function resetMapDrillState() {
+  setMapDrillLevel('continent', {
+    continentKey: '',
+    countryKey: '',
+    disableTransition: true,
   });
 }
 
-function resetToLanding({ clearPersisted = false, clearPersistPreference = false } = {}) {
+function moveMapDrill(model, level, options = {}) {
+  if (!model) {
+    return;
+  }
+  const safeLevel = normalizeMapDrillLevel(level);
+  const continentKey = String(options.continentKey || '').trim().toUpperCase();
+  const countryKey = String(options.countryKey || '').trim().toUpperCase();
+  state.map.expandedRegion = null;
+  if (safeLevel === 'continent') {
+    setMapDrillLevel('continent');
+    clearMapRegionSelection(model, { resetView: true });
+    return;
+  }
+  if (safeLevel === 'country') {
+    setMapDrillLevel('country', { continentKey });
+    if (continentKey) {
+      focusMapRegion(model, 'continent', continentKey);
+    } else {
+      renderMapProgressPanels(model);
+    }
+    return;
+  }
+  setMapDrillLevel('us-state', { continentKey, countryKey: countryKey || 'US' });
+  focusMapRegion(model, 'country', 'US');
+}
+
+function playMapDrillTransition() {
+  const direction = state.map.pendingDrillTransition;
+  state.map.pendingDrillTransition = 'none';
+  if (direction !== 'forward' && direction !== 'backward') {
+    return;
+  }
+  const className = direction === 'forward'
+    ? 'is-drill-anim-forward'
+    : 'is-drill-anim-backward';
+  elements.mapDrillProgress.classList.remove('is-drill-anim-forward', 'is-drill-anim-backward');
+  void elements.mapDrillProgress.offsetWidth;
+  elements.mapDrillProgress.classList.add(className);
+  window.setTimeout(() => {
+    elements.mapDrillProgress.classList.remove(className);
+  }, 260);
+}
+
+function resetToLanding({
+  clearPersisted = false,
+  clearPersistPreference = false,
+  clearManualMappings = false,
+} = {}) {
   state.model = null;
   state.references = null;
   state.activeTab = 'map';
@@ -961,7 +1516,7 @@ function resetToLanding({ clearPersisted = false, clearPersistPreference = false
   state.map.countrySort = 'total_desc';
   state.map.usStateQuery = '';
   state.map.usStateSort = 'total_desc';
-  applyDefaultMapCompletionCollapseState();
+  resetMapDrillState();
   state.aircraft.query = '';
   state.aircraft.sortBy = 'xp';
   state.aircraft.sortDirection = 'desc';
@@ -985,11 +1540,7 @@ function resetToLanding({ clearPersisted = false, clearPersistPreference = false
   clearMapLayers();
   clearDashboardPanels();
 
-  elements.continentSearch.value = '';
-  elements.countrySearch.value = '';
-  elements.usStateSearch.value = '';
   syncCompletionSortControls();
-  syncMapCompletionCollapseUi();
   elements.aircraftSearch.value = '';
   syncAircraftSortControls();
   syncRegistrationModalControls();
@@ -1008,6 +1559,11 @@ function resetToLanding({ clearPersisted = false, clearPersistPreference = false
     writePersistPreference(false);
     elements.persistUpload.checked = false;
   }
+  if (clearManualMappings) {
+    state.manualRegistrationMappings.clear();
+    clearManualRegistrationMappings();
+  }
+  updateManualMappingStorageMeta(null);
 }
 
 function wireDataTools() {
@@ -1022,7 +1578,11 @@ function wireDataTools() {
   });
 
   elements.dataToolsClear.addEventListener('click', () => {
-    resetToLanding({ clearPersisted: true, clearPersistPreference: true });
+    resetToLanding({
+      clearPersisted: true,
+      clearPersistPreference: true,
+      clearManualMappings: true,
+    });
     setBanner('Cleared current dashboard and removed saved local data from this device.', 'info');
   });
 
@@ -1141,22 +1701,7 @@ function setCompletionMeta(target, shownCount, totalCount, label) {
 
 function renderMapKpis(model) {
   const airportPercent = formatPercent(model.summary.airportCaptureRate, 1);
-  const countryPercent = formatPercent(
-    (model.summary.uniqueCapturedCountries / Math.max(model.summary.totalCountries, 1)) * 100,
-    1,
-  );
-  const continentPercent = formatPercent(
-    (model.summary.uniqueCapturedContinents / Math.max(model.summary.totalContinents, 1)) * 100,
-    1,
-  );
-  const usStatePercent = formatPercent(
-    (model.summary.uniqueCapturedUSStates / Math.max(model.summary.totalUSStates, 1)) * 100,
-    1,
-  );
   elements.mapAirportKpi.textContent = `Unlocked ${formatNumber(model.map.capturedAirports)} / ${formatNumber(model.map.totalAirports)} airports (${airportPercent} complete).`;
-  elements.countryKpi.textContent = `Unlocked ${formatNumber(model.summary.uniqueCapturedCountries)} / ${formatNumber(model.summary.totalCountries)} countries (${countryPercent}).`;
-  elements.continentKpi.textContent = `Unlocked ${formatNumber(model.summary.uniqueCapturedContinents)} / ${formatNumber(model.summary.totalContinents)} continents (${continentPercent}).`;
-  elements.usStateKpi.textContent = `Unlocked ${formatNumber(model.summary.uniqueCapturedUSStates)} / ${formatNumber(model.summary.totalUSStates)} US states (${usStatePercent}).`;
 }
 
 function isRegionSelected(regionType, regionKey) {
@@ -1182,6 +1727,7 @@ function ensureRegionPointIndex(model) {
   const continent = new Map();
   const country = new Map();
   const usState = new Map();
+  const countryToContinent = new Map();
   for (const point of model.map.airportPoints) {
     if (point.continentKey) {
       if (!continent.has(point.continentKey)) {
@@ -1194,6 +1740,9 @@ function ensureRegionPointIndex(model) {
         country.set(point.countryCode, []);
       }
       country.get(point.countryCode).push(point);
+      if (point.continentKey && !countryToContinent.has(point.countryCode)) {
+        countryToContinent.set(point.countryCode, point.continentKey);
+      }
     }
     if (point.countryCode === 'US' && point.usStateCode) {
       if (!usState.has(point.usStateCode)) {
@@ -1202,7 +1751,7 @@ function ensureRegionPointIndex(model) {
       usState.get(point.usStateCode).push(point);
     }
   }
-  state.map.regionPointIndex = { continent, country, usState };
+  state.map.regionPointIndex = { continent, country, usState, countryToContinent };
   state.map.regionPointIndexModel = model;
   return state.map.regionPointIndex;
 }
@@ -1222,6 +1771,11 @@ function getRegionAirportPoints(model, regionType, regionKey) {
     return index.usState.get(regionKey) || [];
   }
   return [];
+}
+
+function getCountryContinentKey(model, countryKey) {
+  const index = ensureRegionPointIndex(model);
+  return index.countryToContinent.get(countryKey) || '';
 }
 
 function buildRegionCodeCollections(model, regionType, regionKey) {
@@ -1398,6 +1952,171 @@ function exportRegionCodes(model, regionType, regionKey, scope) {
   });
 }
 
+function toCompletionDisplayRows(rows) {
+  return rows.map((row) => ({
+    key: row.key,
+    label: row.label,
+    percent: row.percent,
+    captured: row.captured,
+    total: row.total,
+    remaining: row.remaining,
+    color: row.color,
+    meta: `${formatNumber(row.captured)} / ${formatNumber(row.total)} (${formatNumber(row.remaining)} remaining)`,
+  }));
+}
+
+function getContinentProgressRow(model, continentKey) {
+  return model.map.continentProgress.find((row) => row.key === continentKey) || null;
+}
+
+function getCountryProgressRow(model, countryKey) {
+  return model.map.countryProgress.find((row) => row.key === countryKey) || null;
+}
+
+function getDrillTargetForRegion(regionType, regionKey) {
+  if (regionType === 'continent' && regionKey) {
+    return true;
+  }
+  if (regionType === 'country' && regionKey === 'US') {
+    return true;
+  }
+  return false;
+}
+
+function buildMapDrillView(model) {
+  const level = normalizeMapDrillLevel(state.map.drillLevel);
+  if (level === 'country') {
+    const continentKey = state.map.drillContinentKey;
+    const continentRow = getContinentProgressRow(model, continentKey);
+    if (!continentRow) {
+      resetMapDrillState();
+      return buildMapDrillView(model);
+    }
+    const allRows = model.map.countryProgress.filter(
+      (row) => getCountryContinentKey(model, row.key) === continentKey,
+    );
+    const completionState = getMapCompletionState('country');
+    const filteredRows = applyCompletionFilters(allRows, completionState.query, completionState.sort);
+    const capturedCount = allRows.filter((row) => row.captured > 0).length;
+    const percent = formatPercent((capturedCount / Math.max(allRows.length, 1)) * 100, 1);
+    return {
+      level: 'country',
+      regionType: 'country',
+      eyebrow: `Viewing ${continentRow.label}`,
+      title: 'Airport completion explorer',
+      helper: 'Click a country row to focus the map. United States drills into US state completion.',
+      kpi: `Unlocked ${formatNumber(capturedCount)} / ${formatNumber(allRows.length)} countries in ${continentRow.label} (${percent}).`,
+      rows: toCompletionDisplayRows(filteredRows),
+      shownCount: filteredRows.length,
+      totalCount: allRows.length,
+      itemLabel: 'countries',
+      emptyMessage: `No country data available for ${continentRow.label}.`,
+      nav: [
+        { label: 'Continents', level: 'continent' },
+        { label: continentRow.label, level: 'country', continentKey, isCurrent: true },
+      ],
+    };
+  }
+  if (level === 'us-state') {
+    const continentKey = state.map.drillContinentKey || getCountryContinentKey(model, 'US') || 'NA';
+    const countryRow = getCountryProgressRow(model, 'US');
+    if (!countryRow) {
+      setMapDrillLevel('country', { continentKey });
+      return buildMapDrillView(model);
+    }
+    const completionState = getMapCompletionState('us-state');
+    const allRows = model.map.usStateProgress.slice();
+    const filteredRows = applyCompletionFilters(allRows, completionState.query, completionState.sort);
+    const capturedCount = allRows.filter((row) => row.captured > 0).length;
+    const percent = formatPercent((capturedCount / Math.max(allRows.length, 1)) * 100, 1);
+    return {
+      level: 'us-state',
+      regionType: 'us-state',
+      eyebrow: 'Viewing United States',
+      title: 'Airport completion explorer',
+      helper: 'Click a US state row to focus it on the map. Use Back to return to countries.',
+      kpi: `Unlocked ${formatNumber(capturedCount)} / ${formatNumber(allRows.length)} US states (${percent}).`,
+      rows: toCompletionDisplayRows(filteredRows),
+      shownCount: filteredRows.length,
+      totalCount: allRows.length,
+      itemLabel: 'US states',
+      emptyMessage: 'No US state data available.',
+      nav: [
+        { label: 'Continents', level: 'continent' },
+        { label: (getContinentProgressRow(model, continentKey)?.label || 'Continent'), level: 'country', continentKey },
+        { label: countryRow.label, level: 'us-state', continentKey, countryKey: 'US', isCurrent: true },
+      ],
+    };
+  }
+
+  const completionState = getMapCompletionState('continent');
+  const allRows = model.map.continentProgress.slice();
+  const filteredRows = applyCompletionFilters(allRows, completionState.query, completionState.sort);
+  const percent = formatPercent(
+    (model.summary.uniqueCapturedContinents / Math.max(model.summary.totalContinents, 1)) * 100,
+    1,
+  );
+  return {
+    level: 'continent',
+    regionType: 'continent',
+    eyebrow: 'Drill-down explorer',
+    title: 'Airport completion explorer',
+    helper: 'Click a continent row to drill into country completion.',
+    kpi: `Unlocked ${formatNumber(model.summary.uniqueCapturedContinents)} / ${formatNumber(model.summary.totalContinents)} continents (${percent}).`,
+    rows: toCompletionDisplayRows(filteredRows),
+    shownCount: filteredRows.length,
+    totalCount: allRows.length,
+    itemLabel: 'continents',
+    emptyMessage: 'No continent data available.',
+    nav: [
+      { label: 'Continents', level: 'continent', isCurrent: true },
+    ],
+  };
+}
+
+function renderMapDrillNavigation(view) {
+  const crumbs = view.nav
+    .map((item, index) => {
+      const button = `
+        <button
+          type="button"
+          class="map-drill-nav-button${item.isCurrent ? ' is-current' : ''}"
+          data-action="set-map-drill-level"
+          data-drill-level="${escapeHtml(item.level)}"
+          data-drill-continent="${escapeHtml(item.continentKey || '')}"
+          data-drill-country="${escapeHtml(item.countryKey || '')}"
+          ${item.isCurrent ? 'disabled aria-current="page"' : ''}
+        >
+          ${escapeHtml(item.label)}
+        </button>
+      `;
+      if (index === 0) {
+        return button;
+      }
+      return `<span class="map-drill-nav-divider" aria-hidden="true">/</span>${button}`;
+    })
+    .join('');
+  const showBackButton = view.level !== 'continent';
+  const backButton = showBackButton
+    ? `
+      <button
+        type="button"
+        class="map-drill-nav-button is-back"
+        data-action="map-drill-back"
+        aria-label="Go back one level"
+      >
+        Back
+      </button>
+    `
+    : '';
+  elements.mapDrillNav.innerHTML = `
+    ${backButton}
+    <div class="map-drill-nav-crumbs">
+      ${crumbs}
+    </div>
+  `;
+}
+
 function renderCompletionProgressRows(model, rows, regionType, emptyMessage) {
   if (!rows.length) {
     return `<div class="empty-copy">${escapeHtml(emptyMessage)}</div>`;
@@ -1409,6 +2128,10 @@ function renderCompletionProgressRows(model, rows, regionType, emptyMessage) {
       const width = Math.max(0, Math.min(row.percent, 100));
       const isSelected = isRegionSelected(regionType, row.key);
       const isExpanded = isRegionExpanded(regionType, row.key);
+      const drillTarget = getDrillTargetForRegion(regionType, row.key);
+      const usStateBadge = regionType === 'country' && row.key === 'US'
+        ? '<span class="completion-drill-badge">State breakdown available</span>'
+        : '';
       return `
           <article class="bar-row completion-region-row${isSelected ? ' is-selected' : ''}${isExpanded ? ' is-expanded' : ''}">
             <div class="completion-region-row-top">
@@ -1419,14 +2142,18 @@ function renderCompletionProgressRows(model, rows, regionType, emptyMessage) {
                 data-region-type="${escapeHtml(regionType)}"
                 data-region-key="${escapeHtml(row.key)}"
                 aria-pressed="${String(isSelected)}"
-                title="Zoom to ${escapeHtml(row.label)}"
+                title="Focus map on ${escapeHtml(row.label)}"
               >
                 <div class="bar-row-head">
-                  <div>
+                  <div class="completion-row-label-stack">
                     <span class="bar-label">${escapeHtml(row.label)}</span>
+                    ${usStateBadge}
                     <span class="bar-meta">${escapeHtml(row.meta)}</span>
                   </div>
-                  <strong>${escapeHtml(formatPercent(row.percent, 1))}</strong>
+                  <div class="completion-row-value-stack">
+                    <strong>${escapeHtml(formatPercent(row.percent, 1))}</strong>
+                    ${drillTarget ? '<span class="completion-drill-arrow" aria-hidden="true">&#8250;</span>' : ''}
+                  </div>
                 </div>
                 <div class="bar-track">
                   <div class="bar-fill" style="width:${width.toFixed(2)}%;--bar-color:${row.color || '#103f6e'};"></div>
@@ -1451,66 +2178,6 @@ function renderCompletionProgressRows(model, rows, regionType, emptyMessage) {
     .join('')}
     </div>
   `;
-}
-
-function renderContinentProgress(model) {
-  const filteredRows = applyCompletionFilters(
-    model.map.continentProgress,
-    state.map.continentQuery,
-    state.map.continentSort,
-  );
-  setCompletionMeta(elements.continentProgressMeta, filteredRows.length, model.map.continentProgress.length, 'continents');
-  const rows = filteredRows.map((row) => ({
-    key: row.key,
-    label: row.label,
-    percent: row.percent,
-    captured: row.captured,
-    total: row.total,
-    remaining: row.remaining,
-    color: row.color,
-    meta: `${formatNumber(row.captured)} / ${formatNumber(row.total)} (${formatNumber(row.remaining)} remaining)`,
-  }));
-  return renderCompletionProgressRows(model, rows, 'continent', 'No continent data available.');
-}
-
-function renderCountryProgress(model) {
-  const filteredRows = applyCompletionFilters(
-    model.map.countryProgress,
-    state.map.countryQuery,
-    state.map.countrySort,
-  );
-  setCompletionMeta(elements.countryProgressMeta, filteredRows.length, model.map.countryProgress.length, 'countries');
-  const rows = filteredRows.map((row) => ({
-    key: row.key,
-    label: row.label,
-    percent: row.percent,
-    captured: row.captured,
-    total: row.total,
-    remaining: row.remaining,
-    color: row.color,
-    meta: `${formatNumber(row.captured)} / ${formatNumber(row.total)} (${formatNumber(row.remaining)} remaining)`,
-  }));
-  return renderCompletionProgressRows(model, rows, 'country', 'No country data available.');
-}
-
-function renderUSStateProgress(model) {
-  const filteredRows = applyCompletionFilters(
-    model.map.usStateProgress,
-    state.map.usStateQuery,
-    state.map.usStateSort,
-  );
-  setCompletionMeta(elements.usStateProgressMeta, filteredRows.length, model.map.usStateProgress.length, 'US states');
-  const rows = filteredRows.map((row) => ({
-    key: row.key,
-    label: row.label,
-    percent: row.percent,
-    captured: row.captured,
-    total: row.total,
-    remaining: row.remaining,
-    color: row.color,
-    meta: `${formatNumber(row.captured)} / ${formatNumber(row.total)} (${formatNumber(row.remaining)} remaining)`,
-  }));
-  return renderCompletionProgressRows(model, rows, 'us-state', 'No US state data available.');
 }
 
 function getAirportMarkerBaseRadius(point) {
@@ -1553,6 +2220,12 @@ function buildAirportCodeLabel(point) {
 function toFr24AirportSlug(point) {
   const rawCode = String(point.iata || point.icao || '').trim().toLowerCase();
   const safeCode = rawCode.replace(/[^a-z0-9-]/g, '');
+  return safeCode || '';
+}
+
+function toSkydexAirportCode(point) {
+  const rawCode = String(point.iata || point.icao || '').trim().toUpperCase();
+  const safeCode = rawCode.replace(/[^A-Z0-9]/g, '');
   return safeCode || '';
 }
 
@@ -1752,16 +2425,19 @@ function clearMapLayers() {
 
 function buildAirportPopup(point) {
   const code = buildAirportCodeDisplay(point);
-  const city = point.city ? `${point.city}, ` : '';
   const fr24Slug = toFr24AirportSlug(point);
+  const skydexCode = toSkydexAirportCode(point);
   const fr24Link = fr24Slug
     ? `<a href="https://www.flightradar24.com/airport/${fr24Slug}" target="_blank" rel="noopener noreferrer">View on FR24</a>`
     : '';
+  const skydexLink = skydexCode
+    ? `<a href="https://www.skydex.info/airport/${skydexCode}" target="_blank" rel="noopener noreferrer">View on Skydex</a>`
+    : '';
+  const links = [fr24Link, skydexLink].filter(Boolean).join(' | ');
   return `
     <strong>${escapeHtml(code)}</strong><br>
     ${escapeHtml(point.name)}<br>
-    ${escapeHtml(city + point.countryLabel)}<br>
-    ${fr24Link || ''}
+    ${links}
   `;
 }
 
@@ -1820,9 +2496,21 @@ function renderLeafletMap(model) {
 }
 
 function renderMapProgressPanels(model) {
-  elements.continentProgress.innerHTML = renderContinentProgress(model);
-  elements.countryProgress.innerHTML = renderCountryProgress(model);
-  elements.usStateProgress.innerHTML = renderUSStateProgress(model);
+  const view = buildMapDrillView(model);
+  elements.mapDrillEyebrow.textContent = view.eyebrow;
+  elements.mapDrillTitle.textContent = view.title;
+  elements.mapDrillHelper.textContent = view.helper;
+  elements.mapDrillKpi.textContent = view.kpi;
+  renderMapDrillNavigation(view);
+  setCompletionMeta(elements.mapDrillProgressMeta, view.shownCount, view.totalCount, view.itemLabel);
+  elements.mapDrillProgress.innerHTML = renderCompletionProgressRows(
+    model,
+    view.rows,
+    view.regionType,
+    view.emptyMessage,
+  );
+  playMapDrillTransition();
+  syncCompletionSortControls();
 }
 
 function renderMapTab(model) {
@@ -2070,6 +2758,7 @@ function ensureAircraftFocusDetailIndex(model) {
   const universeEntries = sortAircraftModelEntries(Array.from(observedUniverse.values()));
   const tierKeys = new Set([
     ...model.aircraft.tierXp.map((row) => row.key),
+    ...((Array.isArray(model.aircraft.tierGlow) ? model.aircraft.tierGlow : []).map((row) => row.key)),
     ...observedByTier.keys(),
   ]);
   for (const key of tierKeys) {
@@ -2230,7 +2919,7 @@ function renderAircraftFocusList(model, rows, options = {}) {
   const maxValue = Math.max(Number.isFinite(options.maxValue) ? options.maxValue : Math.max(...visibleRows.map((row) => row.value), 1), 1);
   const valueFormatter = options.valueFormatter || formatNumber;
   return `
-    <div class="bar-list aircraft-focus-list">
+    <div class="bar-list completion-region-list aircraft-focus-list">
       ${visibleRows.map((row) => {
     const width = Math.max(0, Math.min((row.value / maxValue) * 100, 100));
     const isSelected = isAircraftFocusSelected(options.focusDimension, row.key);
@@ -2240,7 +2929,7 @@ function renderAircraftFocusList(model, rows, options = {}) {
             <div class="completion-region-row-top">
               <button
                 type="button"
-                class="bar-row-button aircraft-focus-button${isSelected ? ' is-selected' : ''}"
+                class="bar-row-button completion-focus-button aircraft-focus-button${isSelected ? ' is-selected' : ''}"
                 data-action="toggle-aircraft-focus"
                 data-focus-scope="${escapeHtml(options.focusScope || '')}"
                 data-focus-dimension="${escapeHtml(options.focusDimension)}"
@@ -2249,11 +2938,13 @@ function renderAircraftFocusList(model, rows, options = {}) {
                 title="Filter aircraft list by ${escapeHtml(row.label)}"
               >
                 <div class="bar-row-head">
-                  <div>
+                  <div class="completion-row-label-stack">
                     <span class="bar-label">${escapeHtml(row.label)}</span>
                     ${row.meta ? `<span class="bar-meta">${escapeHtml(row.meta)}</span>` : ''}
                   </div>
-                  <strong>${escapeHtml(valueFormatter(row.value))}</strong>
+                  <div class="completion-row-value-stack">
+                    <strong>${escapeHtml(valueFormatter(row.value))}</strong>
+                  </div>
                 </div>
                 <div class="bar-track">
                   <div class="bar-fill" style="width:${width.toFixed(2)}%;--bar-color:${row.color || '#103f6e'};"></div>
@@ -2317,13 +3008,19 @@ function getAircraftFocusLabel(model, dimension, key) {
 function renderAircraftWidgets(model) {
   elements.aircraftOverviewPanel.innerHTML = '';
 
+  const totalModels = model.aircraft.rows.length;
+  const modelsByTier = new Map();
+  model.aircraft.rows.forEach((row) => {
+    const tierKey = String(row.dominantTier || 'unknown').toLowerCase();
+    modelsByTier.set(tierKey, (modelsByTier.get(tierKey) || 0) + 1);
+  });
   const totalXp = Math.max(model.summary.totalXp, 1);
   const tierXpRows = model.aircraft.tierXp.map((row) => ({
     key: row.key,
     label: row.label,
     value: row.value,
     color: row.color,
-    meta: `${formatPercent((row.value / totalXp) * 100, 1)} of total XP`,
+    meta: `${formatNumber(modelsByTier.get(row.key) || 0)} / ${formatNumber(totalModels)} models | ${formatPercent((row.value / totalXp) * 100, 1)} XP share`,
   }));
   elements.aircraftTierXpPanel.innerHTML = renderAircraftFocusPanel(model, {
     eyebrow: 'XP',
@@ -2335,21 +3032,22 @@ function renderAircraftWidgets(model) {
     focusScope: 'tier-xp',
   });
 
-  const categoryXpRows = model.aircraft.categoryXp.map((row) => ({
+  const totalGlows = Math.max(model.summary.totalGlowCount, 1);
+  const tierGlowRows = (Array.isArray(model.aircraft.tierGlow) ? model.aircraft.tierGlow : []).map((row) => ({
     key: row.key,
     label: row.label,
     value: row.value,
     color: row.color,
-    meta: `${formatPercent((row.value / totalXp) * 100, 1)} of total XP`,
+    meta: `${formatNumber(modelsByTier.get(row.key) || 0)} / ${formatNumber(totalModels)} models | ${formatPercent((row.value / totalGlows) * 100, 1)} glow share`,
   }));
-  elements.aircraftCategoryXpPanel.innerHTML = renderAircraftFocusPanel(model, {
-    eyebrow: 'XP',
-    title: 'XP by category',
-    rows: categoryXpRows,
-    valueFormatter: (value) => `${formatCompact(value)} XP`,
-    emptyMessage: 'No category XP data available.',
-    focusDimension: 'category',
-    focusScope: 'category-xp',
+  elements.aircraftTierGlowPanel.innerHTML = renderAircraftFocusPanel(model, {
+    eyebrow: 'Glow distribution',
+    title: 'Glows by tier',
+    rows: tierGlowRows,
+    valueFormatter: (value) => `${formatNumber(Math.round(value))} glows`,
+    emptyMessage: 'No glow data available.',
+    focusDimension: 'tier',
+    focusScope: 'tier-glow',
   });
 
   const typeProgressRows = model.aircraft.typeProgress.map((row) => ({
@@ -2397,7 +3095,8 @@ function renderAircraftWidgets(model) {
 
 function formatAircraftStat(value, options = {}) {
   const number = Number(value);
-  if (!Number.isFinite(number)) {
+  const treatNonPositiveAsMissing = options.nullIfNonPositive === true;
+  if (!Number.isFinite(number) || (treatNonPositiveAsMissing && number <= 0)) {
     return 'N/A';
   }
   const formatter = new Intl.NumberFormat('en-US', {
@@ -2409,13 +3108,58 @@ function formatAircraftStat(value, options = {}) {
 
 function formatAircraftRarity(value) {
   const number = Number(value);
-  if (!Number.isFinite(number)) {
+  if (!Number.isFinite(number) || number <= 0) {
     return 'N/A';
   }
   return formatAircraftStat(number / 100, {
+    nullIfNonPositive: true,
     minFractionDigits: 2,
     maxFractionDigits: 2,
   });
+}
+
+function formatAircraftPercent(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return 'N/A';
+  }
+  const formatter = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  return `${formatter.format(number)}%`;
+}
+
+function renderAircraftMetricIcon(iconType) {
+  if (iconType === 'framing') {
+    return `
+      <svg class="aircraft-card-inline-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <circle cx="8" cy="8" r="2.2"></circle>
+        <path d="M8 1.5v2.2M8 12.3v2.2M1.5 8h2.2M12.3 8h2.2"></path>
+        <circle cx="8" cy="8" r="5.1"></circle>
+      </svg>
+    `;
+  }
+  return `
+    <svg class="aircraft-card-inline-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M5.6 12.4h5.8a2.6 2.6 0 0 0 .2-5.2 3.5 3.5 0 0 0-6.9-.8 2.3 2.3 0 0 0 .9 6z"></path>
+    </svg>
+  `;
+}
+
+function renderAircraftInlineMetric(iconType, value) {
+  const normalizedValue = value || 'N/A';
+  return `
+    <span class="aircraft-card-inline-metric is-${escapeHtml(iconType)}">
+      ${renderAircraftMetricIcon(iconType)}
+      <span class="aircraft-card-inline-metric-value">${escapeHtml(normalizedValue)}</span>
+    </span>
+  `;
+}
+
+function normalizeAircraftTierKey(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return AIRCRAFT_XP_TIERS.has(normalized) ? normalized : 'unknown';
 }
 
 function normalizeAircraftImageTier(value) {
@@ -2503,6 +3247,10 @@ function renderAircraftCard(row, index, left, top, width, cardHeight) {
   const name = row.name || row.displayName || row.modelId || 'Unknown aircraft';
   const manufacturer = row.manufacturer || 'Unknown manufacturer';
   const icao = row.icao || row.modelId || 'Unknown';
+  const tierKey = normalizeAircraftTierKey(row.dominantTier);
+  const tierLabel = row.dominantTierLabel || 'Unknown';
+  const framingPercent = formatAircraftPercent(row.avgCoverage);
+  const cloudPercent = formatAircraftPercent(row.avgCloudiness);
   const caughtRegistrations = Number.isFinite(row.caughtRegistrations) ? row.caughtRegistrations : null;
   const possibleRegistrations = Number.isFinite(row.possibleRegistrations) ? row.possibleRegistrations : null;
   const registrationBadgeText = Number.isFinite(caughtRegistrations) && Number.isFinite(possibleRegistrations)
@@ -2545,9 +3293,15 @@ function renderAircraftCard(row, index, left, top, width, cardHeight) {
         <div class="aircraft-card-head">
           <div class="aircraft-card-title-block">
             <p class="aircraft-card-manufacturer">${escapeHtml(manufacturer)}</p>
-            <h4 class="aircraft-card-name">${escapeHtml(name)}</h4>
+            <h4 class="aircraft-card-name" title="${escapeHtml(name)}">${escapeHtml(name)}</h4>
+            <div class="aircraft-card-inline-metrics">
+              ${renderAircraftInlineMetric('framing', framingPercent)}
+              <span class="aircraft-card-inline-separator" aria-hidden="true">|</span>
+              ${renderAircraftInlineMetric('cloud', cloudPercent)}
+            </div>
           </div>
           <div class="aircraft-card-badges">
+            <span class="aircraft-card-tier-badge is-${escapeHtml(tierKey)}">${escapeHtml(tierLabel)}</span>
             <span class="aircraft-card-xp">${formatNumber(row.xp)} XP</span>
             <button
               class="aircraft-card-regs aircraft-card-regs-button"
@@ -2561,36 +3315,86 @@ function renderAircraftCard(row, index, left, top, width, cardHeight) {
             </button>
           </div>
         </div>
-        <p class="aircraft-card-model">ICAO ${escapeHtml(icao)}</p>
-        <dl class="aircraft-card-stats">
-          <div class="aircraft-card-stat">
-            <dt>First flight</dt>
-            <dd>${formatAircraftStat(row.firstFlight, { maxFractionDigits: 0 })}</dd>
-          </div>
-          <div class="aircraft-card-stat">
-            <dt>Rarity</dt>
-            <dd>${formatAircraftRarity(row.rareness)}</dd>
-          </div>
-          <div class="aircraft-card-stat">
-            <dt>Wingspan</dt>
-            <dd>${formatAircraftStat(row.wingspan, { suffix: ' m', maxFractionDigits: 1 })}</dd>
-          </div>
-          <div class="aircraft-card-stat">
-            <dt>Speed</dt>
-            <dd>${formatAircraftStat(row.maxSpeed, { suffix: ' kt', maxFractionDigits: 0 })}</dd>
-          </div>
-          <div class="aircraft-card-stat">
-            <dt>Seats</dt>
-            <dd>${formatAircraftStat(row.seats, { maxFractionDigits: 0 })}</dd>
-          </div>
-          <div class="aircraft-card-stat">
-            <dt>Weight</dt>
-            <dd>${formatAircraftStat(row.mtow, { suffix: ' kg', maxFractionDigits: 0 })}</dd>
-          </div>
-        </dl>
+        <div class="aircraft-card-stats-block">
+          <p class="aircraft-card-model">ICAO ${escapeHtml(icao)}</p>
+          <dl class="aircraft-card-stats">
+            <div class="aircraft-card-stat">
+              <dt>First flight</dt>
+              <dd>${formatAircraftStat(row.firstFlight, { maxFractionDigits: 0, nullIfNonPositive: true })}</dd>
+            </div>
+            <div class="aircraft-card-stat">
+              <dt>Rarity</dt>
+              <dd>${formatAircraftRarity(row.rareness)}</dd>
+            </div>
+            <div class="aircraft-card-stat">
+              <dt>Wingspan</dt>
+              <dd>${formatAircraftStat(row.wingspan, { suffix: ' m', maxFractionDigits: 1, nullIfNonPositive: true })}</dd>
+            </div>
+            <div class="aircraft-card-stat">
+              <dt>Speed</dt>
+              <dd>${formatAircraftStat(row.maxSpeed, { suffix: ' kt', maxFractionDigits: 0, nullIfNonPositive: true })}</dd>
+            </div>
+            <div class="aircraft-card-stat">
+              <dt>Seats</dt>
+              <dd>${formatAircraftStat(row.seats, { maxFractionDigits: 0, nullIfNonPositive: true })}</dd>
+            </div>
+            <div class="aircraft-card-stat">
+              <dt>Weight</dt>
+              <dd>${formatAircraftStat(row.mtow, { suffix: ' kg', maxFractionDigits: 0, nullIfNonPositive: true })}</dd>
+            </div>
+          </dl>
+        </div>
       </div>
     </article>
   `;
+}
+
+function getAircraftSortableMetric(value, options = {}) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return Number.NEGATIVE_INFINITY;
+  }
+  if (options.nullIfNonPositive && number <= 0) {
+    return Number.NEGATIVE_INFINITY;
+  }
+  return number;
+}
+
+function resolveAircraftSortMetric(row, sortBy) {
+  if (sortBy === 'xp') {
+    return getAircraftSortableMetric(row.xp);
+  }
+  if (sortBy === 'glow') {
+    return getAircraftSortableMetric(row.glowCount);
+  }
+  if (sortBy === 'registrations') {
+    return getAircraftSortableMetric(row.caughtRegistrations);
+  }
+  if (sortBy === 'coverage') {
+    return getAircraftSortableMetric(row.avgCoverage);
+  }
+  if (sortBy === 'cloud') {
+    return getAircraftSortableMetric(row.avgCloudiness);
+  }
+  if (sortBy === 'firstFlight') {
+    return getAircraftSortableMetric(row.firstFlight, { nullIfNonPositive: true });
+  }
+  if (sortBy === 'speed') {
+    return getAircraftSortableMetric(row.maxSpeed, { nullIfNonPositive: true });
+  }
+  if (sortBy === 'rarity') {
+    return getAircraftSortableMetric(row.rareness, { nullIfNonPositive: true });
+  }
+  if (sortBy === 'seats') {
+    return getAircraftSortableMetric(row.seats, { nullIfNonPositive: true });
+  }
+  if (sortBy === 'wingspan') {
+    return getAircraftSortableMetric(row.wingspan, { nullIfNonPositive: true });
+  }
+  if (sortBy === 'weight') {
+    return getAircraftSortableMetric(row.mtow, { nullIfNonPositive: true });
+  }
+  return getAircraftSortableMetric(row.xp);
 }
 
 function sortAircraftRows(rows, sortBy, direction = 'desc') {
@@ -2598,22 +3402,11 @@ function sortAircraftRows(rows, sortBy, direction = 'desc') {
   const factor = direction === 'asc' ? 1 : -1;
   return sortable.sort((left, right) => {
     let comparison = 0;
-    if (sortBy === 'glow') {
-      comparison = left.glowCount - right.glowCount
-        || left.xp - right.xp
-        || left.displayName.localeCompare(right.displayName);
-    } else if (sortBy === 'coverage') {
-      comparison = left.avgCoverage - right.avgCoverage
-        || left.xp - right.xp
-        || left.displayName.localeCompare(right.displayName);
-    } else if (sortBy === 'name') {
+    if (sortBy === 'name') {
       comparison = left.displayName.localeCompare(right.displayName);
-    } else if (sortBy === 'speed') {
-      comparison = (left.maxSpeed || -1) - (right.maxSpeed || -1)
-        || left.xp - right.xp
-        || left.displayName.localeCompare(right.displayName);
     } else {
-      comparison = left.xp - right.xp
+      comparison = resolveAircraftSortMetric(left, sortBy) - resolveAircraftSortMetric(right, sortBy)
+        || left.xp - right.xp
         || left.glowCount - right.glowCount
         || left.displayName.localeCompare(right.displayName);
     }
@@ -2646,9 +3439,56 @@ function applyAircraftFilters(model) {
   state.aircraft.visibleRows = sortAircraftRows(filtered, state.aircraft.sortBy, state.aircraft.sortDirection);
 }
 
+function renderAircraftDeckMetrics(rows) {
+  if (!elements.aircraftDeckMetrics) {
+    return;
+  }
+  const totals = rows.reduce((accumulator, row) => {
+    accumulator.xp += Number.isFinite(row.xp) ? row.xp : 0;
+    accumulator.glows += Number.isFinite(row.glowCount) ? row.glowCount : 0;
+    accumulator.registrations += Number.isFinite(row.caughtRegistrations) ? row.caughtRegistrations : 0;
+    return accumulator;
+  }, {
+    xp: 0,
+    glows: 0,
+    registrations: 0,
+  });
+  const isModalOpen = state.ui.registrationModalOpen;
+  elements.aircraftDeckMetrics.innerHTML = `
+    <div class="aircraft-deck-metric">
+      <span class="aircraft-deck-metric-label">Total XP</span>
+      <strong class="aircraft-deck-metric-value">${formatNumber(Math.round(totals.xp))}</strong>
+    </div>
+    <div class="aircraft-deck-metric">
+      <span class="aircraft-deck-metric-label">Total glows</span>
+      <strong class="aircraft-deck-metric-value">${formatNumber(Math.round(totals.glows))}</strong>
+    </div>
+    <div class="aircraft-deck-metric">
+      <span class="aircraft-deck-metric-label">Total regs</span>
+      <div class="aircraft-deck-metric-value-row">
+        <strong class="aircraft-deck-metric-value">${formatNumber(Math.round(totals.registrations))}</strong>
+        <button
+          id="aircraft-reg-transparency-trigger"
+          class="aircraft-caution-button is-inline"
+          type="button"
+          data-action="open-registration-transparency"
+          aria-haspopup="dialog"
+          aria-expanded="${isModalOpen ? 'true' : 'false'}"
+          aria-controls="aircraft-reg-transparency-modal"
+          title="Registration mapping transparency"
+        >
+          <span class="aircraft-caution-icon" aria-hidden="true">&#9888;</span>
+          <span class="sr-only">Open registration mapping transparency details</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
 function renderAircraftList() {
   const rows = state.aircraft.visibleRows;
   const totalRows = state.model?.aircraft.rows.length || 0;
+  renderAircraftDeckMetrics(rows);
   const focusBits = [];
   if (state.model) {
     const typeLabel = getAircraftFocusLabel(state.model, 'type', state.aircraft.focusType);
@@ -2689,7 +3529,16 @@ function renderAircraftList() {
 
   const startIndex = Math.min(rows.length - 1, startRow * layout.columns);
   const endIndex = Math.min(rows.length - 1, ((endRow + 1) * layout.columns) - 1);
-  const renderSignature = `${rows.length}|${layout.columns}|${startRow}|${endRow}|${rows[startIndex]?.key || ''}|${rows[endIndex]?.key || ''}`;
+  const renderSignature = [
+    rows.length,
+    layout.columns,
+    layout.cardWidth.toFixed(2),
+    layout.cardHeight,
+    startRow,
+    endRow,
+    rows[startIndex]?.key || '',
+    rows[endIndex]?.key || '',
+  ].join('|');
   if (state.aircraft.lastRenderedRowsRef === rows && state.aircraft.renderSignature === renderSignature) {
     return;
   }
@@ -2744,7 +3593,7 @@ function renderDashboard(model, references = null) {
   state.map.countrySort = 'total_desc';
   state.map.usStateQuery = '';
   state.map.usStateSort = 'total_desc';
-  applyDefaultMapCompletionCollapseState();
+  resetMapDrillState();
   state.aircraft.query = '';
   state.aircraft.sortBy = 'xp';
   state.aircraft.sortDirection = 'desc';
@@ -2761,11 +3610,7 @@ function renderDashboard(model, references = null) {
   resetModelRegsModalState();
   setRegistrationModalOpen(false, { restoreFocus: false });
   setModelRegsModalOpen(false, { restoreFocus: false });
-  elements.continentSearch.value = '';
-  elements.countrySearch.value = '';
-  elements.usStateSearch.value = '';
   syncCompletionSortControls();
-  syncMapCompletionCollapseUi();
   elements.aircraftSearch.value = '';
   syncAircraftSortControls();
   syncRegistrationModalControls();
@@ -2790,7 +3635,7 @@ async function tryLoadPersistedUpload(persistedUpload = null) {
   try {
     const payload = parseUserCollection(persisted.text, persisted.fileName);
     const references = await loadReferenceData();
-    const model = buildDashboardModel(payload, references);
+    const model = buildDashboardModelWithManualMappings(payload, references);
     state.upload.fileName = persisted.fileName;
     state.upload.text = persisted.text;
     renderDashboard(model, references);
@@ -2814,21 +3659,47 @@ async function tryLoadPersistedUpload(persistedUpload = null) {
   }
 }
 
+function beginDashboardLoadingState(statusMessage) {
+  const previousVisibility = {
+    landingHidden: elements.landingView.hidden,
+    dashboardHidden: elements.dashboard.hidden,
+  };
+  setBootState(true, statusMessage);
+  elements.landingView.hidden = true;
+  elements.dashboard.hidden = true;
+  return previousVisibility;
+}
+
+function endDashboardLoadingState(previousVisibility, restorePreviousView = false) {
+  setBootState(false);
+  if (!restorePreviousView || !previousVisibility) {
+    return;
+  }
+  elements.landingView.hidden = previousVisibility.landingHidden;
+  elements.dashboard.hidden = previousVisibility.dashboardHidden;
+}
+
 async function handleFile(file) {
   if (!file) {
     return;
   }
   setBanner('');
+  const previousVisibility = beginDashboardLoadingState(`Reading ${file.name}...`);
+  let loaded = false;
   setUploadStatus(`Reading ${file.name}...`);
   try {
     const text = await file.text();
+    setBootState(true, `Validating ${file.name}...`);
     const payload = parseUserCollection(text, file.name);
+    setBootState(true, `Enriching ${file.name} with reference data...`);
     setUploadStatus(`Enriching ${file.name} with reference data...`);
     const references = await loadReferenceData();
-    const model = buildDashboardModel(payload, references);
+    setBootState(true, `Building dashboard for ${file.name}...`);
+    const model = buildDashboardModelWithManualMappings(payload, references);
     state.upload.fileName = file.name;
     state.upload.text = text;
     renderDashboard(model, references);
+    loaded = true;
     const persisted = persistCurrentUploadIfEnabled();
     setUploadStatus(
       persisted
@@ -2840,12 +3711,15 @@ async function handleFile(file) {
     setUploadStatus('Waiting for a valid collection export.');
     setBanner(error instanceof Error ? error.message : 'Failed to load the collection export.', 'warning');
   } finally {
+    endDashboardLoadingState(previousVisibility, !loaded);
     elements.fileInput.value = '';
   }
 }
 
 async function handleExampleView() {
   setBanner('');
+  const previousVisibility = beginDashboardLoadingState('Loading example dashboard...');
+  let loaded = false;
   setUploadStatus('Loading example dashboard...');
   try {
     const response = await fetch(EXAMPLE_DECK_PATH, { cache: 'no-store' });
@@ -2853,13 +3727,17 @@ async function handleExampleView() {
       throw new Error(`Failed to load built-in example data (${response.status}).`);
     }
     const text = await response.text();
+    setBootState(true, 'Validating example data...');
     const payload = parseUserCollection(text, 'built-in example');
+    setBootState(true, 'Enriching example data with reference data...');
     setUploadStatus('Enriching example data with reference data...');
     const references = await loadReferenceData();
-    const model = buildDashboardModel(payload, references);
+    setBootState(true, 'Building example dashboard...');
+    const model = buildDashboardModelWithManualMappings(payload, references);
     state.upload.fileName = 'skyviz_try_now_user.json';
     state.upload.text = text;
     renderDashboard(model, references);
+    loaded = true;
     const persisted = persistCurrentUploadIfEnabled();
     setUploadStatus(
       persisted
@@ -2872,6 +3750,8 @@ async function handleExampleView() {
   } catch (error) {
     setUploadStatus('Waiting for a collection export.');
     setBanner(error instanceof Error ? error.message : 'Failed to load built-in example dashboard.', 'warning');
+  } finally {
+    endDashboardLoadingState(previousVisibility, !loaded);
   }
 }
 
@@ -2935,94 +3815,73 @@ function wireUpload() {
 }
 
 function wireMapCompletionControls() {
-  elements.continentSearch.addEventListener('input', () => {
+  elements.mapDrillSearch.addEventListener('input', () => {
+    const level = normalizeMapDrillLevel(state.map.drillLevel);
+    setMapCompletionQuery(level, elements.mapDrillSearch.value);
+    if (state.model) {
+      renderMapProgressPanels(state.model);
+    }
+  });
+
+  elements.mapDrillSort.addEventListener('change', () => {
+    const level = normalizeMapDrillLevel(state.map.drillLevel);
+    const current = parseCompletionSortKey(getMapCompletionState(level).sort);
+    setMapCompletionSort(level, buildCompletionSortKey(elements.mapDrillSort.value, current.direction));
+    syncCompletionSortControls();
+    if (state.model) {
+      renderMapProgressPanels(state.model);
+    }
+  });
+
+  elements.mapDrillSortDirection.addEventListener('click', () => {
+    const level = normalizeMapDrillLevel(state.map.drillLevel);
+    const current = parseCompletionSortKey(getMapCompletionState(level).sort);
+    setMapCompletionSort(level, buildCompletionSortKey(current.category, toggleCompletionDirection(current.direction)));
+    syncCompletionSortControls();
+    if (state.model) {
+      renderMapProgressPanels(state.model);
+    }
+  });
+
+  elements.mapDrillNav.addEventListener('click', (event) => {
     if (!state.model) {
       return;
     }
-    state.map.continentQuery = elements.continentSearch.value;
-    renderMapProgressPanels(state.model);
-  });
-
-  elements.continentSort.addEventListener('change', () => {
-    const current = parseCompletionSortKey(state.map.continentSort);
-    state.map.continentSort = buildCompletionSortKey(elements.continentSort.value, current.direction);
-    syncCompletionSortControls();
-    if (state.model) {
-      renderMapProgressPanels(state.model);
-    }
-  });
-
-  elements.continentSortDirection.addEventListener('click', () => {
-    const current = parseCompletionSortKey(state.map.continentSort);
-    state.map.continentSort = buildCompletionSortKey(current.category, toggleCompletionDirection(current.direction));
-    syncCompletionSortControls();
-    if (state.model) {
-      renderMapProgressPanels(state.model);
-    }
-  });
-
-  elements.countrySearch.addEventListener('input', () => {
-    if (!state.model) {
+    const target = event.target;
+    if (!(target instanceof Element)) {
       return;
     }
-    state.map.countryQuery = elements.countrySearch.value;
-    renderMapProgressPanels(state.model);
-  });
-
-  elements.countrySort.addEventListener('change', () => {
-    const current = parseCompletionSortKey(state.map.countrySort);
-    state.map.countrySort = buildCompletionSortKey(elements.countrySort.value, current.direction);
-    syncCompletionSortControls();
-    if (state.model) {
-      renderMapProgressPanels(state.model);
-    }
-  });
-
-  elements.countrySortDirection.addEventListener('click', () => {
-    const current = parseCompletionSortKey(state.map.countrySort);
-    state.map.countrySort = buildCompletionSortKey(current.category, toggleCompletionDirection(current.direction));
-    syncCompletionSortControls();
-    if (state.model) {
-      renderMapProgressPanels(state.model);
-    }
-  });
-
-  elements.usStateSearch.addEventListener('input', () => {
-    if (!state.model) {
+    const button = target.closest('button[data-action]');
+    if (!button) {
       return;
     }
-    state.map.usStateQuery = elements.usStateSearch.value;
-    renderMapProgressPanels(state.model);
-  });
-
-  elements.usStateSort.addEventListener('change', () => {
-    const current = parseCompletionSortKey(state.map.usStateSort);
-    state.map.usStateSort = buildCompletionSortKey(elements.usStateSort.value, current.direction);
-    syncCompletionSortControls();
-    if (state.model) {
-      renderMapProgressPanels(state.model);
+    const action = button.dataset.action;
+    if (action === 'map-drill-back') {
+      if (state.map.drillLevel === 'us-state') {
+        const continentKey = state.map.drillContinentKey || getCountryContinentKey(state.model, 'US') || '';
+        moveMapDrill(state.model, 'country', { continentKey });
+        return;
+      }
+      if (state.map.drillLevel === 'country') {
+        moveMapDrill(state.model, 'continent');
+      }
+      return;
     }
-  });
-
-  elements.usStateSortDirection.addEventListener('click', () => {
-    const current = parseCompletionSortKey(state.map.usStateSort);
-    state.map.usStateSort = buildCompletionSortKey(current.category, toggleCompletionDirection(current.direction));
-    syncCompletionSortControls();
-    if (state.model) {
-      renderMapProgressPanels(state.model);
+    if (action !== 'set-map-drill-level') {
+      return;
     }
-  });
-
-  elements.continentCollapseToggle.addEventListener('click', () => {
-    setMapCompletionCollapsed('continent', !state.map.continentCollapsed);
-  });
-
-  elements.countryCollapseToggle.addEventListener('click', () => {
-    setMapCompletionCollapsed('country', !state.map.countryCollapsed);
-  });
-
-  elements.usStateCollapseToggle.addEventListener('click', () => {
-    setMapCompletionCollapsed('us-state', !state.map.usStateCollapsed);
+    const level = normalizeMapDrillLevel(button.dataset.drillLevel);
+    const continentKey = String(button.dataset.drillContinent || '').trim().toUpperCase();
+    const countryKey = String(button.dataset.drillCountry || '').trim().toUpperCase();
+    if (level === 'country') {
+      moveMapDrill(state.model, 'country', { continentKey });
+      return;
+    }
+    if (level === 'us-state') {
+      moveMapDrill(state.model, 'us-state', { continentKey, countryKey: countryKey || 'US' });
+      return;
+    }
+    moveMapDrill(state.model, 'continent');
   });
 
   const onCompletionRowClick = (event) => {
@@ -3044,6 +3903,15 @@ function wireMapCompletionControls() {
       return;
     }
     if (action === 'focus-region') {
+      if (regionType === 'continent') {
+        moveMapDrill(state.model, 'country', { continentKey: regionKey });
+        return;
+      }
+      if (regionType === 'country' && regionKey === 'US') {
+        const continentKey = getCountryContinentKey(state.model, 'US') || state.map.drillContinentKey || 'NA';
+        moveMapDrill(state.model, 'us-state', { continentKey, countryKey: 'US' });
+        return;
+      }
       if (isRegionSelected(regionType, regionKey)) {
         clearMapRegionSelection(state.model, { resetView: true });
         return;
@@ -3066,20 +3934,27 @@ function wireMapCompletionControls() {
     }
   };
 
-  elements.continentProgress.addEventListener('click', onCompletionRowClick);
-  elements.countryProgress.addEventListener('click', onCompletionRowClick);
-  elements.usStateProgress.addEventListener('click', onCompletionRowClick);
+  elements.mapDrillProgress.addEventListener('click', onCompletionRowClick);
 }
 
 function wireAircraftControls() {
-  elements.aircraftRegTransparencyTrigger.addEventListener('click', () => {
-    if (!state.model) {
+  elements.aircraftDeckMetrics?.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const trigger = target.closest('button[data-action="open-registration-transparency"]');
+    if (!(trigger instanceof HTMLButtonElement)) {
+      return;
+    }
+    if (!state.model || trigger.disabled) {
       return;
     }
     setModelRegsModalOpen(false, { restoreFocus: false });
     state.ui.registrationModalQuery = '';
     state.ui.registrationModalConfidence = 'all';
     state.ui.registrationModalPage = 1;
+    clearManualRegistrationEditState();
     syncRegistrationModalControls();
     setRegistrationModalOpen(true);
   });
@@ -3095,6 +3970,7 @@ function wireAircraftControls() {
   elements.aircraftRegTransparencySearch.addEventListener('input', () => {
     state.ui.registrationModalQuery = elements.aircraftRegTransparencySearch.value;
     state.ui.registrationModalPage = 1;
+    clearManualRegistrationEditState();
     if (state.ui.registrationModalOpen) {
       renderRegistrationTransparencyModal(state.model);
     }
@@ -3104,9 +3980,131 @@ function wireAircraftControls() {
     const selected = elements.aircraftRegTransparencyFilter.value;
     state.ui.registrationModalConfidence = REGISTRATION_MODAL_FILTERS.has(selected) ? selected : 'all';
     state.ui.registrationModalPage = 1;
+    clearManualRegistrationEditState();
     if (state.ui.registrationModalOpen) {
       renderRegistrationTransparencyModal(state.model);
     }
+  });
+
+  elements.aircraftRegTransparencySummary.addEventListener('click', (event) => {
+    if (!state.model) {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const filterButton = target.closest('button[data-action="set-registration-confidence-filter"][data-confidence-filter]');
+    if (!filterButton) {
+      return;
+    }
+    const selected = String(filterButton.getAttribute('data-confidence-filter') || '').trim().toLowerCase();
+    state.ui.registrationModalConfidence = REGISTRATION_MODAL_FILTERS.has(selected) ? selected : 'all';
+    state.ui.registrationModalPage = 1;
+    clearManualRegistrationEditState();
+    syncRegistrationModalControls();
+    renderRegistrationTransparencyModal(state.model);
+  });
+
+  elements.aircraftRegTransparencyRows.addEventListener('click', (event) => {
+    if (!state.model) {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const button = target.closest('button[data-action][data-row-key]');
+    if (!button) {
+      return;
+    }
+    const rowKey = String(button.getAttribute('data-row-key') || '');
+    const row = getRegistrationRowByRowKey(state.model, rowKey);
+    if (!row) {
+      return;
+    }
+    const action = button.getAttribute('data-action');
+    if (action === 'set-manual-reg-mapping') {
+      beginManualRegistrationMappingEdit(row);
+      return;
+    }
+    if (action === 'clear-manual-reg-mapping') {
+      clearManualRegistrationMappingForRow(row);
+      return;
+    }
+    if (action === 'cancel-manual-reg-mapping') {
+      clearManualRegistrationEditState();
+      renderRegistrationTransparencyModal(state.model);
+      return;
+    }
+    if (action === 'save-manual-reg-mapping') {
+      applyManualRegistrationMapping(row, state.ui.registrationManualEditModelId);
+      return;
+    }
+  });
+
+  elements.aircraftRegTransparencyRows.addEventListener('input', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+    if (target.getAttribute('data-action') !== 'manual-reg-mapping-input') {
+      return;
+    }
+    const rowKey = String(target.getAttribute('data-row-key') || '');
+    if (rowKey && state.ui.registrationManualEditKey === rowKey) {
+      state.ui.registrationManualEditModelId = target.value;
+    }
+  });
+
+  elements.aircraftRegManualExport.addEventListener('click', () => {
+    exportManualRegistrationMappings();
+  });
+
+  elements.aircraftRegManualImportTrigger.addEventListener('click', () => {
+    elements.aircraftRegManualImportInput.click();
+  });
+
+  elements.aircraftRegManualImportInput.addEventListener('change', () => {
+    const file = elements.aircraftRegManualImportInput.files?.[0];
+    if (!file) {
+      return;
+    }
+    void (async () => {
+      try {
+        const text = await file.text();
+        importManualRegistrationMappingsFromText(text, file.name);
+      } catch (error) {
+        setBanner(error instanceof Error ? error.message : 'Failed to import manual mapping file.', 'warning');
+      } finally {
+        elements.aircraftRegManualImportInput.value = '';
+      }
+    })();
+  });
+
+  elements.aircraftRegManualClear.addEventListener('click', () => {
+    if (!state.manualRegistrationMappings.size) {
+      setBanner('No manual mappings are currently saved.', 'info', {
+        autoDismissMs: 4000,
+      });
+      return;
+    }
+    const shouldClear = window.confirm(
+      `Clear ${formatNumber(state.manualRegistrationMappings.size)} manual registration mappings from this browser?`,
+    );
+    if (!shouldClear) {
+      return;
+    }
+    state.manualRegistrationMappings.clear();
+    persistManualRegistrationMappingsWithNotice();
+    rebuildDashboardModelFromCurrentUpload();
+    state.ui.registrationModalPage = 1;
+    if (state.ui.registrationModalOpen) {
+      renderRegistrationTransparencyModal(state.model);
+    }
+    setBanner('Cleared all manual registration mappings from browser storage.', 'info', {
+      autoDismissMs: 6000,
+    });
   });
 
   elements.aircraftModelRegsClose.addEventListener('click', () => {
@@ -3138,6 +4136,7 @@ function wireAircraftControls() {
       return;
     }
     state.ui.registrationModalPage -= 1;
+    clearManualRegistrationEditState();
     renderRegistrationTransparencyModal(state.model);
   });
 
@@ -3146,6 +4145,7 @@ function wireAircraftControls() {
       return;
     }
     state.ui.registrationModalPage += 1;
+    clearManualRegistrationEditState();
     renderRegistrationTransparencyModal(state.model);
   });
 
@@ -3217,15 +4217,7 @@ function wireAircraftControls() {
       return;
     }
     if (action === 'toggle-aircraft-focus') {
-      const wasSelected = isAircraftFocusSelected(dimension, key);
       toggleAircraftFocus(dimension, key);
-      if (wasSelected) {
-        if (isAircraftFocusExpanded(scope, dimension, key)) {
-          state.aircraft.expandedFocus = null;
-        }
-      } else {
-        state.aircraft.expandedFocus = { scope, dimension, key };
-      }
       elements.aircraftList.scrollTop = 0;
       renderAircraftWidgets(state.model);
       applyAircraftFilters(state.model);
@@ -3323,7 +4315,8 @@ async function bootstrap() {
   setModelRegsModalOpen(false, { restoreFocus: false });
   syncRegistrationModalControls();
   renderRegistrationModalTrigger(null);
-  syncMapCompletionCollapseUi();
+  state.manualRegistrationMappings = readManualRegistrationMappings();
+  updateManualMappingStorageMeta(null);
   elements.persistUpload.checked = readPersistPreference();
   const persistedUpload = readPersistedUpload();
   const shouldRestorePersistedUpload = elements.persistUpload.checked && Boolean(persistedUpload);

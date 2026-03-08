@@ -35,6 +35,7 @@
    - aircraft analytics, progress widgets, and a virtualized aircraft card deck
    - per-model caught registration counts by decoding `uniqueRegs[].aircraftId` (decimal ICAO transponder) into hex and joining against the local aircraft lookup snapshot
    - per-registration mapping diagnostics (hex vs registration fallback, confidence class, ambiguity status, and optional inference hints) shown by the aircraft caution modal
+   - browser-local manual registration overrides (for non-high-confidence rows) merged into mapping results before dashboard rendering
    - per-model total possible registration counts from `/models/count/{icao}` snapshots
    - aircraft image candidates resolved as tier-aware CDN URLs using `*_md.png` first, then `cyber` tier + model metadata alias fallback (`imageOverride`, `images[]`)
 8. The loaded UI transitions to a tabbed dashboard (`Map` and `Aircraft`) without sending upload data to any server.
@@ -62,6 +63,7 @@ The reference snapshots keep the site self-contained for GitHub Pages and make a
 
 - The app stays static and deployable to GitHub Pages.
 - User uploads are processed locally in the browser, with optional user-controlled `localStorage` persistence.
+- Manual registration overrides are also browser-local (`localStorage`) and can be exported/imported for backup and restore.
 - Reference snapshots are committed artifacts so the site works without a runtime API dependency.
 - There is no authentication, persistence layer, or custom backend.
 
