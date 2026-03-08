@@ -82,8 +82,8 @@ const elements = {
   aircraftModelRegsPageLabel: document.querySelector('#aircraft-model-regs-page-label'),
 };
 
-const AIRCRAFT_CARD_HEIGHT_MOBILE = 364;
-const AIRCRAFT_CARD_HEIGHT_TABLET_PLUS = 370;
+const AIRCRAFT_CARD_HEIGHT_MOBILE = 428;
+const AIRCRAFT_CARD_HEIGHT_TABLET_PLUS = 416;
 const AIRCRAFT_GRID_GAP = 14;
 const AIRCRAFT_GRID_PADDING = 14;
 const AIRCRAFT_MIN_CARD_WIDTH = 244;
