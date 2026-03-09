@@ -17,5 +17,11 @@ jobs:
           python-version: '3.11'
       - name: Refresh reference data
         run: python scripts/refresh_reference_data.py
+      - name: Refresh model registration counts
+        run: python scripts/refresh_model_registration_counts.py
+      - name: Build aircraft lookup
+        run: python scripts/build_aircraft_lookup_from_db.py --db-path aircraft_data.db
+      - name: Refresh manifest from generated reference data
+        run: python scripts/refresh_reference_data.py --manifest-only
       - name: Run smoke check
         run: python scripts/smoke_check.py

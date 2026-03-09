@@ -32,6 +32,7 @@ If `site/data/reference/` does not exist yet in your local checkout, generate it
 python scripts/refresh_reference_data.py
 python scripts/refresh_model_registration_counts.py
 python scripts/build_aircraft_lookup_from_db.py --db-path aircraft_data.db
+python scripts/refresh_reference_data.py --manifest-only
 ```
 
 ```bash
@@ -100,6 +101,12 @@ Build the `aircraftId` lookup used for per-model caught registration mapping fro
 ```bash
 python scripts/build_aircraft_lookup_from_db.py --db-path aircraft_data.db
 ```
+After writing optional reference artifacts, rebuild `manifest.json` so the browser discovers them:
+
+```bash
+python scripts/refresh_reference_data.py --manifest-only
+```
+
 Generate an inference/review artifact for unresolved `aircraftId`/registration rows:
 
 ```bash
@@ -140,8 +147,9 @@ The repository includes a Pages deployment workflow that publishes the `site/` d
 
 During Pages builds, the workflow refreshes:
 
-- `models.json` / `airports.json` / `manifest.json`
+- `models.json` / `airports.json`
 - `model_registration_counts.json`
 - `aircraft_lookup.json` only when `aircraft_data.db` is present in the build workspace
+- `manifest.json` after optional reference artifacts are generated so deployed browsers can discover them
 
 This repository ignores `site/data/reference/*` in git. CI and Pages workflows generate fresh reference snapshots before validation/deploy.

@@ -14,6 +14,19 @@ def _load_json(path: Path) -> object:
         return json.load(handle)
 
 
+def _assert_manifest_dataset(manifest: dict, dataset_key: str, path: Path) -> None:
+    dataset = manifest.get('datasets', {}).get(dataset_key)
+    if not isinstance(dataset, dict):
+        raise SystemExit(f'smoke_check: manifest missing dataset entry for {dataset_key}')
+    manifest_path = dataset.get('path')
+    expected_path = f'./{path.name}'
+    if manifest_path != expected_path:
+        raise SystemExit(
+            f'smoke_check: manifest dataset path mismatch for {dataset_key}: '
+            f'expected {expected_path}, got {manifest_path!r}',
+        )
+
+
 def check_repo_hygiene() -> None:
     result = subprocess.run(
         [sys.executable, str(REPO_ROOT / 'scripts' / 'repo_hygiene_check.py')],
@@ -83,6 +96,8 @@ def check_reference_data() -> None:
         raise SystemExit('smoke_check: models.json rows missing or empty')
     if not isinstance(airports.get('rows'), list) or not airports['rows']:
         raise SystemExit('smoke_check: airports.json rows missing or empty')
+    _assert_manifest_dataset(manifest, 'models', REPO_ROOT / 'site' / 'data' / 'reference' / 'models.json')
+    _assert_manifest_dataset(manifest, 'airports', REPO_ROOT / 'site' / 'data' / 'reference' / 'airports.json')
     print(
         'reference payloads:',
         f"models={len(models['rows'])}",
@@ -92,16 +107,19 @@ def check_reference_data() -> None:
         model_registration_counts = _load_json(model_registration_counts_path)
         if not isinstance(model_registration_counts.get('countsByModelId'), dict):
             raise SystemExit('smoke_check: model_registration_counts.json countsByModelId missing')
+        _assert_manifest_dataset(manifest, 'modelRegistrationCounts', model_registration_counts_path)
         print('reference registration counts:', f"models={len(model_registration_counts['countsByModelId'])}")
     if aircraft_lookup_path.exists():
         aircraft_lookup = _load_json(aircraft_lookup_path)
         if not isinstance(aircraft_lookup.get('byAircraftHex'), dict):
             raise SystemExit('smoke_check: aircraft_lookup.json byAircraftHex missing')
+        _assert_manifest_dataset(manifest, 'aircraftLookup', aircraft_lookup_path)
         print('reference aircraft lookup:', f"hex_rows={len(aircraft_lookup['byAircraftHex'])}")
     if aircraft_lookup_resolved_path.exists():
         aircraft_lookup_resolved = _load_json(aircraft_lookup_resolved_path)
         if not isinstance(aircraft_lookup_resolved.get('byAircraftHex'), dict):
             raise SystemExit('smoke_check: aircraft_lookup_resolved.json byAircraftHex missing')
+        _assert_manifest_dataset(manifest, 'aircraftLookupResolved', aircraft_lookup_resolved_path)
         print('reference aircraft lookup (resolved):', f"hex_rows={len(aircraft_lookup_resolved['byAircraftHex'])}")
 
 

@@ -58,7 +58,7 @@ Required request headers:
 
 The reference snapshots keep the site self-contained for GitHub Pages and make agent work deterministic:
 
-- `scripts/refresh_reference_data.py` writes `models.json`, `airports.json`, and `manifest.json`, and it records any optional local artifacts present in `site/data/reference/`.
+- `scripts/refresh_reference_data.py` writes `models.json` / `airports.json`, and it can also rebuild `manifest.json` from the current contents of `site/data/reference/` so optional local artifacts are discoverable by the browser.
 - `scripts/refresh_model_registration_counts.py` writes `model_registration_counts.json`.
 - `scripts/build_aircraft_lookup_from_db.py` writes `aircraft_lookup.json` from the local SQLite snapshot (`aircraft_data.db`).
 

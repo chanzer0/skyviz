@@ -101,6 +101,11 @@ def add_optional_manifest_datasets(manifest: dict, out_dir: Path) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Refresh committed Skycards reference data snapshots.')
     parser.add_argument(
+        '--manifest-only',
+        action='store_true',
+        help='Rebuild manifest.json from existing local reference files without fetching models/airports again.',
+    )
+    parser.add_argument(
         '--dataset',
         choices=('all',) + DATASETS,
         default='all',
@@ -133,14 +138,15 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     out_dir = Path(args.out_dir)
-    targets = DATASETS if args.dataset == 'all' else (args.dataset,)
     payloads: dict[str, dict] = {}
 
-    for dataset in targets:
-        payload = fetch_payload(args.base_url, dataset, args.client_version, args.timeout)
-        payloads[dataset] = payload
-        write_json(out_dir / f'{dataset}.json', payload)
-        print(f"refreshed {dataset}: rows={len(payload.get('rows', []))} updatedAt={payload.get('updatedAt')}")
+    if not args.manifest_only:
+        targets = DATASETS if args.dataset == 'all' else (args.dataset,)
+        for dataset in targets:
+            payload = fetch_payload(args.base_url, dataset, args.client_version, args.timeout)
+            payloads[dataset] = payload
+            write_json(out_dir / f'{dataset}.json', payload)
+            print(f"refreshed {dataset}: rows={len(payload.get('rows', []))} updatedAt={payload.get('updatedAt')}")
 
     existing_payloads = {}
     for dataset in DATASETS:
@@ -148,6 +154,12 @@ def main() -> int:
         if path.exists():
             with path.open('r', encoding='utf-8') as handle:
                 existing_payloads[dataset] = json.load(handle)
+    missing_required = [dataset for dataset in DATASETS if dataset not in existing_payloads]
+    if missing_required:
+        raise SystemExit(
+            'cannot build manifest because required reference payloads are missing: '
+            + ', '.join(sorted(missing_required)),
+        )
     manifest = build_manifest(args.base_url, args.client_version, existing_payloads)
     add_optional_manifest_datasets(manifest, out_dir)
     write_json(out_dir / 'manifest.json', manifest)

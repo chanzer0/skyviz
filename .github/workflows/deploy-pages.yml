@@ -34,6 +34,10 @@ jobs:
           else
             echo "aircraft_data.db not present; skipping aircraft lookup build."
           fi
+      - name: Refresh manifest from generated reference data
+        run: python scripts/refresh_reference_data.py --manifest-only
+      - name: Run smoke check
+        run: python scripts/smoke_check.py
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
