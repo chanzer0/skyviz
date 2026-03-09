@@ -10,13 +10,14 @@ import {
 import {
   DAILY_GAME_NAME,
   buildAirportGuessComparison,
-  buildAirportHint,
+  buildAirportHints,
   buildAirportOptionLabel,
   buildAirportSuggestions,
   buildDailyShareText,
   buildDailyStats,
   formatCountdown,
   getDailyChallengeProfile,
+  getDailyHintUnlockThresholds,
   getNextUtcResetTime,
   getUtcDayKey,
   parseDailyHistory,
@@ -478,19 +479,31 @@ function writeDailyHistory() {
 
 function getDailySession(dayKey = state.daily.dayKey || getUtcDayKey()) {
   const source = state.daily.history?.days?.[dayKey];
+  const hintRevealCount = Number.isFinite(Number(source?.hintRevealCount))
+    ? Math.max(0, Math.floor(Number(source.hintRevealCount)))
+    : source?.hintRevealed
+      ? 1
+      : 0;
   return {
     guesses: Array.isArray(source?.guesses) ? source.guesses.filter(Boolean) : [],
     status: source?.status === 'won' || source?.status === 'lost' ? source.status : 'in_progress',
-    hintRevealed: Boolean(source?.hintRevealed),
+    hintRevealCount,
+    hintRevealed: hintRevealCount > 0,
     completedAt: typeof source?.completedAt === 'string' ? source.completedAt : '',
   };
 }
 
 function updateDailySession(dayKey, nextSession) {
+  const hintRevealCount = Number.isFinite(Number(nextSession?.hintRevealCount))
+    ? Math.max(0, Math.floor(Number(nextSession.hintRevealCount)))
+    : nextSession?.hintRevealed
+      ? 1
+      : 0;
   state.daily.history.days[dayKey] = {
     guesses: Array.isArray(nextSession?.guesses) ? nextSession.guesses.filter(Boolean) : [],
     status: nextSession?.status === 'won' || nextSession?.status === 'lost' ? nextSession.status : 'in_progress',
-    hintRevealed: Boolean(nextSession?.hintRevealed),
+    hintRevealCount,
+    hintRevealed: hintRevealCount > 0,
     completedAt: typeof nextSession?.completedAt === 'string' ? nextSession.completedAt : '',
   };
   writeDailyHistory();
@@ -798,33 +811,115 @@ function buildDailyHintValueHtml(hint) {
   }).join('');
 }
 
+function formatDailyHintUnlockCopy(unlockGuess, maxGuesses, options = {}) {
+  const safeUnlockGuess = Math.floor(Number(unlockGuess));
+  const safeMaxGuesses = Math.max(1, Math.floor(Number(maxGuesses) || 8));
+  if (!Number.isFinite(safeUnlockGuess) || safeUnlockGuess <= 0) {
+    return '';
+  }
+  if (safeUnlockGuess >= safeMaxGuesses) {
+    return options.short ? 'Final guess' : 'Unlocked on the final guess';
+  }
+  return options.short
+    ? `${formatNumber(safeUnlockGuess)} guesses`
+    : `Unlocked after ${formatNumber(safeUnlockGuess)} ${safeUnlockGuess === 1 ? 'guess' : 'guesses'}`;
+}
+
+function buildDailyHintState(challenge, session, options = {}) {
+  if (!challenge?.target) {
+    return {
+      maxGuesses: Number(challenge?.maxGuesses || 8),
+      hints: [],
+      thresholds: [],
+      revealCount: 0,
+      unlockedCount: 0,
+      availableCount: 0,
+      visibleHints: [],
+      nextThreshold: null,
+    };
+  }
+  const maxGuesses = Number(challenge.maxGuesses || 8);
+  const thresholds = getDailyHintUnlockThresholds(maxGuesses);
+  const hints = buildAirportHints(challenge.target, {
+    revealAnswer: Boolean(options?.revealAnswer),
+    maxHints: thresholds.length,
+  });
+  const activeThresholds = thresholds.slice(0, hints.length);
+  const storedRevealCount = Math.min(
+    Number.isFinite(Number(session?.hintRevealCount))
+      ? Math.max(0, Math.floor(Number(session.hintRevealCount)))
+      : session?.hintRevealed
+        ? 1
+        : 0,
+    hints.length,
+  );
+  const unlockedCount = Math.min(
+    activeThresholds.filter((threshold) => session.guesses.length >= threshold).length,
+    hints.length,
+  );
+  const revealCount = Math.min(Math.max(storedRevealCount, unlockedCount), hints.length);
+  return {
+    maxGuesses,
+    hints,
+    thresholds: activeThresholds,
+    revealCount,
+    unlockedCount,
+    availableCount: hints.length,
+    visibleHints: hints.slice(0, Boolean(options?.revealAnswer) ? hints.length : revealCount),
+    nextThreshold: activeThresholds[revealCount] ?? null,
+  };
+}
+
+function buildDailyHintEntryHtml(hint, index, unlockGuess, options = {}) {
+  const unlockCopy = formatDailyHintUnlockCopy(unlockGuess, options.maxGuesses, { short: true });
+  const entryClass = options.inAnswerCard ? 'daily-hint-entry is-answer' : 'daily-hint-entry';
+  return `
+    <article class="${entryClass}">
+      <div class="daily-hint-entry-head">
+        <div>
+          <span class="daily-hint-entry-index">Hint ${formatNumber(index + 1)}</span>
+          <h5 class="daily-hint-entry-title">${escapeHtml(hint?.label || 'Extra hint')}</h5>
+        </div>
+        ${unlockCopy ? `<span class="daily-hint-entry-chip">${escapeHtml(unlockCopy)}</span>` : ''}
+      </div>
+      <p class="daily-hint-copy">${buildDailyHintValueHtml(hint)}</p>
+      ${hint?.note ? `
+        <p class="daily-hint-note">
+          <span class="daily-answer-fact-note-icon" aria-hidden="true">i</span>
+          <span>${escapeHtml(hint.note)}</span>
+        </p>
+      ` : ''}
+    </article>
+  `;
+}
+
+function buildDailyHintListHtml(hints, thresholds, options = {}) {
+  if (!hints.length) {
+    return '';
+  }
+  return `
+    <div class="daily-hint-list${options.inAnswerCard ? ' is-answer' : ''}">
+      ${hints.map((hint, index) => buildDailyHintEntryHtml(hint, index, thresholds[index], options)).join('')}
+    </div>
+  `;
+}
+
 function renderDailyBriefing(challenge, session, countdown) {
   const maxGuesses = Number(challenge?.maxGuesses || 8);
   const remainingGuesses = Math.max(maxGuesses - session.guesses.length, 0);
-  const hintCountdown = Math.max(3 - session.guesses.length, 0);
-  const hintIsReady = session.status === 'in_progress' && session.guesses.length >= 3 && !session.hintRevealed;
-  const hintButtonLabel = session.hintRevealed
-    ? 'Hint revealed'
+  const hintState = buildDailyHintState(challenge, session);
+  const guessesUntilNextHint = hintState.nextThreshold === null
+    ? 0
+    : Math.max(hintState.nextThreshold - session.guesses.length, 0);
+  const hintCopy = hintState.availableCount === 0
+    ? 'No extra clues are available for this field today.'
     : session.status !== 'in_progress'
-      ? 'Board complete'
-      : hintIsReady
-        ? 'Reveal hint'
-        : hintCountdown === 1
-          ? 'Hint in 1 guess'
-          : `Hint in ${formatNumber(hintCountdown)} guesses`;
-  const hintButtonDisabled = session.hintRevealed || session.status !== 'in_progress' || !hintIsReady;
-  const hintButtonClass = session.hintRevealed
-    ? ' is-live'
-    : hintIsReady
-      ? ' is-ready'
-      : ' is-locked';
-  const hintCopy = session.hintRevealed
-    ? 'Your extra clue is open below.'
-    : session.status !== 'in_progress'
-      ? 'Board complete. Review the revealed airport below.'
-      : hintIsReady
-        ? 'One extra clue is ready whenever you want it.'
-        : `One extra clue unlocks after ${formatNumber(hintCountdown)} more ${hintCountdown === 1 ? 'guess' : 'guesses'}.`;
+      ? 'Board complete. Review the revealed airport and full hint recap below.'
+      : hintState.revealCount >= hintState.availableCount
+        ? 'All available hints are already open below.'
+        : hintState.nextThreshold === maxGuesses
+          ? 'The final hint auto-reveals on your last guess.'
+          : `The next clue auto-reveals after ${formatNumber(guessesUntilNextHint)} more ${guessesUntilNextHint === 1 ? 'guess' : 'guesses'}.`;
   elements.dailyBriefing.innerHTML = `
     <div class="daily-briefing-card">
       <div class="daily-briefing-head">
@@ -834,16 +929,6 @@ function renderDailyBriefing(challenge, session, countdown) {
             <strong class="daily-widget-value">${formatNumber(remainingGuesses)}</strong>
             <span class="daily-widget-note">of ${formatNumber(maxGuesses)} left</span>
           </div>
-        </div>
-        <div class="daily-briefing-controls">
-          <button
-            class="region-action-button daily-hint-button${hintButtonClass}"
-            type="button"
-            data-action="reveal-daily-hint"
-            ${hintButtonDisabled ? 'disabled' : ''}
-          >
-            ${escapeHtml(hintButtonLabel)}
-          </button>
         </div>
       </div>
       <div class="daily-runway-lights" aria-hidden="true">
@@ -866,7 +951,7 @@ function renderDailyIntel(challenge, session, options = {}) {
   const target = challenge.target;
   const revealAnswer = session.status === 'won' || session.status === 'lost';
   const celebrateSolve = session.status === 'won' && Boolean(options?.celebrateSolve);
-  const hint = buildAirportHint(target, { revealAnswer });
+  const hintState = buildDailyHintState(challenge, session, { revealAnswer });
   if (session.status === 'won' || session.status === 'lost') {
     const guessesRemaining = Math.max((challenge.maxGuesses || 8) - session.guesses.length, 0);
     const copyButtonConfig = session.status === 'won'
@@ -898,43 +983,42 @@ function renderDailyIntel(challenge, session, options = {}) {
             <span class="daily-answer-fact-label">Navigation</span>
             <span class="daily-answer-fact-value">${escapeHtml(`${formatNumber(target.navaidCount)} navaids, ${formatNumber(target.frequencyCount)} radio entries`)}</span>
           </div>
-          <div class="daily-answer-fact">
-            <span class="daily-answer-fact-label">${escapeHtml(hint.label)}</span>
-            <span class="daily-answer-fact-value">${buildDailyHintValueHtml(hint)}</span>
-            ${hint.note ? `
-              <p class="daily-answer-fact-note">
-                <span class="daily-answer-fact-note-icon" aria-hidden="true">i</span>
-                <span>${escapeHtml(hint.note)}</span>
-              </p>
-            ` : ''}
-          </div>
+          ${hintState.availableCount ? `
+            <div class="daily-answer-fact is-hints">
+              <span class="daily-answer-fact-label">Hint recap</span>
+              ${buildDailyHintListHtml(hintState.hints, hintState.thresholds, { inAnswerCard: true, maxGuesses: hintState.maxGuesses })}
+            </div>
+          ` : ''}
         </div>
       </div>
     `;
     return;
   }
-  if (!session.hintRevealed) {
+  if (!hintState.revealCount) {
     elements.dailyIntel.hidden = true;
     elements.dailyIntel.innerHTML = '';
     return;
   }
+  const nextHintCopy = hintState.nextThreshold === null
+    ? 'All available hints are already revealed.'
+    : hintState.nextThreshold === hintState.maxGuesses
+      ? 'The final hint auto-reveals on your last guess.'
+      : `Next clue auto-reveals after ${formatNumber(Math.max(hintState.nextThreshold - session.guesses.length, 0))} more ${Math.max(hintState.nextThreshold - session.guesses.length, 0) === 1 ? 'guess' : 'guesses'}.`;
   elements.dailyIntel.hidden = false;
   elements.dailyIntel.innerHTML = `
     <div class="daily-hint-card">
       <div class="daily-hint-head">
         <div>
-          <p class="eyebrow">Extra hint</p>
-          <h4 class="daily-hint-title">${escapeHtml(hint.label)}</h4>
+          <p class="eyebrow">Extra hints</p>
+          <h4 class="daily-hint-title">${escapeHtml(`${formatNumber(hintState.revealCount)} unlocked`)}</h4>
         </div>
-        <span class="daily-hint-chip">Unlocked after 3 guesses</span>
+        <span class="daily-hint-chip">${escapeHtml(`${formatNumber(hintState.revealCount)} / ${formatNumber(hintState.availableCount)}`)}</span>
       </div>
-      <p class="daily-hint-copy">${buildDailyHintValueHtml(hint)}</p>
-      ${hint.note ? `
-        <p class="daily-hint-meta">
-          <span class="daily-hint-meta-icon" aria-hidden="true">i</span>
-          <span>${escapeHtml(hint.note)}</span>
-        </p>
-      ` : ''}
+      ${buildDailyHintListHtml(hintState.visibleHints, hintState.thresholds, { maxGuesses: hintState.maxGuesses })}
+      <p class="daily-hint-meta">
+        <span class="daily-hint-meta-icon" aria-hidden="true">i</span>
+        <span>${escapeHtml(nextHintCopy)}</span>
+      </p>
     </div>
   `;
 }
@@ -1619,11 +1703,18 @@ function submitDailyGuessByAirport(airport) {
     : nextGuesses.length >= challenge.maxGuesses
       ? 'lost'
       : 'in_progress';
-  updateDailySession(challenge.dayKey, {
+  const nextSession = {
     guesses: nextGuesses,
     status,
-    hintRevealed: session.hintRevealed,
+    hintRevealCount: session.hintRevealCount,
     completedAt: status === 'in_progress' ? session.completedAt : new Date().toISOString(),
+  };
+  const nextHintState = buildDailyHintState(challenge, nextSession);
+  const nextHintRevealCount = nextHintState.revealCount;
+  const newlyRevealedHintCount = Math.max(nextHintRevealCount - session.hintRevealCount, 0);
+  updateDailySession(challenge.dayKey, {
+    ...nextSession,
+    hintRevealCount: nextHintRevealCount,
   });
   const nextStats = buildDailyStats(state.daily.history);
   state.daily.pendingAnimatedGuessId = airport.id;
@@ -1643,27 +1734,14 @@ function submitDailyGuessByAirport(airport) {
       ? `Nailed it in ${formatDailyGuessCount(nextGuesses.length)}.`
       : status === 'lost'
         ? 'Out of guesses. Today\'s airport is revealed below.'
-        : '',
-    solved ? 'success' : status === 'lost' ? 'warning' : 'muted',
+        : newlyRevealedHintCount === 1
+          ? `Hint ${formatNumber(nextHintRevealCount)} auto-revealed below.`
+          : newlyRevealedHintCount > 1
+            ? `${formatNumber(newlyRevealedHintCount)} hints auto-revealed below.`
+            : '',
+    solved ? 'success' : status === 'lost' ? 'warning' : newlyRevealedHintCount ? 'success' : 'muted',
   );
   renderDailyLandingCta();
-  renderDailyTab();
-}
-
-function revealDailyHint() {
-  const challenge = state.daily.challenge;
-  if (!challenge) {
-    return;
-  }
-  const session = getDailySession(challenge.dayKey);
-  if (session.hintRevealed || session.guesses.length < 3) {
-    return;
-  }
-  updateDailySession(challenge.dayKey, {
-    ...session,
-    hintRevealed: true,
-  });
-  setDailyFeedback('Hint revealed below.', 'success');
   renderDailyTab();
 }
 
@@ -5984,18 +6062,6 @@ function wireDailyGame() {
       panel.open = false;
     });
     syncDailyHelpOpenState();
-  });
-
-  elements.dailyBriefing.addEventListener('click', (event) => {
-    const target = event.target;
-    if (!(target instanceof Element)) {
-      return;
-    }
-    const revealButton = target.closest('button[data-action="reveal-daily-hint"]');
-    if (!revealButton) {
-      return;
-    }
-    revealDailyHint();
   });
 
   elements.dailyIntel.addEventListener('click', (event) => {

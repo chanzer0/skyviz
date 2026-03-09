@@ -57,6 +57,7 @@ CONTINENT_LABELS = {
     'SA': 'South America',
 }
 DEFAULT_MAX_GUESSES = 8
+COMMENT_HINT_LIMIT = 4
 
 
 def utc_now_iso() -> str:
@@ -271,32 +272,48 @@ def build_comment_index(rows: list[dict[str, str]]) -> dict[str, dict[str, objec
     by_airport: dict[str, dict[str, object]] = defaultdict(
         lambda: {
             'comment_count': 0,
-            'latest_date': '',
-            'comment_subject': '',
-            'comment_snippet': '',
+            'comments': [],
         }
     )
-    for row in rows:
+    for index, row in enumerate(rows):
         airport_ref = sanitize_text(row.get('airportRef'))
         if not airport_ref:
             continue
         bucket = by_airport[airport_ref]
         bucket['comment_count'] += 1
-        comment_date = sanitize_text(row.get('date'))
-        if comment_date < bucket['latest_date']:
-            continue
-        bucket['latest_date'] = comment_date
-        subject = sanitize_text(row.get('subject'))
+        subject = sanitize_text(row.get('subject'))[:100]
         body = sanitize_text(row.get('body'))
         snippet_source = body or subject
-        bucket['comment_subject'] = subject[:100]
-        bucket['comment_snippet'] = snippet_source[:180]
+        if not snippet_source:
+            continue
+        bucket['comments'].append(
+            {
+                'date': sanitize_text(row.get('date')),
+                'subject': subject,
+                'snippet': snippet_source[:180],
+                'order': index,
+            }
+        )
     finalized: dict[str, dict[str, object]] = {}
     for airport_ref, bucket in by_airport.items():
+        comments = sorted(
+            bucket['comments'],
+            key=lambda entry: (str(entry.get('date') or ''), int(entry.get('order') or 0)),
+            reverse=True,
+        )[:COMMENT_HINT_LIMIT]
+        latest_comment = comments[0] if comments else {}
         finalized[airport_ref] = {
             'comment_count': int(bucket['comment_count']),
-            'comment_subject': bucket['comment_subject'],
-            'comment_snippet': bucket['comment_snippet'],
+            'comment_subject': str(latest_comment.get('subject') or ''),
+            'comment_snippet': str(latest_comment.get('snippet') or ''),
+            'comments': [
+                {
+                    'date': str(comment.get('date') or ''),
+                    'subject': str(comment.get('subject') or ''),
+                    'snippet': str(comment.get('snippet') or ''),
+                }
+                for comment in comments
+            ],
         }
     return finalized
 
@@ -512,6 +529,7 @@ def build_airport_records(csv_dir: Path) -> tuple[list[dict[str, object]], dict[
             'commentCount': int(comment_details['comment_count']),
             'commentSubject': comment_details['comment_subject'],
             'commentSnippet': comment_details['comment_snippet'],
+            'comments': list(comment_details.get('comments') or []),
             'targetTier': target_tier,
             'targetTierLabel': TARGET_TIER_LABELS[target_tier],
             'searchText': search_text,

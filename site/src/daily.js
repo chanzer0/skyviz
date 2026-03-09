@@ -54,6 +54,8 @@ const TONE_SCORES = {
 
 export const DAILY_GAME_NAME = 'Navdle';
 export const DAILY_MAX_SUGGESTIONS = 8;
+const DAILY_HINT_UNLOCK_BASE_GUESSES = Object.freeze([3, 5, 7]);
+const DAILY_HINT_LIMIT = 4;
 
 const DAILY_SHARE_TONE_SYMBOLS = {
   hit: '🟩',
@@ -605,19 +607,36 @@ function redactCommunityHintText(text, target) {
   };
 }
 
-export function buildAirportHint(target, options = {}) {
+function buildAirportCommunityHints(target, options = {}) {
   const revealAnswer = Boolean(options?.revealAnswer);
-  const commentSnippet = sanitizeText(target.commentSnippet);
-  if (commentSnippet) {
+  const commentEntries = Array.isArray(target?.comments)
+    ? target.comments
+      .map((comment) => ({
+        date: sanitizeText(comment?.date),
+        subject: sanitizeText(comment?.subject),
+        snippet: sanitizeText(comment?.snippet),
+      }))
+      .filter((comment) => comment.snippet)
+    : [];
+  const normalizedComments = commentEntries.length
+    ? commentEntries
+    : sanitizeText(target?.commentSnippet)
+      ? [{
+        date: '',
+        subject: sanitizeText(target?.commentSubject),
+        snippet: sanitizeText(target?.commentSnippet),
+      }]
+      : [];
+  return normalizedComments.map((comment) => {
     if (revealAnswer) {
       return {
         label: 'Community note',
-        value: commentSnippet,
+        value: comment.snippet,
         source: 'community',
         note: 'Community-submitted and unverified. The note may be inaccurate, outdated, or contain harmful language.',
       };
     }
-    const redactedComment = redactCommunityHintText(commentSnippet, target);
+    const redactedComment = redactCommunityHintText(comment.snippet, target);
     return {
       label: 'Community note',
       value: redactedComment.text,
@@ -627,27 +646,79 @@ export function buildAirportHint(target, options = {}) {
         ? 'Community-submitted and unverified. Direct airport identifiers stay visually redacted and the note may still be inaccurate, outdated, or contain harmful language.'
         : 'Community-submitted and unverified. The note may be inaccurate, outdated, or contain harmful language.',
     };
-  }
+  });
+}
+
+function buildDerivedAirportHints(target) {
+  const derivedHints = [];
   if (target.frequencyTypes?.length) {
-    return {
+    derivedHints.push({
       label: 'Radio stack',
       value: `This field carries ${target.frequencyTypes.slice(0, 3).join(', ')} service entries.`,
       source: 'derived',
-    };
+    });
   }
   if (sanitizeText(target.municipality)) {
     const municipality = sanitizeText(target.municipality);
-    return {
+    derivedHints.push({
       label: 'Municipality',
       value: `The municipality starts with ${municipality.charAt(0)} and has ${municipality.length} letters.`,
       source: 'derived',
-    };
+    });
   }
-  return {
+  const surfaceLabel = sanitizeText(target.surfaceLabel);
+  if (surfaceLabel && !/^unknown/i.test(surfaceLabel)) {
+    derivedHints.push({
+      label: 'Surface profile',
+      value: `The open-data surface profile reads as ${surfaceLabel.toLowerCase()}.`,
+      source: 'derived',
+    });
+  }
+  derivedHints.push({
+    label: 'Target tier',
+    value: `${target.targetTierLabel} challenge field.`,
+    source: 'derived',
+  });
+  return derivedHints.filter((hint) => sanitizeText(hint?.value));
+}
+
+export function getDailyHintUnlockThresholds(maxGuesses = 8) {
+  const safeMaxGuesses = Math.max(1, Math.floor(Number(maxGuesses) || 8));
+  return Array.from(
+    new Set([
+      ...DAILY_HINT_UNLOCK_BASE_GUESSES.filter((guessNumber) => guessNumber <= safeMaxGuesses),
+      safeMaxGuesses,
+    ]),
+  )
+    .sort((left, right) => left - right)
+    .slice(0, DAILY_HINT_LIMIT);
+}
+
+export function buildAirportHints(target, options = {}) {
+  const maxHints = Number.isFinite(Number(options?.maxHints))
+    ? Math.max(0, Math.floor(Number(options.maxHints)))
+    : DAILY_HINT_LIMIT;
+  const hints = [
+    ...buildAirportCommunityHints(target, options),
+    ...buildDerivedAirportHints(target),
+  ];
+  return hints.slice(0, maxHints);
+}
+
+export function buildAirportHint(target, options = {}) {
+  return buildAirportHints(target, options)[0] || {
     label: 'Target tier',
     value: `${target.targetTierLabel} challenge field.`,
     source: 'derived',
   };
+}
+
+function normalizeHintRevealCount(entry) {
+  const parsedCount = Math.floor(Number(entry?.hintRevealCount));
+  if (Number.isFinite(parsedCount) && parsedCount >= 0) {
+    return parsedCount;
+  }
+  return entry?.hintRevealed ? 1 : 0;
 }
 
 export function parseDailyHistory(rawValue) {
@@ -666,10 +737,12 @@ export function parseDailyHistory(rawValue) {
         ? entry.guesses.map((value) => sanitizeText(value)).filter(Boolean)
         : [];
       const status = entry?.status === 'won' || entry?.status === 'lost' ? entry.status : 'in_progress';
+      const hintRevealCount = normalizeHintRevealCount(entry);
       normalizedDays[dayKey] = {
         guesses,
         status,
-        hintRevealed: Boolean(entry?.hintRevealed),
+        hintRevealCount,
+        hintRevealed: hintRevealCount > 0,
         completedAt: sanitizeText(entry?.completedAt),
       };
     });
@@ -681,7 +754,7 @@ export function parseDailyHistory(rawValue) {
 
 export function serializeDailyHistory(history) {
   return JSON.stringify({
-    version: 1,
+    version: 2,
     days: history?.days || {},
   });
 }
@@ -744,7 +817,8 @@ export function buildDailyShareText(challenge, historyEntry, comparisons, option
   const solved = historyEntry?.status === 'won';
   const guessCount = Array.isArray(historyEntry?.guesses) ? historyEntry.guesses.length : 0;
   const maxGuesses = Number(challenge?.maxGuesses || 8);
-  const headline = `${DAILY_GAME_NAME} ${challenge.dayKey} ${solved ? `${guessCount}/${maxGuesses}` : `X/${maxGuesses}`}${historyEntry?.hintRevealed ? ' 💡' : ''}`;
+  const hintWasUsed = normalizeHintRevealCount(historyEntry) > 0;
+  const headline = `${DAILY_GAME_NAME} ${challenge.dayKey} ${solved ? `${guessCount}/${maxGuesses}` : `X/${maxGuesses}`}${hintWasUsed ? ' 💡' : ''}`;
   const rows = comparisons
     .map((comparison) => comparison.tiles.map((tile) => DAILY_SHARE_TONE_SYMBOLS[tile.tone] || DAILY_SHARE_TONE_SYMBOLS.miss).join(''))
     .filter(Boolean);

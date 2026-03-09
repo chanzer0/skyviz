@@ -37,7 +37,7 @@
 7. Aircraft cards are enriched by `card.modelId -> models.rows[].id`.
 8. Airport unlocks are enriched by `unlockedAirportIds[] -> airports.rows[].id`.
 9. The app computes tab-specific view models in memory:
-  - one airport-daily game state machine for `Navdle`, with hero-search state, guesses-left tracking, guess history, a pinned best-so-far comparison tracker, per-category comparison tiles, hint state, streak statistics, emoji share-grid generation with a direct `#navdle` link, and legacy `#tab-daily` hash compatibility
+  - one airport-daily game state machine for `Navdle`, with hero-search state, guesses-left tracking, guess history, a pinned best-so-far comparison tracker, per-category comparison tiles, a progressive multi-hint queue, streak statistics, emoji share-grid generation with a direct `#navdle` link, and legacy `#tab-daily` hash compatibility
    - airport capture progress across all committed reference airports
    - aircraft analytics, progress widgets, and a virtualized aircraft card deck
    - per-model caught registration counts by decoding `uniqueRegs[].aircraftId` (decimal ICAO transponder) into hex and joining against the local aircraft lookup snapshot
@@ -73,7 +73,7 @@ The reference snapshots keep the site self-contained for GitHub Pages and make a
 The `DAILY` airport game uses generated artifacts under `site/data/airports/`:
 
 - `scripts/refresh_airport_game_data.py` downloads the OurAirports CSV snapshots (`airports`, `runways`, `navaids`, `airport-frequencies`, `airport-comments`, `countries`, `regions`)
-- the same script builds `daily-game.json`, a curated browser payload of guessable airports plus derived runway, navaid, frequency, and comment metadata
+- the same script builds `daily-game.json`, a curated browser payload of guessable airports plus derived runway, navaid, frequency, and recent community-note metadata
 - the same script builds `manifest.json`, which gives the browser a stable way to discover the daily-game payload and expose source attribution
 
 The browser does not parse the raw CSVs directly during normal gameplay. It loads the generated JSON so the static site stays responsive on GitHub Pages.
