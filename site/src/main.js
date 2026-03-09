@@ -18,6 +18,10 @@ const elements = {
   aircraftTabButton: document.querySelector('#tab-aircraft-button'),
   dataToolsTrigger: document.querySelector('#data-tools-trigger'),
   dataToolsMenu: document.querySelector('#data-tools-menu'),
+  dataToolsPersistUpload: document.querySelector('#data-tools-persist-upload'),
+  dataToolsPersistStatus: document.querySelector('#data-tools-persist-status'),
+  dataToolsPersistSummary: document.querySelector('#data-tools-persist-summary'),
+  dataToolsCollectionSummary: document.querySelector('#data-tools-collection-summary'),
   dataToolsUpload: document.querySelector('#data-tools-upload'),
   dataToolsClear: document.querySelector('#data-tools-clear'),
   mapTabPanel: document.querySelector('#tab-map'),
@@ -497,13 +501,15 @@ function persistCurrentUploadIfEnabled() {
   if (!elements.persistUpload.checked) {
     clearPersistedUpload();
     writePersistPreference(false);
+    syncDataToolsPanelState();
     return false;
   }
   const saved = writePersistedUpload(state.upload);
   if (!saved) {
-    elements.persistUpload.checked = false;
+    setPersistPreferenceChecked(false);
     clearPersistedUpload();
     writePersistPreference(false);
+    syncDataToolsPanelState();
     setBanner(
       'Could not save to local storage (browser storage unavailable or quota exceeded). Your data is still private and in-memory only for this session.',
       'warning',
@@ -511,6 +517,7 @@ function persistCurrentUploadIfEnabled() {
     return false;
   }
   writePersistPreference(true);
+  syncDataToolsPanelState();
   return true;
 }
 
@@ -518,6 +525,98 @@ function setDataToolsOpen(isOpen) {
   state.ui.dataToolsOpen = isOpen;
   elements.dataToolsTrigger.setAttribute('aria-expanded', String(isOpen));
   elements.dataToolsMenu.hidden = !isOpen;
+  if (isOpen) {
+    syncDataToolsPanelState();
+  }
+}
+
+function setPersistPreferenceChecked(enabled) {
+  const normalizedEnabled = Boolean(enabled);
+  elements.persistUpload.checked = normalizedEnabled;
+  if (elements.dataToolsPersistUpload) {
+    elements.dataToolsPersistUpload.checked = normalizedEnabled;
+  }
+}
+
+function describePersistPreferenceSummary() {
+  const persistEnabled = Boolean(elements.persistUpload.checked);
+  const hasCurrentUpload = Boolean(state.upload.text);
+  const hasPersistedUpload = Boolean(readPersistedUpload()?.text);
+  if (persistEnabled) {
+    if (hasCurrentUpload && hasPersistedUpload) {
+      return 'Current dashboard is saved in browser local storage on this device.';
+    }
+    if (hasCurrentUpload) {
+      return 'Local save is on. Current dashboard will stay available on this device after refresh.';
+    }
+    return 'Local save is on. Your next successful upload will be stored only on this device.';
+  }
+  if (hasCurrentUpload) {
+    return 'Current dashboard is in memory only. Turn this on to keep a local copy after refresh.';
+  }
+  return 'Local save is off. Nothing is stored on this device.';
+}
+
+function describeDataToolsCollectionSummary() {
+  if (!state.upload.text) {
+    return 'Upload a Skycards export JSON file to start a dashboard in this browser.';
+  }
+  if (state.upload.fileName === 'skyviz_try_now_user.json') {
+    return 'Built-in sample deck is active. Uploading a JSON export replaces the current in-browser view.';
+  }
+  return `Loaded source: ${state.upload.fileName}. Uploading a new JSON export replaces the current in-browser view.`;
+}
+
+function syncDataToolsPanelState() {
+  const persistEnabled = Boolean(elements.persistUpload.checked);
+  if (elements.dataToolsPersistUpload) {
+    elements.dataToolsPersistUpload.checked = persistEnabled;
+  }
+  if (elements.dataToolsPersistStatus) {
+    elements.dataToolsPersistStatus.textContent = persistEnabled ? 'On' : 'Off';
+    elements.dataToolsPersistStatus.classList.toggle('is-enabled', persistEnabled);
+    elements.dataToolsPersistStatus.classList.toggle('is-disabled', !persistEnabled);
+  }
+  if (elements.dataToolsPersistSummary) {
+    elements.dataToolsPersistSummary.textContent = describePersistPreferenceSummary();
+  }
+  if (elements.dataToolsCollectionSummary) {
+    elements.dataToolsCollectionSummary.textContent = describeDataToolsCollectionSummary();
+  }
+}
+
+function handlePersistPreferenceChange(enabled) {
+  setPersistPreferenceChecked(enabled);
+  writePersistPreference(enabled);
+  if (!enabled) {
+    clearPersistedUpload();
+    syncDataToolsPanelState();
+    if (state.model) {
+      setUploadStatus('Current upload is private in-memory only for this session.');
+      setBanner('Local save disabled. Any saved upload has been removed from this device.', 'info');
+    }
+    return;
+  }
+  if (!state.upload.text) {
+    syncDataToolsPanelState();
+    setBanner('Local save enabled. Your next successful upload will be saved only on this device.', 'info');
+    return;
+  }
+  const saved = writePersistedUpload(state.upload);
+  if (!saved) {
+    setPersistPreferenceChecked(false);
+    clearPersistedUpload();
+    writePersistPreference(false);
+    syncDataToolsPanelState();
+    setBanner(
+      'Could not save to local storage (browser storage unavailable or quota exceeded). Data remains private in-memory only.',
+      'warning',
+    );
+    return;
+  }
+  syncDataToolsPanelState();
+  setUploadStatus('Current upload saved only on this device (local storage).');
+  setBanner('Upload saved locally on this device. Skyviz does not send your collection to a server.', 'info');
 }
 
 function resetRegistrationModalState() {
@@ -1899,13 +1998,14 @@ function resetToLanding({
   }
   if (clearPersistPreference) {
     writePersistPreference(false);
-    elements.persistUpload.checked = false;
+    setPersistPreferenceChecked(false);
   }
   if (clearManualMappings) {
     state.manualRegistrationMappings.clear();
     clearManualRegistrationMappings();
   }
   updateManualMappingStorageMeta(null);
+  syncDataToolsPanelState();
 }
 
 function wireDataTools() {
@@ -1917,6 +2017,10 @@ function wireDataTools() {
   elements.dataToolsUpload.addEventListener('click', () => {
     setDataToolsOpen(false);
     elements.fileInput.click();
+  });
+
+  elements.dataToolsPersistUpload.addEventListener('change', () => {
+    handlePersistPreferenceChange(elements.dataToolsPersistUpload.checked);
   });
 
   elements.dataToolsClear.addEventListener('click', () => {
@@ -3999,6 +4103,7 @@ function renderDashboard(model, references = null) {
   renderMapTab(model);
   renderAircraftTab(model);
   setActiveTab('map');
+  syncDataToolsPanelState();
 }
 
 async function tryLoadPersistedUpload(persistedUpload = null) {
@@ -4024,8 +4129,9 @@ async function tryLoadPersistedUpload(persistedUpload = null) {
     });
   } catch (error) {
     clearPersistedUpload();
-    elements.persistUpload.checked = false;
+    setPersistPreferenceChecked(false);
     writePersistPreference(false);
+    syncDataToolsPanelState();
     elements.dashboard.hidden = true;
     elements.landingView.hidden = false;
     setUploadStatus('Waiting for a collection export.');
@@ -4164,32 +4270,7 @@ function wireUpload() {
   });
 
   elements.persistUpload.addEventListener('change', () => {
-    const enabled = elements.persistUpload.checked;
-    writePersistPreference(enabled);
-    if (!enabled) {
-      clearPersistedUpload();
-      if (state.model) {
-        setBanner('Local save disabled. Any saved upload has been removed from this device.', 'info');
-      }
-      return;
-    }
-    if (!state.upload.text) {
-      setBanner('Local save enabled. Your next successful upload will be saved only on this device.', 'info');
-      return;
-    }
-    const saved = writePersistedUpload(state.upload);
-    if (!saved) {
-      elements.persistUpload.checked = false;
-      clearPersistedUpload();
-      writePersistPreference(false);
-      setBanner(
-        'Could not save to local storage (browser storage unavailable or quota exceeded). Data remains private in-memory only.',
-        'warning',
-      );
-      return;
-    }
-    setUploadStatus('Current upload saved only on this device (local storage).');
-    setBanner('Upload saved locally on this device. Skyviz does not send your collection to a server.', 'info');
+    handlePersistPreferenceChange(elements.persistUpload.checked);
   });
 }
 
@@ -4823,7 +4904,8 @@ async function bootstrap() {
   renderRegistrationModalTrigger(null);
   state.manualRegistrationMappings = readManualRegistrationMappings();
   updateManualMappingStorageMeta(null);
-  elements.persistUpload.checked = readPersistPreference();
+  setPersistPreferenceChecked(readPersistPreference());
+  syncDataToolsPanelState();
   const persistedUpload = readPersistedUpload();
   const shouldRestorePersistedUpload = elements.persistUpload.checked && Boolean(persistedUpload);
   setDataToolsOpen(false);
