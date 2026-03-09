@@ -14,6 +14,7 @@
 - Optional inferred-mapping snapshot `site/data/reference/inferred_aircraft_type_mappings.json` for registration-confidence transparency in the aircraft deck.
 - CDN route reference artifact in repo root `cdn_index.json` for debugging/validating `https://cdn.skycards.oldapes.com/assets` path coverage.
 - Leaflet runtime assets loaded from CDN in `site/index.html` for the interactive airport map.
+- `model-viewer` loaded from CDN in `site/index.html` for the aircraft detail modal's default GLB preview.
 - Reference snapshot refresh tooling in `scripts/refresh_reference_data.py`.
 - Model registration-count refresh tooling in `scripts/refresh_model_registration_counts.py`.
 - Aircraft `aircraftId` lookup builder in `scripts/build_aircraft_lookup_from_db.py` (from local `aircraft_data.db`).
@@ -27,7 +28,7 @@
 1. A user opens the static site from GitHub Pages.
 2. The user either uploads a Skycards export JSON file or uses the landing-page `View Example Dashboard` button to load a built-in sample deck.
 3. Optional: if the user enables local persistence, the active deck is cached in browser `localStorage` on that device and can be restored on next visit.
-4. The browser validates the payload shape and loads static reference snapshots (`models.json`, `airports.json`, optional registration lookup/count datasets).
+4. The browser validates the payload shape and loads static reference snapshots (`models.json`, `airports.json`, and any optional datasets listed in `manifest.json`).
 5. Aircraft cards are enriched by `card.modelId -> models.rows[].id`.
 6. Airport unlocks are enriched by `unlockedAirportIds[] -> airports.rows[].id`.
 7. The app computes two loaded-state view models in memory:
@@ -38,6 +39,8 @@
    - browser-local manual registration overrides (for non-high-confidence rows) merged into mapping results before dashboard rendering
    - per-model total possible registration counts from `/models/count/{icao}` snapshots
    - aircraft image candidates resolved as tier-aware CDN URLs using `*_md.png` first, then `cyber` tier + model metadata alias fallback (`imageOverride`, `images[]`)
+   - aircraft detail modal metadata slices for engine profile, performance, airframe geometry, military status, and seasonal span
+   - aircraft detail media candidates resolved from optimized Skycards CDN GLB assets
 8. The loaded UI transitions to a tabbed dashboard (`Map` and `Aircraft`) without sending upload data to any server.
 
 ## Reference data contract
@@ -55,7 +58,7 @@ Required request headers:
 
 The reference snapshots keep the site self-contained for GitHub Pages and make agent work deterministic:
 
-- `scripts/refresh_reference_data.py` writes `models.json`, `airports.json`, and `manifest.json`.
+- `scripts/refresh_reference_data.py` writes `models.json`, `airports.json`, and `manifest.json`, and it records any optional local artifacts present in `site/data/reference/`.
 - `scripts/refresh_model_registration_counts.py` writes `model_registration_counts.json`.
 - `scripts/build_aircraft_lookup_from_db.py` writes `aircraft_lookup.json` from the local SQLite snapshot (`aircraft_data.db`).
 

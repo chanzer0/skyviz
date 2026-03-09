@@ -80,6 +80,18 @@ const elements = {
   aircraftModelRegsPrev: document.querySelector('#aircraft-model-regs-prev'),
   aircraftModelRegsNext: document.querySelector('#aircraft-model-regs-next'),
   aircraftModelRegsPageLabel: document.querySelector('#aircraft-model-regs-page-label'),
+  aircraftDetailModal: document.querySelector('#aircraft-detail-modal'),
+  aircraftDetailBackdrop: document.querySelector('#aircraft-detail-backdrop'),
+  aircraftDetailClose: document.querySelector('#aircraft-detail-close'),
+  aircraftDetailTitle: document.querySelector('#aircraft-detail-title'),
+  aircraftDetailSubtitle: document.querySelector('#aircraft-detail-subtitle'),
+  aircraftDetailMediaHeading: document.querySelector('#aircraft-detail-media-heading'),
+  aircraftDetailMediaNote: document.querySelector('#aircraft-detail-media-note'),
+  aircraftDetailMediaStage: document.querySelector('#aircraft-detail-media-stage'),
+  aircraftDetailMediaOptions: document.querySelector('#aircraft-detail-media-options'),
+  aircraftDetailOpenRegs: document.querySelector('#aircraft-detail-open-regs'),
+  aircraftDetailKpis: document.querySelector('#aircraft-detail-kpis'),
+  aircraftDetailMetaSections: document.querySelector('#aircraft-detail-meta-sections'),
 };
 
 const AIRCRAFT_CARD_HEIGHT_MOBILE = 428;
@@ -89,6 +101,8 @@ const AIRCRAFT_GRID_PADDING = 14;
 const AIRCRAFT_MIN_CARD_WIDTH = 244;
 const AIRCRAFT_VIRTUAL_OVERSCAN_ROWS = 2;
 const AIRCRAFT_IMAGE_BASE_URL = 'https://cdn.skycards.oldapes.com/assets/models/images/1';
+const AIRCRAFT_MODEL_BASE_URL = 'https://cdn.skycards.oldapes.com/assets/models/optimized';
+const AIRCRAFT_DETAIL_CAMERA_ORBIT = '0deg 75deg 115%';
 const AIRCRAFT_IMAGE_TIERS = ['paper', 'bronze', 'silver', 'gold', 'platinum', 'cyber'];
 const AIRCRAFT_XP_TIERS = new Set([...AIRCRAFT_IMAGE_TIERS, 'unknown']);
 const AIRCRAFT_IMAGE_SIZE_ORDER = ['md'];
@@ -193,6 +207,10 @@ const state = {
     modelRegsModalModelId: null,
     modelRegsModalFocusModelId: null,
     modelRegsModalPage: 1,
+    aircraftDetailModalOpen: false,
+    aircraftDetailModelId: null,
+    aircraftDetailFocusModelId: null,
+    aircraftDetailMediaKey: '',
   },
 };
 
@@ -519,10 +537,17 @@ function resetModelRegsModalState() {
   state.ui.modelRegsModalPage = 1;
 }
 
+function resetAircraftDetailModalState() {
+  state.ui.aircraftDetailModalOpen = false;
+  state.ui.aircraftDetailModelId = null;
+  state.ui.aircraftDetailFocusModelId = null;
+  state.ui.aircraftDetailMediaKey = '';
+}
+
 function syncGlobalModalBodyLock() {
   document.body.classList.toggle(
     'has-modal-open',
-    Boolean(state.ui.registrationModalOpen || state.ui.modelRegsModalOpen),
+    Boolean(state.ui.registrationModalOpen || state.ui.modelRegsModalOpen || state.ui.aircraftDetailModalOpen),
   );
 }
 
@@ -1078,6 +1103,9 @@ function setRegistrationModalOpen(isOpen, options = {}) {
   if (isOpen && state.ui.modelRegsModalOpen) {
     setModelRegsModalOpen(false, { restoreFocus: false });
   }
+  if (isOpen && state.ui.aircraftDetailModalOpen) {
+    setAircraftDetailModalOpen(false, { restoreFocus: false });
+  }
   if (!isOpen) {
     clearManualRegistrationEditState();
   }
@@ -1129,6 +1157,127 @@ function focusModelRegsBadge(modelId) {
     }
   }
   return false;
+}
+
+function focusAircraftDetailCard(modelId) {
+  const normalizedModelId = String(modelId || '').trim().toUpperCase();
+  if (!normalizedModelId || !elements.aircraftList) {
+    return false;
+  }
+  const cards = elements.aircraftList.querySelectorAll('.aircraft-card[data-model-id]');
+  for (const card of cards) {
+    const cardModelId = String(card.getAttribute('data-model-id') || '').trim().toUpperCase();
+    if (cardModelId === normalizedModelId) {
+      card.focus();
+      return true;
+    }
+  }
+  return false;
+}
+
+function openAircraftDetailForModelId(modelId) {
+  const normalizedModelId = String(modelId || '').trim().toUpperCase();
+  if (!normalizedModelId || !state.model) {
+    return;
+  }
+  state.ui.aircraftDetailModelId = normalizedModelId;
+  state.ui.aircraftDetailFocusModelId = normalizedModelId;
+  state.ui.aircraftDetailMediaKey = '';
+  setAircraftDetailModalOpen(true, { restoreFocus: false, focusModelId: normalizedModelId });
+}
+
+function buildAircraftDetailModelOptions(row) {
+  const codes = Array.isArray(row?.imageCodes) && row.imageCodes.length
+    ? row.imageCodes
+    : [String(row?.icao || row?.modelId || '').trim().toUpperCase()];
+  return Array.from(new Set(codes.map((code) => String(code || '').trim().toUpperCase()).filter(Boolean)))
+    .map((code, index) => ({
+      key: `model:${code}`,
+      kind: 'model',
+      code,
+      label: index === 0 ? '3D studio' : `3D alias ${code}`,
+      note: index === 0 ? `Optimized GLB for ${code}` : `Optimized GLB alias ${code}`,
+      urls: [`${AIRCRAFT_MODEL_BASE_URL}/${encodeURIComponent(code)}.glb`],
+    }));
+}
+
+function getAircraftDetailMediaState(row) {
+  const options = buildAircraftDetailModelOptions(row);
+  if (!options.length) {
+    state.ui.aircraftDetailMediaKey = '';
+    return { options, selected: null };
+  }
+  let selected = options.find((option) => option.key === state.ui.aircraftDetailMediaKey) || null;
+  if (!selected) {
+    selected = options[0];
+    state.ui.aircraftDetailMediaKey = selected.key;
+  }
+  return { options, selected };
+}
+
+function formatAircraftSeasonSpan(minimum, maximum) {
+  const seasonMin = Number(minimum);
+  const seasonMax = Number(maximum);
+  if (!Number.isFinite(seasonMin) && !Number.isFinite(seasonMax)) {
+    return 'N/A';
+  }
+  if (Number.isFinite(seasonMin) && Number.isFinite(seasonMax)) {
+    if (seasonMin === seasonMax) {
+      return `Season ${Math.trunc(seasonMin)}`;
+    }
+    return `Season ${Math.trunc(seasonMin)}-${Math.trunc(seasonMax)}`;
+  }
+  const number = Number.isFinite(seasonMin) ? seasonMin : seasonMax;
+  return `Season ${Math.trunc(number)}`;
+}
+
+function formatAircraftTextValue(value, fallback = 'N/A') {
+  const text = String(value || '').trim();
+  return text || fallback;
+}
+
+function formatAircraftEngineSummary(row) {
+  const engineCount = Number(row?.engNum);
+  const engineType = String(row?.engTypeLabel || '').trim();
+  if (Number.isFinite(engineCount) && engineType) {
+    return `${Math.trunc(engineCount)} x ${engineType}`;
+  }
+  if (Number.isFinite(engineCount)) {
+    return `${Math.trunc(engineCount)} engines`;
+  }
+  return engineType || 'N/A';
+}
+
+function buildAircraftDetailKpi(label, value, note = '') {
+  return `
+    <article class="aircraft-detail-kpi">
+      <span class="aircraft-detail-kpi-label">${escapeHtml(label)}</span>
+      <strong class="aircraft-detail-kpi-value">${escapeHtml(value)}</strong>
+      ${note ? `<span class="aircraft-detail-kpi-note">${escapeHtml(note)}</span>` : ''}
+    </article>
+  `;
+}
+
+function renderAircraftDetailSection(title, rows) {
+  const visibleRows = rows.filter((row) => row && row.value);
+  if (!visibleRows.length) {
+    return '';
+  }
+  return `
+    <section class="aircraft-detail-section">
+      <div class="aircraft-detail-section-head">
+        <p class="eyebrow">${escapeHtml(title)}</p>
+      </div>
+      <dl class="aircraft-detail-facts">
+        ${visibleRows.map((row) => `
+          <div class="aircraft-detail-fact">
+            <dt>${escapeHtml(row.label)}</dt>
+            <dd>${escapeHtml(row.value)}</dd>
+          </div>
+        `).join('')}
+      </dl>
+    </section>
+  `;
 }
 
 function renderModelRegistrationsModal(model = state.model) {
@@ -1237,6 +1386,9 @@ function setModelRegsModalOpen(isOpen, options = {}) {
   if (isOpen && state.ui.registrationModalOpen) {
     setRegistrationModalOpen(false, { restoreFocus: false });
   }
+  if (isOpen && state.ui.aircraftDetailModalOpen) {
+    setAircraftDetailModalOpen(false, { restoreFocus: false });
+  }
   state.ui.modelRegsModalOpen = Boolean(isOpen);
   elements.aircraftModelRegsModal.hidden = !state.ui.modelRegsModalOpen;
   syncGlobalModalBodyLock();
@@ -1251,6 +1403,188 @@ function setModelRegsModalOpen(isOpen, options = {}) {
   if (restoreFocus) {
     const focusModelId = String(state.ui.modelRegsModalFocusModelId || state.ui.modelRegsModalModelId || '').trim().toUpperCase();
     if (!focusModelRegsBadge(focusModelId)) {
+      elements.aircraftSearch?.focus();
+    }
+  }
+}
+
+function renderAircraftDetailModal(model = state.model) {
+  if (!elements.aircraftDetailModal) {
+    return;
+  }
+  const modelId = String(state.ui.aircraftDetailModelId || '').trim().toUpperCase();
+  const row = getAircraftModelRowByModelId(model, modelId);
+  if (!row) {
+    setAircraftDetailModalOpen(false, { restoreFocus: true });
+    return;
+  }
+
+  const title = row.name || row.displayName || modelId || 'Aircraft detail';
+  const subtitleParts = [
+    row.manufacturer || '',
+    row.icao ? `ICAO ${row.icao}` : row.modelId,
+    row.typeLabel || '',
+    row.dominantCategoryLabel || '',
+    row.dominantTierLabel ? `${row.dominantTierLabel} dominant` : '',
+  ].filter(Boolean);
+  const registrationCoverageLabel = Number.isFinite(row.caughtRegistrations) && Number.isFinite(row.possibleRegistrations)
+    ? `${formatNumber(row.caughtRegistrations)} / ${formatNumber(row.possibleRegistrations)}`
+    : Number.isFinite(row.caughtRegistrations)
+      ? `${formatNumber(row.caughtRegistrations)} mapped`
+      : Number.isFinite(row.possibleRegistrations)
+        ? `? / ${formatNumber(row.possibleRegistrations)}`
+        : 'N/A';
+  const registrationCoverageNote = Number.isFinite(row.registrationCoverage)
+    ? `${formatPercent(row.registrationCoverage, 1)} coverage`
+    : 'Model registration universe incomplete';
+  const { options, selected } = getAircraftDetailMediaState(row);
+  const mediaHeading = '3D studio';
+  const mediaNote = selected?.note || 'Optimized GLB from the Skycards CDN.';
+  const modelViewerReady = typeof window.customElements?.get === 'function'
+    && Boolean(window.customElements.get('model-viewer'));
+
+  elements.aircraftDetailTitle.textContent = title;
+  elements.aircraftDetailSubtitle.textContent = subtitleParts.join(' / ');
+  elements.aircraftDetailMediaHeading.textContent = mediaHeading;
+  elements.aircraftDetailMediaNote.textContent = mediaNote;
+  elements.aircraftDetailOpenRegs.disabled = !row.modelId;
+  elements.aircraftDetailOpenRegs.setAttribute('data-model-id', row.modelId || '');
+
+  if (!selected) {
+    elements.aircraftDetailMediaStage.innerHTML = `
+      <div class="aircraft-detail-media-frame is-empty">
+        <div class="aircraft-detail-media-fallback is-visible">No 3D reference model was available for this aircraft.</div>
+      </div>
+    `;
+    elements.aircraftDetailMediaOptions.innerHTML = '';
+  } else if (modelViewerReady) {
+    elements.aircraftDetailMediaStage.innerHTML = `
+      <div class="aircraft-detail-media-frame is-model">
+        <model-viewer
+          class="aircraft-detail-model-viewer"
+          src="${escapeHtml(selected.urls[0] || '')}"
+          data-model-candidates="${escapeHtml(selected.urls.join('|'))}"
+          data-model-index="0"
+          camera-orbit="${AIRCRAFT_DETAIL_CAMERA_ORBIT}"
+          camera-controls
+          auto-rotate
+          interaction-prompt="none"
+          touch-action="pan-y"
+          shadow-intensity="1"
+          exposure="1.1"
+          alt="${escapeHtml(title)} 3D model"
+        ></model-viewer>
+        <div class="aircraft-detail-media-fallback">3D model unavailable for this aircraft source.</div>
+      </div>
+    `;
+  } else if (selected.kind === 'model') {
+    elements.aircraftDetailMediaStage.innerHTML = `
+      <div class="aircraft-detail-media-frame is-empty">
+        <div class="aircraft-detail-media-fallback is-visible">3D viewer unavailable in this browser session.</div>
+      </div>
+    `;
+  }
+
+  const activeMediaKey = selected?.key || '';
+  elements.aircraftDetailMediaOptions.innerHTML = options.map((option) => {
+    const isActive = option.key === activeMediaKey;
+    return `
+      <button
+        class="aircraft-detail-media-option${isActive ? ' is-active' : ''}"
+        type="button"
+        role="tab"
+        aria-selected="${isActive ? 'true' : 'false'}"
+        data-action="set-aircraft-detail-media"
+        data-media-key="${escapeHtml(option.key)}"
+      >
+        <span class="aircraft-detail-media-option-kind">3D</span>
+        <span class="aircraft-detail-media-option-label">${escapeHtml(option.label)}</span>
+      </button>
+    `;
+  }).join('');
+  elements.aircraftDetailMediaOptions.hidden = options.length <= 1;
+
+  elements.aircraftDetailKpis.innerHTML = [
+    buildAircraftDetailKpi('Total XP', formatNumber(Math.round(row.xp)), `${formatNumber(row.cardCount)} cards in deck`),
+    buildAircraftDetailKpi('Glows', formatNumber(Math.round(row.glowCount)), `${formatPercent(row.fullCoverageRate, 1)} full-framing rate`),
+    buildAircraftDetailKpi('Registrations', registrationCoverageLabel, registrationCoverageNote),
+    buildAircraftDetailKpi('Framing', formatAircraftPercent(row.avgCoverage), 'Average across cards'),
+    buildAircraftDetailKpi('Cloud', formatAircraftPercent(row.avgCloudiness), 'Average across cards'),
+    buildAircraftDetailKpi('Season span', formatAircraftSeasonSpan(row.seasonMin, row.seasonMax), row.military ? 'Military profile' : 'Civil profile'),
+  ].join('');
+
+  elements.aircraftDetailMetaSections.innerHTML = [
+    renderAircraftDetailSection('Profile', [
+      { label: 'Type', value: row.typeLabel || 'N/A' },
+      { label: 'Category', value: row.dominantCategoryLabel || 'N/A' },
+      { label: 'Tier', value: row.dominantTierLabel || 'N/A' },
+      { label: 'Engine setup', value: formatAircraftEngineSummary(row) },
+      { label: 'Landing gear', value: formatAircraftTextValue(row.landingGear) },
+      { label: 'Service', value: row.military ? 'Military' : 'Civil' },
+    ]),
+    renderAircraftDetailSection('Performance', [
+      { label: 'First flight', value: formatAircraftYear(row.firstFlight) },
+      { label: 'Max speed', value: formatAircraftStat(row.maxSpeed, { suffix: ' kt', maxFractionDigits: 0, nullIfNonPositive: true }) },
+      { label: 'Range', value: formatAircraftStat(row.range, { suffix: ' km', maxFractionDigits: 0, nullIfNonPositive: true }) },
+      { label: 'Ceiling', value: formatAircraftStat(row.ceiling, { suffix: ' ft', maxFractionDigits: 0, nullIfNonPositive: true }) },
+      { label: 'Seats', value: formatAircraftStat(row.seats, { maxFractionDigits: 0, nullIfNonPositive: true }) },
+      { label: 'Rarity', value: formatAircraftRarity(row.rareness) },
+    ]),
+    renderAircraftDetailSection('Airframe', [
+      { label: 'Wingspan', value: formatAircraftStat(row.wingspan, { suffix: ' m', maxFractionDigits: 1, nullIfNonPositive: true }) },
+      { label: 'Length', value: formatAircraftStat(row.length, { suffix: ' m', maxFractionDigits: 1, nullIfNonPositive: true }) },
+      { label: 'Height', value: formatAircraftStat(row.height, { suffix: ' m', maxFractionDigits: 1, nullIfNonPositive: true }) },
+      { label: 'Weight', value: formatAircraftWeight(row.mtow) },
+      { label: 'Wing position', value: formatAircraftTextValue(row.wingPosition) },
+      { label: 'Wing shape', value: formatAircraftTextValue(row.wingShape) },
+    ]),
+  ].join('');
+}
+
+function setAircraftDetailModalOpen(isOpen, options = {}) {
+  const restoreFocus = options.restoreFocus !== false;
+  const requestedFocusModelId = String(options.focusModelId || '').trim().toUpperCase();
+  if (!elements.aircraftDetailModal) {
+    return;
+  }
+  if (isOpen && !state.model) {
+    return;
+  }
+  if (isOpen) {
+    const focusModelId = requestedFocusModelId || String(state.ui.aircraftDetailModelId || '').trim().toUpperCase();
+    const row = getAircraftModelRowByModelId(state.model, focusModelId);
+    if (!row) {
+      return;
+    }
+    if (focusModelId !== String(state.ui.aircraftDetailModelId || '').trim().toUpperCase()) {
+      state.ui.aircraftDetailMediaKey = '';
+    }
+    state.ui.aircraftDetailModelId = focusModelId;
+    state.ui.aircraftDetailFocusModelId = focusModelId;
+  }
+  if (isOpen && state.ui.registrationModalOpen) {
+    setRegistrationModalOpen(false, { restoreFocus: false });
+  }
+  if (isOpen && state.ui.modelRegsModalOpen) {
+    setModelRegsModalOpen(false, { restoreFocus: false });
+  }
+  if (!isOpen) {
+    state.ui.aircraftDetailMediaKey = '';
+  }
+  state.ui.aircraftDetailModalOpen = Boolean(isOpen);
+  elements.aircraftDetailModal.hidden = !state.ui.aircraftDetailModalOpen;
+  syncGlobalModalBodyLock();
+
+  if (state.ui.aircraftDetailModalOpen) {
+    renderAircraftDetailModal(state.model);
+    requestAnimationFrame(() => {
+      elements.aircraftDetailClose?.focus();
+    });
+    return;
+  }
+  if (restoreFocus) {
+    const focusModelId = String(state.ui.aircraftDetailFocusModelId || state.ui.aircraftDetailModelId || '').trim().toUpperCase();
+    if (!focusAircraftDetailCard(focusModelId)) {
       elements.aircraftSearch?.focus();
     }
   }
@@ -1289,6 +1623,14 @@ function clearDashboardPanels() {
   elements.aircraftModelRegsMeta.textContent = '';
   elements.aircraftModelRegsRows.innerHTML = '';
   elements.aircraftModelRegsPageLabel.textContent = '';
+  elements.aircraftDetailTitle.textContent = 'Aircraft detail';
+  elements.aircraftDetailSubtitle.textContent = '';
+  elements.aircraftDetailMediaHeading.textContent = '3D studio';
+  elements.aircraftDetailMediaNote.textContent = '';
+  elements.aircraftDetailMediaStage.innerHTML = '';
+  elements.aircraftDetailMediaOptions.innerHTML = '';
+  elements.aircraftDetailKpis.innerHTML = '';
+  elements.aircraftDetailMetaSections.innerHTML = '';
 }
 
 function parseCompletionSortKey(sortKey) {
@@ -3106,6 +3448,32 @@ function formatAircraftStat(value, options = {}) {
   return `${formatter.format(number)}${options.suffix || ''}`;
 }
 
+function formatAircraftYear(value) {
+  const year = Number(value);
+  if (!Number.isFinite(year) || year <= 0) {
+    return 'N/A';
+  }
+  const formatter = new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 0,
+    useGrouping: false,
+  });
+  return formatter.format(year);
+}
+
+function formatAircraftWeight(value) {
+  const kilograms = Number(value);
+  if (!Number.isFinite(kilograms) || kilograms <= 0) {
+    return 'N/A';
+  }
+  const tonnes = kilograms / 1000;
+  return formatAircraftStat(tonnes, {
+    suffix: ' tonnes',
+    minFractionDigits: 0,
+    maxFractionDigits: Number.isInteger(tonnes) ? 0 : 1,
+    nullIfNonPositive: true,
+  });
+}
+
 function formatAircraftRarity(value) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) {
@@ -3271,6 +3639,12 @@ function renderAircraftCard(row, index, left, top, width, cardHeight) {
       class="aircraft-card${hasGlow ? ' has-glow' : ''}"
       role="listitem"
       data-index="${index}"
+      data-model-id="${escapeHtml(row.modelId)}"
+      tabindex="0"
+      aria-haspopup="dialog"
+      aria-controls="aircraft-detail-modal"
+      aria-label="${escapeHtml(`Open aircraft detail for ${manufacturer} ${name}`.trim())}"
+      title="${escapeHtml(`Open aircraft detail for ${manufacturer} ${name}`.trim())}"
       style="transform:translate(${left.toFixed(2)}px,${top.toFixed(2)}px);width:${width.toFixed(2)}px;height:${cardHeight}px;"
     >
       <div class="aircraft-card-media${imageUrl ? '' : ' is-fallback'}">
@@ -3320,7 +3694,7 @@ function renderAircraftCard(row, index, left, top, width, cardHeight) {
           <dl class="aircraft-card-stats">
             <div class="aircraft-card-stat">
               <dt>First flight</dt>
-              <dd>${formatAircraftStat(row.firstFlight, { maxFractionDigits: 0, nullIfNonPositive: true })}</dd>
+              <dd>${formatAircraftYear(row.firstFlight)}</dd>
             </div>
             <div class="aircraft-card-stat">
               <dt>Rarity</dt>
@@ -3340,7 +3714,7 @@ function renderAircraftCard(row, index, left, top, width, cardHeight) {
             </div>
             <div class="aircraft-card-stat">
               <dt>Weight</dt>
-              <dd>${formatAircraftStat(row.mtow, { suffix: ' kg', maxFractionDigits: 0, nullIfNonPositive: true })}</dd>
+              <dd>${formatAircraftWeight(row.mtow)}</dd>
             </div>
           </dl>
         </div>
@@ -3570,6 +3944,9 @@ function renderAircraftTab(model) {
   applyAircraftFilters(model);
   renderAircraftList();
   renderRegistrationModalTrigger(model);
+  if (state.ui.aircraftDetailModalOpen) {
+    renderAircraftDetailModal(model);
+  }
   if (state.ui.registrationModalOpen) {
     renderRegistrationTransparencyModal(model);
   }
@@ -3608,8 +3985,10 @@ function renderDashboard(model, references = null) {
   state.aircraft.renderQueued = false;
   resetRegistrationModalState();
   resetModelRegsModalState();
+  resetAircraftDetailModalState();
   setRegistrationModalOpen(false, { restoreFocus: false });
   setModelRegsModalOpen(false, { restoreFocus: false });
+  setAircraftDetailModalOpen(false, { restoreFocus: false });
   syncCompletionSortControls();
   elements.aircraftSearch.value = '';
   syncAircraftSortControls();
@@ -4153,6 +4532,11 @@ function wireAircraftControls() {
     if (event.key !== 'Escape') {
       return;
     }
+    if (state.ui.aircraftDetailModalOpen) {
+      event.preventDefault();
+      setAircraftDetailModalOpen(false);
+      return;
+    }
     if (state.ui.modelRegsModalOpen) {
       event.preventDefault();
       setModelRegsModalOpen(false);
@@ -4267,6 +4651,45 @@ function wireAircraftControls() {
     state.ui.modelRegsModalFocusModelId = modelId;
     state.ui.modelRegsModalPage = 1;
     setModelRegsModalOpen(true, { restoreFocus: false, focusModelId: modelId });
+    return;
+  });
+
+  elements.aircraftList.addEventListener('click', (event) => {
+    if (!state.model) {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    if (target.closest('button')) {
+      return;
+    }
+    const card = target.closest('.aircraft-card[data-model-id]');
+    if (!(card instanceof HTMLElement)) {
+      return;
+    }
+    const modelId = String(card.getAttribute('data-model-id') || '').trim().toUpperCase();
+    if (!modelId) {
+      return;
+    }
+    openAircraftDetailForModelId(modelId);
+  });
+
+  elements.aircraftList.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || !target.classList.contains('aircraft-card')) {
+      return;
+    }
+    event.preventDefault();
+    const modelId = String(target.getAttribute('data-model-id') || '').trim().toUpperCase();
+    if (!modelId) {
+      return;
+    }
+    openAircraftDetailForModelId(modelId);
   });
 
   elements.aircraftList.addEventListener('error', (event) => {
@@ -4288,6 +4711,87 @@ function wireAircraftControls() {
       media.classList.add('is-fallback');
     }
     target.remove();
+  }, true);
+
+  elements.aircraftDetailClose.addEventListener('click', () => {
+    setAircraftDetailModalOpen(false);
+  });
+
+  elements.aircraftDetailBackdrop.addEventListener('click', () => {
+    setAircraftDetailModalOpen(false);
+  });
+
+  elements.aircraftDetailMediaOptions.addEventListener('click', (event) => {
+    if (!state.ui.aircraftDetailModalOpen || !state.model) {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const button = target.closest('button[data-action="set-aircraft-detail-media"][data-media-key]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+    const mediaKey = String(button.getAttribute('data-media-key') || '').trim();
+    if (!mediaKey || mediaKey === state.ui.aircraftDetailMediaKey) {
+      return;
+    }
+    state.ui.aircraftDetailMediaKey = mediaKey;
+    renderAircraftDetailModal(state.model);
+  });
+
+  elements.aircraftDetailOpenRegs.addEventListener('click', () => {
+    if (!state.model) {
+      return;
+    }
+    const modelId = String(elements.aircraftDetailOpenRegs.getAttribute('data-model-id') || '').trim().toUpperCase();
+    if (!modelId) {
+      return;
+    }
+    state.ui.modelRegsModalModelId = modelId;
+    state.ui.modelRegsModalFocusModelId = modelId;
+    state.ui.modelRegsModalPage = 1;
+    setAircraftDetailModalOpen(false, { restoreFocus: false });
+    setModelRegsModalOpen(true, { restoreFocus: false, focusModelId: modelId });
+  });
+
+  elements.aircraftDetailModal.addEventListener('error', (event) => {
+    const target = event.target;
+    if (target instanceof HTMLImageElement && target.classList.contains('aircraft-detail-media-image')) {
+      const encodedCandidates = target.dataset.imageCandidates || '';
+      const candidates = encodedCandidates ? encodedCandidates.split('|').filter(Boolean) : [];
+      const currentIndex = Number.parseInt(target.dataset.imageIndex || '0', 10);
+      const nextIndex = Number.isFinite(currentIndex) ? currentIndex + 1 : 1;
+      if (nextIndex < candidates.length) {
+        target.dataset.imageIndex = String(nextIndex);
+        target.src = candidates[nextIndex];
+        return;
+      }
+      const frame = target.closest('.aircraft-detail-media-frame');
+      if (frame) {
+        frame.classList.add('is-fallback');
+      }
+      target.remove();
+      return;
+    }
+    if (!(target instanceof HTMLElement) || target.tagName.toLowerCase() !== 'model-viewer') {
+      return;
+    }
+    const encodedCandidates = target.dataset.modelCandidates || '';
+    const candidates = encodedCandidates ? encodedCandidates.split('|').filter(Boolean) : [];
+    const currentIndex = Number.parseInt(target.dataset.modelIndex || '0', 10);
+    const nextIndex = Number.isFinite(currentIndex) ? currentIndex + 1 : 1;
+    if (nextIndex < candidates.length) {
+      target.dataset.modelIndex = String(nextIndex);
+      target.setAttribute('src', candidates[nextIndex]);
+      return;
+    }
+    const frame = target.closest('.aircraft-detail-media-frame');
+    if (frame) {
+      frame.classList.add('is-fallback');
+    }
+    target.removeAttribute('src');
   }, true);
 
   window.addEventListener('resize', () => {
@@ -4312,7 +4816,9 @@ async function bootstrap() {
   syncAircraftSortControls();
   resetRegistrationModalState();
   resetModelRegsModalState();
+  resetAircraftDetailModalState();
   setModelRegsModalOpen(false, { restoreFocus: false });
+  setAircraftDetailModalOpen(false, { restoreFocus: false });
   syncRegistrationModalControls();
   renderRegistrationModalTrigger(null);
   state.manualRegistrationMappings = readManualRegistrationMappings();

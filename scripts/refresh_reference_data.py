@@ -24,6 +24,10 @@ OPTIONAL_MANIFEST_DATASETS = {
         'file': 'aircraft_lookup_resolved.json',
         'rows_key': 'byAircraftHex',
     },
+    'inferredAircraftMappings': {
+        'file': 'inferred_aircraft_type_mappings.json',
+        'rows_key': 'rows',
+    },
 }
 
 

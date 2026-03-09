@@ -147,23 +147,23 @@ export async function loadReferenceManifest() {
 
 export async function loadReferenceData() {
   if (!referenceState.dataPromise) {
-    referenceState.dataPromise = Promise.all([
-      loadReferenceManifest(),
-      fetchJson('./data/reference/models.json'),
-      fetchJson('./data/reference/airports.json'),
-      fetchJsonOptional('./data/reference/model_registration_counts.json'),
-      fetchJsonOptional('./data/reference/aircraft_lookup.json'),
-      fetchJsonOptional('./data/reference/aircraft_lookup_resolved.json'),
-      fetchJsonOptional('./data/reference/inferred_aircraft_type_mappings.json'),
-    ]).then(([
-      manifest,
-      modelsPayload,
-      airportsPayload,
-      modelRegistrationCountsPayload,
-      aircraftLookupPayload,
-      resolvedAircraftLookupPayload,
-      inferredAircraftMappingsPayload,
-    ]) => {
+    referenceState.dataPromise = loadReferenceManifest().then(async (manifest) => {
+      const [
+        modelsPayload,
+        airportsPayload,
+        modelRegistrationCountsPayload,
+        aircraftLookupPayload,
+        resolvedAircraftLookupPayload,
+        inferredAircraftMappingsPayload,
+      ] = await Promise.all([
+        fetchJson(getManifestDatasetPath(manifest, 'models', './data/reference/models.json')),
+        fetchJson(getManifestDatasetPath(manifest, 'airports', './data/reference/airports.json')),
+        fetchJsonOptional(getManifestDatasetPath(manifest, 'modelRegistrationCounts')),
+        fetchJsonOptional(getManifestDatasetPath(manifest, 'aircraftLookup')),
+        fetchJsonOptional(getManifestDatasetPath(manifest, 'aircraftLookupResolved')),
+        fetchJsonOptional(getManifestDatasetPath(manifest, 'inferredAircraftMappings')),
+      ]);
+
       const modelRows = asArray(modelsPayload.rows);
       const airportRows = asArray(airportsPayload.rows);
       const allAirports = airportRows.map((row) => buildAirportRef(row));
@@ -199,6 +199,38 @@ export async function loadReferenceData() {
   return referenceState.dataPromise;
 }
 
+function getManifestDatasetPath(manifest, datasetKey, fallbackPath = null) {
+  const datasetPath = sanitizeText(manifest?.datasets?.[datasetKey]?.path);
+  if (datasetPath) {
+    return resolveReferenceDatasetPath(datasetPath);
+  }
+  return fallbackPath;
+}
+
+function resolveReferenceDatasetPath(path) {
+  const normalizedPath = sanitizeText(path);
+  if (!normalizedPath) {
+    return '';
+  }
+  if (
+    normalizedPath.startsWith('http://')
+    || normalizedPath.startsWith('https://')
+    || normalizedPath.startsWith('/')
+  ) {
+    return normalizedPath;
+  }
+  if (normalizedPath.startsWith('./data/reference/')) {
+    return normalizedPath;
+  }
+  if (normalizedPath.startsWith('data/reference/')) {
+    return `./${normalizedPath}`;
+  }
+  if (normalizedPath.startsWith('./')) {
+    return `./data/reference/${normalizedPath.slice(2)}`;
+  }
+  return `./data/reference/${normalizedPath}`;
+}
+
 async function fetchJson(path) {
   const response = await fetch(path, { cache: 'no-store' });
   if (!response.ok) {
@@ -208,6 +240,9 @@ async function fetchJson(path) {
 }
 
 async function fetchJsonOptional(path) {
+  if (!path) {
+    return null;
+  }
   const response = await fetch(path, { cache: 'no-store' });
   if (!response.ok) {
     return null;
@@ -940,10 +975,16 @@ export function buildDashboardModel(payload, references, options = {}) {
       seats: asNumber(card.seats) ?? asNumber(model?.seats),
       mtow: asNumber(card.mtow) ?? asNumber(model?.mtow),
       range: asNumber(model?.range),
+      ceiling: asNumber(model?.ceiling),
+      length: asNumber(model?.length),
+      height: asNumber(model?.height),
       engNum: asNumber(model?.engNum),
       engType: normalizeKey(model?.engType),
       aircraftType: typeKey,
       aircraftTypeLabel: TYPE_LABELS[typeKey] || TYPE_LABELS.unknown,
+      landingGear: sanitizeText(model?.landingGear),
+      wingPosition: sanitizeText(model?.wingPos),
+      wingShape: sanitizeText(model?.wingShape),
       season: asNumber(card.season),
       military: Boolean(model?.military),
       modelMatched: Boolean(model),
@@ -1066,10 +1107,16 @@ export function buildDashboardModel(payload, references, options = {}) {
         wingspan: card.wingspan,
         seats: card.seats,
         range: card.range,
+        ceiling: card.ceiling,
+        length: card.length,
+        height: card.height,
         firstFlight: card.firstFlight,
         rareness: card.rareness,
         engNum: card.engNum,
         engTypeLabel: engineLabel(card.engType),
+        landingGear: card.landingGear,
+        wingPosition: card.wingPosition,
+        wingShape: card.wingShape,
         military: card.military,
         seasonMin: card.season,
         seasonMax: card.season,
@@ -1158,10 +1205,16 @@ export function buildDashboardModel(payload, references, options = {}) {
         wingspan: row.wingspan,
         seats: row.seats,
         range: row.range,
+        ceiling: row.ceiling,
+        length: row.length,
+        height: row.height,
         firstFlight: row.firstFlight,
         rareness: row.rareness,
         engNum: row.engNum,
         engTypeLabel: row.engTypeLabel,
+        landingGear: row.landingGear,
+        wingPosition: row.wingPosition,
+        wingShape: row.wingShape,
         military: row.military,
         seasonMin: row.seasonMin,
         seasonMax: row.seasonMax,
