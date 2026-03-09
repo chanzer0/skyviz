@@ -137,6 +137,10 @@ const referenceState = {
   manifestPromise: null,
   dataPromise: null,
 };
+const airportGameState = {
+  manifestPromise: null,
+  dataPromise: null,
+};
 
 export async function loadReferenceManifest() {
   if (!referenceState.manifestPromise) {
@@ -199,6 +203,34 @@ export async function loadReferenceData() {
   return referenceState.dataPromise;
 }
 
+export async function loadAirportGameManifest() {
+  if (!airportGameState.manifestPromise) {
+    airportGameState.manifestPromise = fetchJson('./data/airports/manifest.json');
+  }
+  return airportGameState.manifestPromise;
+}
+
+export async function loadAirportGameData() {
+  if (!airportGameState.dataPromise) {
+    airportGameState.dataPromise = loadAirportGameManifest().then(async (manifest) => {
+      const datasetPath = resolveAirportGameDatasetPath(manifest?.dailyDataPath || './data/airports/daily-game.json');
+      const payload = await fetchJson(datasetPath);
+      const airports = asArray(payload?.airports).filter((row) => row && typeof row === 'object');
+      return {
+        manifest,
+        payload,
+        airports,
+        airportsById: new Map(
+          airports
+            .map((row) => [sanitizeText(row.id), row])
+            .filter(([id]) => Boolean(id)),
+        ),
+      };
+    });
+  }
+  return airportGameState.dataPromise;
+}
+
 function getManifestDatasetPath(manifest, datasetKey, fallbackPath = null) {
   const datasetPath = sanitizeText(manifest?.datasets?.[datasetKey]?.path);
   if (datasetPath) {
@@ -229,6 +261,30 @@ function resolveReferenceDatasetPath(path) {
     return `./data/reference/${normalizedPath.slice(2)}`;
   }
   return `./data/reference/${normalizedPath}`;
+}
+
+function resolveAirportGameDatasetPath(path) {
+  const normalizedPath = sanitizeText(path);
+  if (!normalizedPath) {
+    return '';
+  }
+  if (
+    normalizedPath.startsWith('http://')
+    || normalizedPath.startsWith('https://')
+    || normalizedPath.startsWith('/')
+  ) {
+    return normalizedPath;
+  }
+  if (normalizedPath.startsWith('./data/airports/')) {
+    return normalizedPath;
+  }
+  if (normalizedPath.startsWith('data/airports/')) {
+    return `./${normalizedPath}`;
+  }
+  if (normalizedPath.startsWith('./')) {
+    return `./data/airports/${normalizedPath.slice(2)}`;
+  }
+  return `./data/airports/${normalizedPath}`;
 }
 
 async function fetchJson(path) {

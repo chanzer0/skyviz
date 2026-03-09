@@ -15,6 +15,14 @@
 - Update `docs/architecture.md` and `README.md` if the workflow changed.
 - Rebuild or refresh `site/data/reference/manifest.json` if needed.
 
+## Airport daily game or OurAirports data change
+
+- Update the relevant files in `site/`.
+- Update `scripts/refresh_airport_game_data.py`.
+- Update `README.md` and `docs/architecture.md`.
+- Run `python scripts/smoke_check.py`.
+- Use a browser pass when the environment supports it.
+
 ## Workflow or architecture change
 
 - Update the relevant `docs/` surfaces.

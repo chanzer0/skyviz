@@ -3,11 +3,32 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Skyviz</title>
+    <title>Navdle by Skyviz | Daily Airport Game</title>
     <meta
       name="description"
-      content="Upload a Skycards export and explore an interactive map plus aircraft analytics in a browser-only dashboard."
+      content="Play Navdle, a free daily airport game for aviation fans, and explore Skyviz's browser-only map and aircraft dashboard built from Skycards exports."
     >
+    <meta name="robots" content="index,follow,max-image-preview:large">
+    <link rel="canonical" href="https://chanzer0.github.io/skyviz/">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Navdle by Skyviz | Daily Airport Game">
+    <meta property="og:description" content="Play Navdle, a free daily airport game for aviation fans, and explore Skyviz's browser-only map and aircraft dashboard.">
+    <meta property="og:url" content="https://chanzer0.github.io/skyviz/">
+    <meta property="og:site_name" content="Skyviz">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Navdle by Skyviz | Daily Airport Game">
+    <meta name="twitter:description" content="Play Navdle, a free daily airport game for aviation fans, and explore Skyviz's browser-only map and aircraft dashboard.">
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Skyviz",
+        "alternateName": "Navdle",
+        "url": "https://chanzer0.github.io/skyviz/",
+        "description": "Play Navdle, a free daily airport game for aviation fans, and explore a browser-only aviation dashboard for Skycards exports.",
+        "keywords": "daily airport game, daily aviation game, airport guessing game, aviation game, Navdle"
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -50,6 +71,27 @@
               Skyviz is a free, open-source alternative built for collectors who want control. Your file is processed locally in your browser only, and you can choose whether to keep a copy on this device.
             </p>
 
+            <section class="landing-daily-feature" aria-labelledby="daily-feature-title">
+              <div class="landing-daily-copy">
+                <p class="landing-step-kicker">New daily game</p>
+                <h2 id="daily-feature-title" class="landing-daily-title">Navdle</h2>
+                <p id="daily-landing-summary" class="landing-daily-summary">
+                  Navdle is a daily airport game for aviation fans. Guess the airport of the day using geography, runway, navaid, and layout clues.
+                </p>
+              </div>
+              <div class="landing-daily-meta">
+                <div id="daily-landing-stats" class="landing-daily-stats" aria-live="polite"></div>
+                <p id="daily-landing-teaser" class="landing-daily-teaser">
+                  Loading today&apos;s briefing...
+                </p>
+                <a id="daily-launch" class="daily-launch-button" href="#navdle">Play Navdle</a>
+                <p class="landing-daily-credit">
+                  Airport data courtesy of
+                  <a href="https://ourairports.com/data/" target="_blank" rel="noopener noreferrer">OurAirports open data</a>.
+                </p>
+              </div>
+            </section>
+
             <section class="landing-step" aria-labelledby="step-start-title">
               <p class="landing-step-kicker">Step 1</p>
               <h2 id="step-start-title" class="landing-step-title">Start your private dashboard</h2>
@@ -68,7 +110,7 @@
               </div>
 
               <p class="landing-support" id="upload-support">
-                Expected after upload: two private local views, <strong>Map</strong> and <strong>Aircraft</strong>. Accepted input: Skycards export JSON (for local testing, use <code>skycards_user.json</code>).
+                  Expected after upload: two private local views, <strong>Map</strong> and <strong>Deck</strong>. Accepted input: Skycards export JSON (for local testing, use <code>skycards_user.json</code>).
               </p>
             </section>
 
@@ -143,7 +185,18 @@
                 aria-controls="tab-aircraft"
                 data-tab="aircraft"
               >
-                Aircraft
+                Deck
+              </button>
+              <button
+                id="tab-daily-button"
+                class="dashboard-tab-button"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="navdle"
+                data-tab="daily"
+              >
+                DAILY
               </button>
             </nav>
             <div class="data-tools">
@@ -316,7 +369,7 @@
               <div class="section-head aircraft-list-head">
                 <div class="aircraft-list-title-wrap">
                   <div>
-                    <p class="eyebrow">Aircraft</p>
+                    <p class="eyebrow">Deck</p>
                     <h3>Aircraft deck</h3>
                   </div>
                 </div>
@@ -373,6 +426,79 @@
             <article id="aircraft-tier-completion-panel"></article>
             <article id="aircraft-image-placeholder-panel"></article>
             <article id="aircraft-reg-placeholder-panel"></article>
+          </div>
+        </section>
+
+        <section
+          id="navdle"
+          class="dashboard-tab-panel daily-tab-panel"
+          role="tabpanel"
+          aria-labelledby="tab-daily-button"
+          hidden
+        >
+          <div class="daily-layout">
+            <article class="daily-unified-panel">
+              <section class="daily-search-section" aria-label="Daily command deck">
+                <div class="daily-command-deck">
+                  <div class="daily-command-top">
+                    <div class="daily-command-title-row">
+                      <div class="daily-command-title-copy">
+                        <p class="eyebrow">Skyviz Daily</p>
+                        <h3 id="daily-title">Navdle</h3>
+                        <p id="daily-hero-summary" class="daily-hero-summary">
+                          Guess the airport of the day. Each guess sharpens your read on geography, runway setup, navaids, and layout.
+                        </p>
+                      </div>
+                      <button id="daily-copy-result" class="region-action-button daily-copy-button" type="button" hidden>
+                        Copy results
+                      </button>
+                    </div>
+                    <div class="daily-meta-stack">
+                      <div id="daily-meta-grid" class="daily-meta-grid" aria-live="polite"></div>
+                      <p class="daily-meta-disclosure">
+                        Privacy-first: streak and win rate stay in this browser only on this device.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="daily-command-surface">
+                    <form id="daily-guess-form" class="daily-guess-form" autocomplete="off">
+                      <label class="control-field daily-guess-field" for="daily-guess-input">
+                        <span class="daily-guess-field-label">Guess an airport</span>
+                        <span class="daily-guess-input-wrap">
+                          <span class="daily-guess-field-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" focusable="false">
+                              <circle cx="10.5" cy="10.5" r="5.75"></circle>
+                              <path d="M15 15l4.75 4.75"></path>
+                            </svg>
+                          </span>
+                          <input
+                            id="daily-guess-input"
+                            type="search"
+                            placeholder="Type airport, city, or code"
+                            spellcheck="false"
+                            enterkeyhint="search"
+                            aria-autocomplete="list"
+                            aria-controls="daily-suggestion-list"
+                            aria-expanded="false"
+                          >
+                        </span>
+                      </label>
+                    </form>
+                    <div id="daily-suggestion-list" class="daily-suggestion-list" role="listbox"></div>
+                    <p id="daily-feedback" class="daily-feedback" aria-live="polite"></p>
+                  </div>
+                  <div class="daily-command-strip">
+                    <div id="daily-briefing"></div>
+                    <div id="daily-intel"></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="daily-board-section" aria-label="Guess board">
+                <p id="daily-board-meta" class="daily-board-meta"></p>
+                <div id="daily-board" class="daily-board"></div>
+              </section>
+            </article>
           </div>
         </section>
       </main>
@@ -604,9 +730,15 @@
             <ul class="site-footer-links">
               <li><a href="#page-top">Back to top</a></li>
               <li><a href="#dashboard">Jump to dashboard</a></li>
+              <li><a href="#navdle">Navdle daily airport game</a></li>
               <li>
                 <a href="https://github.com/mfkp/skycards-export" target="_blank" rel="noopener noreferrer">
                   Skycards export guide
+                </a>
+              </li>
+              <li>
+                <a href="https://ourairports.com/data/" target="_blank" rel="noopener noreferrer">
+                  OurAirports data
                 </a>
               </li>
             </ul>

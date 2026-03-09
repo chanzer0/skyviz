@@ -1,5 +1,29 @@
 import { renderBarList } from './charts.js';
-import { buildDashboardModel, loadReferenceData, loadReferenceManifest, parseUserCollection } from './data.js';
+import {
+  buildDashboardModel,
+  loadAirportGameData,
+  loadAirportGameManifest,
+  loadReferenceData,
+  loadReferenceManifest,
+  parseUserCollection,
+} from './data.js';
+import {
+  DAILY_GAME_NAME,
+  buildAirportGuessComparison,
+  buildAirportHint,
+  buildAirportOptionLabel,
+  buildAirportSuggestions,
+  buildDailyShareText,
+  buildDailyStats,
+  formatCountdown,
+  getDailyChallengeProfile,
+  getNextUtcResetTime,
+  getUtcDayKey,
+  parseDailyHistory,
+  resolveAirportGuess,
+  selectDailyAirport,
+  serializeDailyHistory,
+} from './daily.js';
 import { escapeHtml, formatCompact, formatDateFromMillis, formatNumber, formatPercent } from './format.js';
 
 const elements = {
@@ -9,6 +33,10 @@ const elements = {
   fileInput: document.querySelector('#file-input'),
   dropzone: document.querySelector('#dropzone'),
   viewExampleButton: document.querySelector('#view-example'),
+  dailyLaunchButton: document.querySelector('#daily-launch'),
+  dailyLandingSummary: document.querySelector('#daily-landing-summary'),
+  dailyLandingStats: document.querySelector('#daily-landing-stats'),
+  dailyLandingTeaser: document.querySelector('#daily-landing-teaser'),
   persistUpload: document.querySelector('#persist-upload'),
   uploadStatus: document.querySelector('#upload-status'),
   referenceStatus: document.querySelector('#reference-status'),
@@ -16,6 +44,7 @@ const elements = {
   dashboard: document.querySelector('#dashboard'),
   mapTabButton: document.querySelector('#tab-map-button'),
   aircraftTabButton: document.querySelector('#tab-aircraft-button'),
+  dailyTabButton: document.querySelector('#tab-daily-button'),
   dataToolsTrigger: document.querySelector('#data-tools-trigger'),
   dataToolsMenu: document.querySelector('#data-tools-menu'),
   dataToolsPersistUpload: document.querySelector('#data-tools-persist-upload'),
@@ -26,6 +55,7 @@ const elements = {
   dataToolsClear: document.querySelector('#data-tools-clear'),
   mapTabPanel: document.querySelector('#tab-map'),
   aircraftTabPanel: document.querySelector('#tab-aircraft'),
+  dailyTabPanel: document.querySelector('#navdle'),
   mapSide: document.querySelector('#map-side'),
   mapCanvas: document.querySelector('#map-canvas'),
   mapLegend: document.querySelector('#map-legend'),
@@ -96,6 +126,19 @@ const elements = {
   aircraftDetailOpenRegs: document.querySelector('#aircraft-detail-open-regs'),
   aircraftDetailKpis: document.querySelector('#aircraft-detail-kpis'),
   aircraftDetailMetaSections: document.querySelector('#aircraft-detail-meta-sections'),
+  dailyCopyResultButton: document.querySelector('#daily-copy-result'),
+  dailyTitle: document.querySelector('#daily-title'),
+  dailyHeroSummary: document.querySelector('#daily-hero-summary'),
+  dailyMetaGrid: document.querySelector('#daily-meta-grid'),
+  dailyCommandDeck: document.querySelector('.daily-command-deck'),
+  dailyGuessForm: document.querySelector('#daily-guess-form'),
+  dailyGuessInput: document.querySelector('#daily-guess-input'),
+  dailySuggestionList: document.querySelector('#daily-suggestion-list'),
+  dailyFeedback: document.querySelector('#daily-feedback'),
+  dailyBriefing: document.querySelector('#daily-briefing'),
+  dailyIntel: document.querySelector('#daily-intel'),
+  dailyBoardMeta: document.querySelector('#daily-board-meta'),
+  dailyBoard: document.querySelector('#daily-board'),
 };
 
 const AIRCRAFT_CARD_HEIGHT_MOBILE = 428;
@@ -114,6 +157,9 @@ const PERSISTED_UPLOAD_KEY = 'skyviz.persistedUpload.v1';
 const PERSIST_PREFERENCE_KEY = 'skyviz.persistUploadPreference.v1';
 const MANUAL_REGISTRATION_MAPPINGS_KEY = 'skyviz.manualRegistrationMappings.v1';
 const MANUAL_REGISTRATION_MAPPINGS_EXPORT_SCHEMA = 'skyviz.manualRegistrationMappings.v1';
+const DAILY_GAME_HISTORY_KEY = 'skyviz.dailyAirportHistory.v1';
+const DAILY_GAME_HASH = '#navdle';
+const LEGACY_DAILY_GAME_HASHES = new Set(['#tab-daily']);
 const EXAMPLE_DECK_PATH = './data/example/try_now_user.json';
 const COMPLETION_SORT_CATEGORIES = new Set(['percent', 'total', 'captured', 'name']);
 const COMPLETION_SORT_DIRECTIONS = new Set(['asc', 'desc']);
@@ -127,6 +173,69 @@ const MAP_DRILL_LEVELS = Object.freeze(['continent', 'country', 'us-state']);
 const REGION_CODE_PREVIEW_LIMIT = 56;
 const REGISTRATION_MODAL_PAGE_SIZE = 120;
 const MODEL_REGISTRATION_MODAL_PAGE_SIZE = 120;
+const COMPASS_LABELS = Object.freeze(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']);
+const COMPASS_ARROWS = Object.freeze({
+  N: '\u2191',
+  NE: '\u2197',
+  E: '\u2192',
+  SE: '\u2198',
+  S: '\u2193',
+  SW: '\u2199',
+  W: '\u2190',
+  NW: '\u2196',
+});
+const DAILY_TONE_ORDER = Object.freeze({
+  miss: 0,
+  near: 1,
+  hit: 2,
+});
+const DAILY_PROFILE_RANKS = Object.freeze({
+  small: 0,
+  medium: 1,
+  large: 2,
+});
+const DAILY_TILE_HELP = Object.freeze({
+  profile: {
+    meaning: 'Airport profile combines the field size and airport type.',
+    examples: 'Large airport often means a major scheduled field. Small airport can mean a local or general-aviation field.',
+  },
+  continent: {
+    meaning: 'Continent compares the airport\'s broad world region.',
+    examples: 'North America, Europe, and Asia are exact continent matches when they line up.',
+  },
+  country: {
+    meaning: 'Country compares the airport\'s national boundary.',
+    examples: 'A near result usually means the guess is on the right continent but in the wrong country.',
+  },
+  region: {
+    meaning: 'Region compares the airport\'s state, province, or equivalent local area.',
+    examples: 'For the United States this is usually the state. Other countries may use provinces or similar subdivisions.',
+  },
+  elevation: {
+    meaning: 'Elevation compares field altitude above sea level.',
+    examples: 'An up arrow means the target sits higher. A down arrow means it sits lower.',
+  },
+  runways: {
+    meaning: 'Runways compares the number of listed runways at the field.',
+    examples: 'A large hub may have many runways. A smaller field may only have one or two.',
+  },
+  'longest-runway': {
+    meaning: 'Longest runway compares the airport\'s longest listed runway length.',
+    examples: 'Longer runways usually support heavier or longer-range traffic.',
+  },
+  navaids: {
+    meaning: 'Navaids compares listed radio-navigation aids connected to the airport area.',
+    examples: 'Examples include VOR, DME, NDB, TACAN, or VORTAC.',
+  },
+  layout: {
+    meaning: 'Layout compares runway geometry rather than runway count.',
+    examples: 'Examples include single, parallel, intersecting, or mixed runway layouts.',
+  },
+  distance: {
+    meaning: 'Distance shows how far your guess is from today\'s airport and the arrow points toward the target.',
+    examples: 'If the card says 500 km with a northeast arrow, the target is 500 km to the northeast of your guess.',
+  },
+});
 const REGISTRATION_MODAL_FILTERS = new Set(['all', 'manual', 'high', 'medium', 'ambiguous', 'low']);
 const REGISTRATION_MODAL_CONFIDENCE_LABELS = {
   manual: 'Manual override',
@@ -197,6 +306,24 @@ const state = {
     fileName: '',
     text: '',
   },
+  daily: {
+    manifest: null,
+    dataset: null,
+    dayKey: '',
+    challenge: null,
+    error: '',
+    query: '',
+    feedback: '',
+    feedbackTone: 'muted',
+    suggestions: [],
+    selectedSuggestionIndex: -1,
+    pendingAnimatedGuessId: '',
+    pendingVictoryDayKey: '',
+    pendingStatCelebrateKeys: [],
+    copyStatus: '',
+    history: { days: {} },
+    countdownTimer: null,
+  },
   ui: {
     dataToolsOpen: false,
     bannerDismissTimer: null,
@@ -215,8 +342,44 @@ const state = {
     aircraftDetailModelId: null,
     aircraftDetailFocusModelId: null,
     aircraftDetailMediaKey: '',
+  pendingDailyInputFocus: false,
   },
 };
+
+function toRadians(value) {
+  const numericValue = Number.isFinite(Number(value)) ? Number(value) : 0;
+  return (numericValue * Math.PI) / 180;
+}
+
+function getAirportBearing(from, to) {
+  const fromLatitude = toRadians(from?.latitude || 0);
+  const toLatitude = toRadians(to?.latitude || 0);
+  const deltaLongitude = toRadians((to?.longitude || 0) - (from?.longitude || 0));
+  const y = Math.sin(deltaLongitude) * Math.cos(toLatitude);
+  const x = Math.cos(fromLatitude) * Math.sin(toLatitude)
+    - Math.sin(fromLatitude) * Math.cos(toLatitude) * Math.cos(deltaLongitude);
+  return (Math.atan2(y, x) * 180) / Math.PI + 360;
+}
+
+function describeAirportDirection(from, to) {
+  const normalizedBearing = getAirportBearing(from, to) % 360;
+  const sectorIndex = Math.round(normalizedBearing / 45) % COMPASS_LABELS.length;
+  const label = COMPASS_LABELS[sectorIndex] || '';
+  return {
+    label,
+    arrow: COMPASS_ARROWS[label] || '',
+  };
+}
+
+function getCompassSectorDistance(leftLabel, rightLabel) {
+  const leftIndex = COMPASS_LABELS.indexOf(leftLabel);
+  const rightIndex = COMPASS_LABELS.indexOf(rightLabel);
+  if (leftIndex === -1 || rightIndex === -1) {
+    return 0;
+  }
+  const rawDistance = Math.abs(leftIndex - rightIndex);
+  return Math.min(rawDistance, COMPASS_LABELS.length - rawDistance);
+}
 
 function clearBannerTimer() {
   if (!state.ui.bannerDismissTimer) {
@@ -283,6 +446,1114 @@ function setBootState(isVisible, statusMessage = '') {
   if (statusMessage) {
     elements.bootStatus.textContent = statusMessage;
   }
+}
+
+function readDailyHistory() {
+  try {
+    return parseDailyHistory(window.localStorage.getItem(DAILY_GAME_HISTORY_KEY));
+  } catch {
+    return { days: {} };
+  }
+}
+
+function writeDailyHistory() {
+  try {
+    window.localStorage.setItem(DAILY_GAME_HISTORY_KEY, serializeDailyHistory(state.daily.history));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getDailySession(dayKey = state.daily.dayKey || getUtcDayKey()) {
+  const source = state.daily.history?.days?.[dayKey];
+  return {
+    guesses: Array.isArray(source?.guesses) ? source.guesses.filter(Boolean) : [],
+    status: source?.status === 'won' || source?.status === 'lost' ? source.status : 'in_progress',
+    hintRevealed: Boolean(source?.hintRevealed),
+    completedAt: typeof source?.completedAt === 'string' ? source.completedAt : '',
+  };
+}
+
+function updateDailySession(dayKey, nextSession) {
+  state.daily.history.days[dayKey] = {
+    guesses: Array.isArray(nextSession?.guesses) ? nextSession.guesses.filter(Boolean) : [],
+    status: nextSession?.status === 'won' || nextSession?.status === 'lost' ? nextSession.status : 'in_progress',
+    hintRevealed: Boolean(nextSession?.hintRevealed),
+    completedAt: typeof nextSession?.completedAt === 'string' ? nextSession.completedAt : '',
+  };
+  writeDailyHistory();
+}
+
+function clearDailyCountdownTimer() {
+  if (!state.daily.countdownTimer) {
+    return;
+  }
+  window.clearInterval(state.daily.countdownTimer);
+  state.daily.countdownTimer = null;
+}
+
+function focusDailyGuessInput() {
+  if (state.activeTab !== 'daily' || elements.dashboard.hidden || elements.dailyGuessInput.disabled) {
+    state.ui.pendingDailyInputFocus = false;
+    return;
+  }
+  state.ui.pendingDailyInputFocus = false;
+  requestAnimationFrame(() => {
+    elements.dailyGuessInput.focus();
+    elements.dailyGuessInput.select();
+  });
+}
+
+function syncDashboardTabAvailability() {
+  const hasCollection = Boolean(state.model);
+  [elements.mapTabButton, elements.aircraftTabButton].forEach((button) => {
+    button.disabled = !hasCollection;
+    button.classList.toggle('is-disabled', !hasCollection);
+    button.setAttribute('aria-disabled', String(!hasCollection));
+  });
+}
+
+function setDailyFeedback(message, tone = 'muted') {
+  state.daily.feedback = message;
+  state.daily.feedbackTone = tone;
+}
+
+function buildDailyLandingChipHtml(label, value, quiet = false) {
+  const classes = quiet ? 'landing-daily-chip is-quiet' : 'landing-daily-chip';
+  return `<span class="${classes}">${escapeHtml(label)}: ${escapeHtml(value)}</span>`;
+}
+
+function renderDailyLandingCta() {
+  const todayKey = getUtcDayKey();
+  const todaySession = getDailySession(todayKey);
+  const stats = buildDailyStats(state.daily.history);
+  const countdown = formatCountdown(getNextUtcResetTime().getTime() - Date.now());
+  const statsHtml = [
+    buildDailyLandingChipHtml('Streak', `${formatNumber(stats.currentStreak)}`),
+    buildDailyLandingChipHtml('Reset', countdown),
+  ].join('');
+  elements.dailyLandingStats.innerHTML = statsHtml;
+  elements.dailyLandingSummary.textContent = state.daily.error
+    ? 'Daily game data is unavailable right now. Try refreshing after the airport data build completes.'
+    : 'Guess today\'s airport using geography, runway, navaid, layout, elevation, and distance clues.';
+  if (state.daily.error) {
+    elements.dailyLandingTeaser.textContent = state.daily.error;
+    elements.dailyLaunchButton.textContent = `Open ${DAILY_GAME_NAME}`;
+    return;
+  }
+  if (todaySession.status === 'won') {
+    elements.dailyLandingTeaser.textContent = `You cleared today in ${formatDailyGuessCount(todaySession.guesses.length)}. Win rate: ${formatNumber(stats.winRate)}%.`;
+    elements.dailyLaunchButton.textContent = `Review ${DAILY_GAME_NAME}`;
+    return;
+  }
+  if (todaySession.status === 'lost') {
+    elements.dailyLandingTeaser.textContent = 'Today\'s board is complete. Review the answer and reset timer from the DAILY tab.';
+    elements.dailyLaunchButton.textContent = `Review ${DAILY_GAME_NAME}`;
+    return;
+  }
+  if (todaySession.guesses.length) {
+    elements.dailyLandingTeaser.textContent = `${formatDailyGuessCount(todaySession.guesses.length)} logged so far. Pick up the board before the UTC reset.`;
+    elements.dailyLaunchButton.textContent = `Continue ${DAILY_GAME_NAME}`;
+    return;
+  }
+  const guessableAirports = Number(state.daily.manifest?.guessableAirports || state.daily.dataset?.manifest?.guessableAirports || 0);
+  elements.dailyLandingTeaser.textContent = guessableAirports
+    ? `${formatNumber(guessableAirports)} guessable airports are in the rotation. Search by airport, city, or code and watch each clue category update after every guess.`
+    : 'A fresh airport rotates in every UTC day. Search by airport, city, or code and watch each clue category update after every guess.';
+  elements.dailyLaunchButton.textContent = `Play ${DAILY_GAME_NAME}`;
+}
+
+function buildDailyMetaChipHtml(label, value, note, options = {}) {
+  const toneClass = options.tone ? ` is-${options.tone}` : '';
+  const celebrateClass = options.isCelebrating ? ' is-celebrating' : '';
+  const noteText = note ? escapeHtml(note) : '&nbsp;';
+  return `
+    <article class="daily-meta-chip${toneClass}${celebrateClass}">
+      <span class="daily-meta-chip-label">${escapeHtml(label)}</span>
+      <strong class="daily-meta-chip-value">${escapeHtml(value)}</strong>
+      <span class="daily-meta-chip-note${note ? '' : ' is-empty'}">${noteText}</span>
+    </article>
+  `;
+}
+
+function buildDailyStatusBadgeHtml(label, value, note, options = {}) {
+  return buildDailyMetaChipHtml(label, value, note, options);
+}
+
+function buildDailyStatCardHtml(label, value, note, options = {}) {
+  return buildDailyMetaChipHtml(label, value, note, options);
+}
+
+function buildDailyVictoryOverlayHtml() {
+  const fireworks = [
+    { left: '8%', top: '10%', hue: '35deg', delay: '0ms' },
+    { left: '28%', top: '24%', hue: '12deg', delay: '180ms' },
+    { left: '54%', top: '8%', hue: '192deg', delay: '320ms' },
+    { left: '76%', top: '18%', hue: '326deg', delay: '120ms' },
+    { left: '88%', top: '38%', hue: '52deg', delay: '420ms' },
+  ];
+  const ribbons = [
+    { left: '12%', delay: '90ms', rotate: '-14deg' },
+    { left: '34%', delay: '260ms', rotate: '8deg' },
+    { left: '61%', delay: '140ms', rotate: '-6deg' },
+    { left: '82%', delay: '320ms', rotate: '15deg' },
+  ];
+  return `
+    <div class="daily-victory-overlay" aria-hidden="true">
+      <span class="daily-victory-flash"></span>
+      ${fireworks.map((firework) => `
+        <span
+          class="daily-firework"
+          style="--firework-left:${firework.left};--firework-top:${firework.top};--firework-hue:${firework.hue};--firework-delay:${firework.delay};"
+        ></span>
+      `).join('')}
+      ${ribbons.map((ribbon) => `
+        <span
+          class="daily-victory-ribbon"
+          style="--ribbon-left:${ribbon.left};--ribbon-delay:${ribbon.delay};--ribbon-rotate:${ribbon.rotate};"
+        ></span>
+      `).join('')}
+    </div>
+  `;
+}
+
+function getDailyCopyButtonConfig(challenge, session, options = {}) {
+  if (!challenge || (session.status !== 'won' && session.status !== 'lost')) {
+    return null;
+  }
+  const celebrateSolve = Boolean(options?.celebrateSolve);
+  const isVictory = session.status === 'won';
+  if (state.daily.copyStatus === 'copied') {
+    return isVictory
+      ? {
+        className: 'region-action-button daily-copy-button is-victory is-copied',
+        label: 'Copied',
+      }
+      : {
+        className: 'region-action-button daily-copy-button is-loss is-copied',
+        label: 'Copied',
+      };
+  }
+  if (state.daily.copyStatus === 'error') {
+    return {
+      className: `region-action-button daily-copy-button${isVictory ? ' is-victory' : ' is-loss'} is-error`,
+      label: 'Copy results',
+    };
+  }
+  return isVictory
+    ? {
+      className: `region-action-button daily-copy-button is-victory${celebrateSolve ? ' is-celebrating' : ''}`,
+      label: 'Copy results',
+    }
+    : {
+      className: 'region-action-button daily-copy-button is-loss',
+      label: 'Copy results',
+    };
+}
+
+function buildDailyRunwayLightHtml(index, spentCount, status) {
+  const isSpent = index < spentCount;
+  const isActive = status === 'in_progress' && index === spentCount;
+  return `<span class="daily-runway-light${isSpent ? ' is-spent' : ''}${isActive ? ' is-active' : ''}"></span>`;
+}
+
+function getDailySourceAttribution() {
+  const manifest = state.daily.manifest || state.daily.dataset?.manifest;
+  const label = String(manifest?.source || 'OurAirports Open Data').trim() || 'OurAirports Open Data';
+  const url = String(manifest?.sourcePage || 'https://ourairports.com/data/').trim() || 'https://ourairports.com/data/';
+  return { label, url };
+}
+
+function buildDailySourceNoteHtml() {
+  const source = getDailySourceAttribution();
+  if (!source.url) {
+    return `<p class="daily-source-note">Daily airport data provided by ${escapeHtml(source.label)}.</p>`;
+  }
+  return `
+    <p class="daily-source-note">
+      Daily airport data provided by
+      <a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.label)}</a>.
+    </p>
+  `;
+}
+
+function normalizeHashRoute(hash) {
+  return String(hash || '').trim().toLowerCase();
+}
+
+function isDailyHashRoute(hash = typeof window !== 'undefined' ? window.location?.hash : '') {
+  const normalizedHash = normalizeHashRoute(hash);
+  return normalizedHash === DAILY_GAME_HASH || LEGACY_DAILY_GAME_HASHES.has(normalizedHash);
+}
+
+function isLegacyDailyHashRoute(hash = typeof window !== 'undefined' ? window.location?.hash : '') {
+  return LEGACY_DAILY_GAME_HASHES.has(normalizeHashRoute(hash));
+}
+
+function updateUrlHash(hash, options = {}) {
+  if (typeof window === 'undefined' || !window.location || !window.history) {
+    return;
+  }
+  const nextHash = String(hash || '').trim();
+  const url = new URL(window.location.href);
+  url.hash = nextHash ? nextHash.replace(/^#/, '') : '';
+  const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+  const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (nextUrl === currentUrl) {
+    return;
+  }
+  const method = options.replace ? 'replaceState' : 'pushState';
+  window.history[method](window.history.state, '', nextUrl);
+}
+
+function getDailyShareUrl() {
+  if (typeof window === 'undefined' || !window.location) {
+    return DAILY_GAME_HASH;
+  }
+  const url = new URL(window.location.href);
+  url.hash = DAILY_GAME_HASH.slice(1);
+  return url.toString();
+}
+
+function formatDailyGuessCount(count) {
+  return `${formatNumber(count)} ${count === 1 ? 'guess' : 'guesses'}`;
+}
+
+function formatDailyCategoryList(labels, limit = 2) {
+  const uniqueLabels = Array.from(new Set(labels.filter(Boolean)));
+  if (!uniqueLabels.length) {
+    return 'No clue change';
+  }
+  if (uniqueLabels.length <= limit) {
+    return uniqueLabels.join(', ');
+  }
+  return `${uniqueLabels.slice(0, limit).join(', ')} +${formatNumber(uniqueLabels.length - limit)} more`;
+}
+
+function isKnownDailyNumber(value) {
+  return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+}
+
+function getDailyTileHelp(key) {
+  return DAILY_TILE_HELP[key] || {
+    meaning: 'This clue compares one part of the guessed airport against today\'s airport.',
+    examples: 'Green is exact, amber is near, and gray means the clue is off.',
+  };
+}
+
+function buildDailyTileHelpHtml(key) {
+  const help = getDailyTileHelp(key);
+  return `
+    <details class="daily-tile-help">
+      <summary class="daily-tile-help-toggle" aria-label="Explain this clue">?</summary>
+      <div class="daily-tile-help-panel">
+        <strong class="daily-tile-help-title">What this means</strong>
+        <p class="daily-tile-help-copy">${escapeHtml(help.meaning)}</p>
+        <p class="daily-tile-help-copy is-example">${escapeHtml(help.examples)}</p>
+      </div>
+    </details>
+  `;
+}
+
+function buildDailyHintValueHtml(hint) {
+  const valueParts = Array.isArray(hint?.valueParts) ? hint.valueParts : null;
+  if (!valueParts?.length) {
+    return escapeHtml(hint?.value || '');
+  }
+  return valueParts.map((part) => {
+    if (typeof part === 'string') {
+      return escapeHtml(part);
+    }
+    if (part?.type === 'redaction') {
+      return `<span class="daily-redaction" aria-hidden="true"><span class="daily-redaction-ink">${escapeHtml(part.text || '')}</span></span><span class="sr-only">[airport identifier redacted]</span>`;
+    }
+    return escapeHtml(part?.text || '');
+  }).join('');
+}
+
+function renderDailyBriefing(challenge, session, countdown) {
+  const maxGuesses = Number(challenge?.maxGuesses || 8);
+  const remainingGuesses = Math.max(maxGuesses - session.guesses.length, 0);
+  const hintCountdown = Math.max(3 - session.guesses.length, 0);
+  const hintIsReady = session.status === 'in_progress' && session.guesses.length >= 3 && !session.hintRevealed;
+  const hintButtonLabel = session.hintRevealed
+    ? 'Hint revealed'
+    : session.status !== 'in_progress'
+      ? 'Board complete'
+      : hintIsReady
+        ? 'Reveal hint'
+        : hintCountdown === 1
+          ? 'Hint in 1 guess'
+          : `Hint in ${formatNumber(hintCountdown)} guesses`;
+  const hintButtonDisabled = session.hintRevealed || session.status !== 'in_progress' || !hintIsReady;
+  const hintButtonClass = session.hintRevealed
+    ? ' is-live'
+    : hintIsReady
+      ? ' is-ready'
+      : ' is-locked';
+  const hintCopy = session.hintRevealed
+    ? 'Your extra clue is open below.'
+    : session.status !== 'in_progress'
+      ? 'Board complete. Review the revealed airport below.'
+      : hintIsReady
+        ? 'One extra clue is ready whenever you want it.'
+        : `One extra clue unlocks after ${formatNumber(hintCountdown)} more ${hintCountdown === 1 ? 'guess' : 'guesses'}.`;
+  elements.dailyBriefing.innerHTML = `
+    <div class="daily-briefing-card">
+      <div class="daily-briefing-head">
+        <div class="daily-briefing-copy">
+          <div class="daily-widget-head">
+            <span class="daily-widget-kicker">Guesses left</span>
+            <strong class="daily-widget-value">${formatNumber(remainingGuesses)}</strong>
+            <span class="daily-widget-note">of ${formatNumber(maxGuesses)} left</span>
+          </div>
+        </div>
+        <div class="daily-briefing-controls">
+          <button
+            class="region-action-button daily-hint-button${hintButtonClass}"
+            type="button"
+            data-action="reveal-daily-hint"
+            ${hintButtonDisabled ? 'disabled' : ''}
+          >
+            ${escapeHtml(hintButtonLabel)}
+          </button>
+        </div>
+      </div>
+      <div class="daily-runway-lights" aria-hidden="true">
+        ${Array.from({ length: maxGuesses }, (_, index) => buildDailyRunwayLightHtml(index, session.guesses.length, session.status)).join('')}
+      </div>
+      <div class="daily-briefing-foot">
+        <p class="daily-hint-note">${escapeHtml(hintCopy)}</p>
+        ${buildDailySourceNoteHtml()}
+      </div>
+    </div>
+  `;
+}
+
+function renderDailyIntel(challenge, session, options = {}) {
+  if (!challenge?.target) {
+    elements.dailyIntel.hidden = true;
+    elements.dailyIntel.innerHTML = '';
+    return;
+  }
+  const target = challenge.target;
+  const revealAnswer = session.status === 'won' || session.status === 'lost';
+  const celebrateSolve = session.status === 'won' && Boolean(options?.celebrateSolve);
+  const hint = buildAirportHint(target, { revealAnswer });
+  if (session.status === 'won' || session.status === 'lost') {
+    const guessesRemaining = Math.max((challenge.maxGuesses || 8) - session.guesses.length, 0);
+    elements.dailyIntel.hidden = false;
+    elements.dailyIntel.innerHTML = `
+      <div class="daily-answer-card${session.status === 'won' ? ' is-victory' : ''}${celebrateSolve ? ' is-celebrating' : ''}">
+        ${celebrateSolve ? buildDailyVictoryOverlayHtml() : ''}
+        <div class="daily-answer-head">
+          <div>
+            <p class="eyebrow">${session.status === 'won' ? 'Direct hit' : 'Revealed airport'}</p>
+            <h4 class="daily-answer-title">${escapeHtml(target.name)}</h4>
+            <p class="daily-answer-copy">${escapeHtml(buildAirportOptionLabel(target))}</p>
+          </div>
+          ${session.status === 'won' ? `
+            <div class="daily-victory-banner${celebrateSolve ? ' is-celebrating' : ''}">
+              <span class="daily-victory-banner-kicker">Fireworks</span>
+              <strong class="daily-victory-banner-value">${escapeHtml(formatDailyGuessCount(session.guesses.length))}</strong>
+              <span class="daily-victory-banner-note">${formatNumber(guessesRemaining)} ${guessesRemaining === 1 ? 'try' : 'tries'} to spare</span>
+            </div>
+          ` : ''}
+        </div>
+        <div class="daily-answer-facts">
+          <div class="daily-answer-fact">
+            <span class="daily-answer-fact-label">Location</span>
+            <span class="daily-answer-fact-value">${escapeHtml([target.municipality, target.regionName, target.countryName].filter(Boolean).join(', '))}</span>
+          </div>
+          <div class="daily-answer-fact">
+            <span class="daily-answer-fact-label">Infrastructure</span>
+            <span class="daily-answer-fact-value">${escapeHtml(`${formatNumber(target.runwayCount)} runways, longest ${formatNumber(target.longestRunwayFt || 0)} ft, ${target.surfaceLabel || 'surface unknown'}`)}</span>
+          </div>
+          <div class="daily-answer-fact">
+            <span class="daily-answer-fact-label">Navigation</span>
+            <span class="daily-answer-fact-value">${escapeHtml(`${formatNumber(target.navaidCount)} navaids, ${formatNumber(target.frequencyCount)} radio entries`)}</span>
+          </div>
+          <div class="daily-answer-fact">
+            <span class="daily-answer-fact-label">${escapeHtml(hint.label)}</span>
+            <span class="daily-answer-fact-value">${buildDailyHintValueHtml(hint)}</span>
+            ${hint.note ? `
+              <p class="daily-answer-fact-note">
+                <span class="daily-answer-fact-note-icon" aria-hidden="true">i</span>
+                <span>${escapeHtml(hint.note)}</span>
+              </p>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+  if (!session.hintRevealed) {
+    elements.dailyIntel.hidden = true;
+    elements.dailyIntel.innerHTML = '';
+    return;
+  }
+  elements.dailyIntel.hidden = false;
+  elements.dailyIntel.innerHTML = `
+    <div class="daily-hint-card">
+      <div class="daily-hint-head">
+        <div>
+          <p class="eyebrow">Extra hint</p>
+          <h4 class="daily-hint-title">${escapeHtml(hint.label)}</h4>
+        </div>
+        <span class="daily-hint-chip">Unlocked after 3 guesses</span>
+      </div>
+      <p class="daily-hint-copy">${buildDailyHintValueHtml(hint)}</p>
+      ${hint.note ? `
+        <p class="daily-hint-meta">
+          <span class="daily-hint-meta-icon" aria-hidden="true">i</span>
+          <span>${escapeHtml(hint.note)}</span>
+        </p>
+      ` : ''}
+    </div>
+  `;
+}
+
+function buildDailyTransitionChipHtml(label, value, tone = 'flat') {
+  return `
+    <span class="daily-transition-chip is-${tone}">
+      <span class="daily-transition-chip-label">${escapeHtml(label)}</span>
+      <span class="daily-transition-chip-value">${escapeHtml(value)}</span>
+    </span>
+  `;
+}
+
+function getDailyTileByKey(entry, key) {
+  return entry?.comparison?.tiles?.find((tile) => tile.key === key) || null;
+}
+
+function buildDailyToneShiftChip(label, previousTone, currentTone, nearCopy = 'closer') {
+  if (!previousTone || !currentTone || previousTone === currentTone) {
+    return '';
+  }
+  if (currentTone === 'hit') {
+    return '';
+  }
+  if ((DAILY_TONE_ORDER[currentTone] || 0) > (DAILY_TONE_ORDER[previousTone] || 0)) {
+    return buildDailyTransitionChipHtml(label, currentTone === 'hit' ? 'matched' : nearCopy, 'better');
+  }
+  return buildDailyTransitionChipHtml(label, previousTone === 'hit' ? 'left exact match' : 'farther off', 'worse');
+}
+
+function formatDailyCountShift(change, singular, plural = `${singular}s`) {
+  const roundedAmount = Math.round(Math.abs(Number(change) || 0));
+  if (!roundedAmount) {
+    return '';
+  }
+  const noun = roundedAmount === 1 ? singular : plural;
+  return change > 0
+    ? `${formatNumber(roundedAmount)} more ${noun}`
+    : `${formatNumber(roundedAmount)} fewer ${noun}`;
+}
+
+function formatDailyDirectionalShift(change, unit, increaseWord, decreaseWord, pluralUnit = unit) {
+  const roundedAmount = Math.round(Math.abs(Number(change) || 0));
+  if (!roundedAmount) {
+    return '';
+  }
+  const unitLabel = roundedAmount === 1 ? unit : pluralUnit;
+  return `${formatNumber(roundedAmount)} ${unitLabel} ${change > 0 ? increaseWord : decreaseWord}`;
+}
+
+function buildDailyNumericTransitionChip(label, previousValue, currentValue, targetValue, formatter) {
+  if (!isKnownDailyNumber(previousValue) || !isKnownDailyNumber(currentValue) || !isKnownDailyNumber(targetValue)) {
+    return '';
+  }
+  const previousDelta = Math.abs(Number(previousValue) - Number(targetValue));
+  const currentDelta = Math.abs(Number(currentValue) - Number(targetValue));
+  if (currentDelta === previousDelta) {
+    return '';
+  }
+  if (currentDelta === 0) {
+    return '';
+  }
+  const shift = previousDelta - currentDelta;
+  const valueShift = Number(currentValue) - Number(previousValue);
+  const valueCopy = formatter(valueShift);
+  if (!valueCopy) {
+    return '';
+  }
+  return buildDailyTransitionChipHtml(
+    label,
+    valueCopy,
+    shift > 0 ? 'better' : 'worse',
+  );
+}
+
+function buildDailyProfileTransitionChip(previousAirport, currentAirport, targetAirport) {
+  const previousRank = DAILY_PROFILE_RANKS[String(previousAirport?.sizeBucket || '').toLowerCase()];
+  const currentRank = DAILY_PROFILE_RANKS[String(currentAirport?.sizeBucket || '').toLowerCase()];
+  const targetRank = DAILY_PROFILE_RANKS[String(targetAirport?.sizeBucket || '').toLowerCase()];
+  if (!Number.isFinite(previousRank) || !Number.isFinite(currentRank) || !Number.isFinite(targetRank)) {
+    return '';
+  }
+  const previousDelta = Math.abs(previousRank - targetRank);
+  const currentDelta = Math.abs(currentRank - targetRank);
+  if (currentDelta === previousDelta) {
+    return '';
+  }
+  if (currentDelta === 0) {
+    return '';
+  }
+  const shift = previousDelta - currentDelta;
+  const steps = Math.abs(shift);
+  const sizeShift = currentRank - previousRank;
+  return buildDailyTransitionChipHtml(
+    'Profile',
+    `${formatNumber(steps)} size tier${steps === 1 ? '' : 's'} ${sizeShift > 0 ? 'larger' : 'smaller'}`,
+    shift > 0 ? 'better' : 'worse',
+  );
+}
+
+function buildDailyDirectionTransitionChip(currentEntry, previousEntry) {
+  const movementDirection = describeAirportDirection(previousEntry.airport, currentEntry.airport);
+  const previousHint = previousEntry.comparison?.bearingLabel;
+  if (!movementDirection.label || !previousHint || currentEntry.comparison?.distanceKm < 1) {
+    return '';
+  }
+  const courseDelta = getCompassSectorDistance(previousHint, movementDirection.label);
+  if (courseDelta === 0) {
+    return buildDailyTransitionChipHtml('Direction', `${movementDirection.arrow} followed ${previousHint}`, 'better');
+  }
+  if (courseDelta === 1) {
+    return buildDailyTransitionChipHtml('Direction', `${movementDirection.arrow} near ${previousHint}`, 'flat');
+  }
+  return buildDailyTransitionChipHtml('Direction', `${movementDirection.arrow} off ${previousHint}`, 'worse');
+}
+
+function buildDailyGuessTransitionHtml(currentEntry, previousEntry, targetAirport) {
+  const distanceDeltaKm = previousEntry.comparison.distanceKm - currentEntry.comparison.distanceKm;
+  const distanceTone = distanceDeltaKm > 0 ? 'better' : distanceDeltaKm < 0 ? 'worse' : 'flat';
+  const distanceCopy = distanceDeltaKm > 0
+    ? `${formatNumber(Math.round(distanceDeltaKm))} km closer`
+    : distanceDeltaKm < 0
+      ? `${formatNumber(Math.round(Math.abs(distanceDeltaKm)))} km farther`
+      : 'same distance';
+  const chips = [
+    currentEntry.comparison.distanceKm < 1 ? '' : buildDailyTransitionChipHtml('Distance', distanceCopy, distanceTone),
+    buildDailyDirectionTransitionChip(currentEntry, previousEntry),
+    buildDailyProfileTransitionChip(previousEntry.airport, currentEntry.airport, targetAirport),
+    buildDailyToneShiftChip('Continent', getDailyTileByKey(previousEntry, 'continent')?.tone, getDailyTileByKey(currentEntry, 'continent')?.tone),
+    buildDailyToneShiftChip('Country', getDailyTileByKey(previousEntry, 'country')?.tone, getDailyTileByKey(currentEntry, 'country')?.tone, 'same continent'),
+    buildDailyToneShiftChip('Region', getDailyTileByKey(previousEntry, 'region')?.tone, getDailyTileByKey(currentEntry, 'region')?.tone, 'same country'),
+    buildDailyNumericTransitionChip(
+      'Elevation',
+      previousEntry.airport?.elevationFt,
+      currentEntry.airport?.elevationFt,
+      targetAirport?.elevationFt,
+      (valueShift) => formatDailyDirectionalShift(valueShift, 'ft', 'higher', 'lower'),
+    ),
+    buildDailyNumericTransitionChip(
+      'Runways',
+      previousEntry.airport?.runwayCount,
+      currentEntry.airport?.runwayCount,
+      targetAirport?.runwayCount,
+      (valueShift) => formatDailyCountShift(valueShift, 'runway', 'runways'),
+    ),
+    buildDailyNumericTransitionChip(
+      'Longest runway',
+      previousEntry.airport?.longestRunwayFt,
+      currentEntry.airport?.longestRunwayFt,
+      targetAirport?.longestRunwayFt,
+      (valueShift) => formatDailyDirectionalShift(valueShift, 'ft', 'longer', 'shorter'),
+    ),
+    buildDailyNumericTransitionChip(
+      'Navaids',
+      previousEntry.airport?.navaidCount,
+      currentEntry.airport?.navaidCount,
+      targetAirport?.navaidCount,
+      (valueShift) => formatDailyCountShift(valueShift, 'navaid', 'navaids'),
+    ),
+    buildDailyToneShiftChip('Layout', getDailyTileByKey(previousEntry, 'layout')?.tone, getDailyTileByKey(currentEntry, 'layout')?.tone, 'more similar'),
+  ].filter(Boolean);
+  if (!chips.length) {
+    return '';
+  }
+  return `
+    <div class="daily-guess-transition" aria-label="Change from guess ${previousEntry.guessNumber} to guess ${currentEntry.guessNumber}">
+      <span class="daily-transition-label">Guess ${previousEntry.guessNumber} to ${currentEntry.guessNumber}</span>
+      <div class="daily-transition-rail">
+        ${chips.join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderDailyBoard(challenge, session) {
+  const entries = session.guesses
+    .map((airportId, index) => {
+      const airport = state.daily.dataset?.airportsById?.get(airportId);
+      if (!airport) {
+        return null;
+      }
+      return {
+        airport,
+        guessNumber: index + 1,
+        comparison: buildAirportGuessComparison(airport, challenge.target),
+      };
+    })
+    .filter(Boolean);
+  elements.dailyBoardMeta.hidden = true;
+  elements.dailyBoardMeta.textContent = '';
+  if (!entries.length) {
+    elements.dailyBoard.innerHTML = `
+      <div class="daily-board-empty">
+        Your guesses will drop here. Start with a likely airport, then follow the distance and direction clues.
+      </div>
+    `;
+    return [];
+  }
+  const displayEntries = [...entries].reverse();
+  const animatedGuessId = state.daily.pendingAnimatedGuessId;
+  elements.dailyBoard.innerHTML = `
+    <div class="daily-board-stack">
+      ${displayEntries.map((entry, index) => {
+    const { airport, comparison, guessNumber } = entry;
+    const currentRowHtml = `
+      <article class="daily-guess-row${comparison.solved ? ' is-solved' : ''}">
+        <div class="daily-guess-head">
+          <div>
+            <h4 class="daily-guess-title">${escapeHtml(airport.name)}</h4>
+            <p class="daily-guess-subtitle">${escapeHtml(buildAirportOptionLabel(airport))}</p>
+          </div>
+          <span class="daily-guess-badge${comparison.solved ? ' is-solved' : ''}">${comparison.solved ? 'Solved' : `Guess ${guessNumber}`}</span>
+        </div>
+        <div class="daily-guess-grid">
+          ${comparison.tiles.map((tile, tileIndex) => `
+            <div class="daily-guess-tile is-${escapeHtml(tile.tone)}" style="--tile-index:${tileIndex};">
+              <div class="daily-tile-head">
+                <span class="daily-tile-label">${escapeHtml(tile.label)}</span>
+              </div>
+              <div class="daily-tile-value-row">
+                <strong class="daily-tile-value">${escapeHtml(tile.value)}</strong>
+                ${tile.indicator ? `<span class="daily-tile-indicator" aria-hidden="true">${escapeHtml(tile.indicator)}</span>` : ''}
+              </div>
+              <span class="daily-tile-meta">${escapeHtml(tile.meta || '')}</span>
+              ${buildDailyTileHelpHtml(tile.key)}
+            </div>
+          `).join('')}
+        </div>
+      </article>
+    `;
+        return `
+          <div class="daily-board-step${comparison.solved ? ' is-solved' : ''}${animatedGuessId && airport.id === animatedGuessId ? ' is-fresh' : ''}">
+            <div class="daily-board-step-rail" aria-hidden="true">
+              <span class="daily-board-step-node">${escapeHtml(String(guessNumber))}</span>
+              ${index < displayEntries.length - 1 ? '<span class="daily-board-step-line"></span>' : ''}
+            </div>
+            <div class="daily-board-step-body">
+              ${currentRowHtml}
+              ${index < displayEntries.length - 1 ? buildDailyGuessTransitionHtml(entry, displayEntries[index + 1], challenge.target) : ''}
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+  if (animatedGuessId) {
+    state.daily.pendingAnimatedGuessId = '';
+  }
+  return displayEntries.map((entry) => entry.comparison);
+}
+
+function buildDailyMetaGridHtml(challenge, session, stats, countdown, statCelebrateKeys = new Set()) {
+  return [
+    buildDailyStatusBadgeHtml('Reset', countdown, 'UTC', { tone: 'reset' }),
+    buildDailyStatCardHtml('Streak', formatNumber(stats.currentStreak), `${formatNumber(stats.longestStreak)} best`, {
+      isCelebrating: statCelebrateKeys.has('streak'),
+    }),
+    buildDailyStatCardHtml('Win rate', `${formatNumber(stats.winRate)}%`, stats.best ? `${formatDailyGuessCount(stats.best)} best` : 'No clears yet', {
+      isCelebrating: statCelebrateKeys.has('win-rate'),
+    }),
+  ].join('');
+}
+
+function renderDailyErrorState(message) {
+  elements.dailyCommandDeck?.classList.remove('is-victorious');
+  elements.dailyTitle.textContent = DAILY_GAME_NAME;
+  elements.dailyHeroSummary.textContent = 'Board offline';
+  elements.dailyMetaGrid.innerHTML = [
+    buildDailyStatusBadgeHtml('Reset', '--', 'UTC', { tone: 'reset' }),
+    buildDailyStatCardHtml('Streak', '--', 'Unavailable'),
+    buildDailyStatCardHtml('Win rate', '--', 'Unavailable'),
+  ].join('');
+  elements.dailyGuessInput.disabled = true;
+  elements.dailyGuessInput.value = '';
+  elements.dailyGuessInput.setAttribute('aria-expanded', 'false');
+  elements.dailySuggestionList.innerHTML = '';
+  elements.dailyFeedback.hidden = false;
+  elements.dailyFeedback.className = 'daily-feedback is-warning';
+  elements.dailyFeedback.textContent = message;
+  elements.dailyBriefing.innerHTML = `
+    <div class="daily-briefing-card is-warning">
+      <div class="daily-briefing-head">
+        <div class="daily-briefing-copy">
+          <div class="daily-widget-head">
+            <span class="daily-widget-kicker">Daily status</span>
+            <strong class="daily-widget-value">Unavailable</strong>
+          </div>
+          <p class="daily-briefing-note">${escapeHtml(message)}</p>
+        </div>
+      </div>
+      <div class="daily-briefing-foot">
+        ${buildDailySourceNoteHtml()}
+      </div>
+    </div>
+  `;
+  elements.dailyIntel.hidden = true;
+  elements.dailyIntel.innerHTML = '';
+  elements.dailyBoardMeta.hidden = true;
+  elements.dailyBoardMeta.textContent = '';
+  elements.dailyBoard.innerHTML = `
+    <div class="daily-board-empty">
+      Daily data is unavailable right now. The rest of Skyviz still works normally.
+    </div>
+  `;
+  elements.dailyCopyResultButton.hidden = true;
+}
+
+function renderDailyTab() {
+  if (state.daily.error) {
+    renderDailyErrorState(state.daily.error);
+    return;
+  }
+  const challenge = state.daily.challenge;
+  if (!challenge || !state.daily.dataset) {
+    elements.dailyCommandDeck?.classList.remove('is-victorious');
+    elements.dailyTitle.textContent = DAILY_GAME_NAME;
+    elements.dailyHeroSummary.textContent = 'Signal warming up';
+    elements.dailyMetaGrid.innerHTML = [
+      buildDailyStatusBadgeHtml('Reset', formatCountdown(getNextUtcResetTime().getTime() - Date.now()), 'UTC', { tone: 'reset' }),
+      buildDailyStatCardHtml('Streak', '--', 'Loading'),
+      buildDailyStatCardHtml('Win rate', '--', 'Loading'),
+    ].join('');
+    elements.dailyGuessInput.disabled = true;
+    elements.dailyGuessInput.value = '';
+    elements.dailySuggestionList.innerHTML = '';
+    elements.dailyFeedback.hidden = false;
+    elements.dailyFeedback.className = 'daily-feedback is-muted';
+    elements.dailyFeedback.textContent = 'Loading airport data...';
+    renderDailyBriefing({ profile: getDailyChallengeProfile(getUtcDayKey()) }, getDailySession(getUtcDayKey()), formatCountdown(getNextUtcResetTime().getTime() - Date.now()));
+    renderDailyIntel(null, getDailySession(getUtcDayKey()));
+    elements.dailyBoardMeta.hidden = true;
+    elements.dailyBoardMeta.textContent = '';
+    elements.dailyBoard.innerHTML = '<div class="daily-board-empty">Preparing today&apos;s board...</div>';
+    elements.dailyCopyResultButton.hidden = true;
+    return;
+  }
+
+  const session = getDailySession(challenge.dayKey);
+  const stats = buildDailyStats(state.daily.history);
+  const celebrateSolve = session.status === 'won' && state.daily.pendingVictoryDayKey === challenge.dayKey;
+  const statCelebrateKeys = new Set(celebrateSolve ? state.daily.pendingStatCelebrateKeys : []);
+  const countdown = formatCountdown(getNextUtcResetTime().getTime() - Date.now());
+  const canGuess = session.status === 'in_progress' && session.guesses.length < (challenge.maxGuesses || 8);
+  elements.dailyTitle.textContent = DAILY_GAME_NAME;
+  elements.dailyHeroSummary.textContent = canGuess
+    ? 'Type an airport, city, or code. Each guess updates continent, country, region, runway, navaids, layout, elevation, and distance clues.'
+    : session.status === 'won'
+      ? 'Board cleared. Review the clue trail, the revealed airport, and your share-ready grid.'
+      : 'Board complete. Review the clue trail and today\'s revealed airport.';
+  elements.dailyMetaGrid.innerHTML = buildDailyMetaGridHtml(challenge, session, stats, countdown, statCelebrateKeys);
+  elements.dailyGuessInput.disabled = !canGuess;
+  elements.dailyGuessInput.value = state.daily.query;
+  elements.dailyGuessInput.setAttribute('aria-expanded', String(canGuess && state.daily.suggestions.length > 0));
+  elements.dailySuggestionList.innerHTML = canGuess
+    ? state.daily.suggestions.map((airport, index) => `
+        <button
+          class="daily-suggestion-button${index === state.daily.selectedSuggestionIndex ? ' is-active' : ''}"
+          type="button"
+          role="option"
+          aria-selected="${index === state.daily.selectedSuggestionIndex}"
+          data-action="select-daily-suggestion"
+          data-airport-id="${escapeHtml(airport.id)}"
+        >
+          <span class="daily-suggestion-label">${escapeHtml(buildAirportOptionLabel(airport))}</span>
+          <span class="daily-suggestion-meta">${escapeHtml([
+            `${formatNumber(Number(airport.runwayCount) || 0)} runways`,
+            airport.runwayLayoutLabel || 'Layout unknown',
+            airport.surfaceLabel || 'Surface unknown',
+          ].filter(Boolean).join(' / '))}</span>
+        </button>
+      `).join('')
+    : '';
+  const defaultFeedback = canGuess
+    ? (session.guesses.length ? '' : 'Pick a result to submit your next guess, or press Enter on an exact match.')
+    : session.status === 'won'
+      ? 'Board solved.'
+      : 'Board complete.';
+  const feedbackText = state.daily.feedback || defaultFeedback;
+  elements.dailyFeedback.hidden = !feedbackText;
+  elements.dailyFeedback.className = `daily-feedback is-${escapeHtml(state.daily.feedbackTone || 'muted')}`;
+  elements.dailyFeedback.textContent = feedbackText;
+  renderDailyBriefing(challenge, session, countdown);
+  renderDailyBoard(challenge, session);
+  renderDailyIntel(challenge, session, { celebrateSolve });
+  elements.dailyCommandDeck?.classList.toggle('is-victorious', celebrateSolve);
+  const copyButtonConfig = getDailyCopyButtonConfig(challenge, session, { celebrateSolve });
+  elements.dailyCopyResultButton.hidden = !copyButtonConfig;
+  if (copyButtonConfig) {
+    elements.dailyCopyResultButton.className = copyButtonConfig.className;
+    elements.dailyCopyResultButton.innerHTML = `
+      <span class="daily-copy-button-label">${escapeHtml(copyButtonConfig.label)}</span>
+    `;
+  } else {
+    elements.dailyCopyResultButton.className = 'region-action-button daily-copy-button';
+    elements.dailyCopyResultButton.textContent = 'Copy results';
+  }
+  if (state.ui.pendingDailyInputFocus) {
+    focusDailyGuessInput();
+  }
+  if ((session.status === 'won' || session.status === 'lost') && !state.daily.feedback) {
+    setDailyFeedback(
+      session.status === 'won'
+        ? `Cleared in ${formatDailyGuessCount(session.guesses.length)}. The share grid is ready.`
+        : 'No solve today. The answer and clue trail are revealed below.',
+      session.status === 'won' ? 'success' : 'warning',
+    );
+    elements.dailyFeedback.className = `daily-feedback is-${escapeHtml(state.daily.feedbackTone)}`;
+    elements.dailyFeedback.textContent = state.daily.feedback;
+  }
+  if (celebrateSolve) {
+    state.daily.pendingVictoryDayKey = '';
+    state.daily.pendingStatCelebrateKeys = [];
+  }
+}
+
+function scheduleDailyCountdownRefresh() {
+  clearDailyCountdownTimer();
+  renderDailyLandingCta();
+  if (state.activeTab === 'daily') {
+    renderDailyTab();
+  }
+  state.daily.countdownTimer = window.setInterval(() => {
+    const nextDayKey = getUtcDayKey();
+    if (state.daily.dayKey && state.daily.dayKey !== nextDayKey) {
+      state.daily.challenge = null;
+      state.daily.dayKey = '';
+      state.daily.query = '';
+      state.daily.suggestions = [];
+      state.daily.selectedSuggestionIndex = -1;
+      void ensureDailyGameReady({ focusInput: state.activeTab === 'daily' });
+      return;
+    }
+    renderDailyLandingCta();
+    if (state.activeTab === 'daily' && document.activeElement !== elements.dailyGuessInput) {
+      renderDailyTab();
+    }
+  }, 30000);
+}
+
+async function ensureDailyGameReady(options = {}) {
+  const todayKey = getUtcDayKey();
+  if (state.daily.challenge && state.daily.dataset && state.daily.dayKey === todayKey) {
+    if (options.focusInput) {
+      state.ui.pendingDailyInputFocus = true;
+    }
+    renderDailyLandingCta();
+    renderDailyTab();
+    scheduleDailyCountdownRefresh();
+    return true;
+  }
+  state.daily.error = '';
+  if (options.focusInput) {
+    state.ui.pendingDailyInputFocus = true;
+  }
+  try {
+    if (!state.daily.manifest) {
+      state.daily.manifest = await loadAirportGameManifest();
+    }
+    if (!state.daily.dataset) {
+      state.daily.dataset = await loadAirportGameData();
+      state.daily.manifest = state.daily.dataset.manifest;
+    }
+    const selection = selectDailyAirport(state.daily.dataset.airports, todayKey);
+    if (!selection?.airport) {
+      throw new Error('No airport could be selected for today.');
+    }
+    state.daily.dayKey = todayKey;
+    state.daily.challenge = {
+      dayKey: todayKey,
+      profile: selection.profile,
+      continent: selection.continent,
+      target: selection.airport,
+      maxGuesses: Number(state.daily.manifest?.maxGuesses || state.daily.dataset?.payload?.maxGuesses || 8),
+    };
+    state.daily.query = '';
+    state.daily.suggestions = [];
+    state.daily.selectedSuggestionIndex = -1;
+    state.daily.pendingVictoryDayKey = '';
+    state.daily.pendingStatCelebrateKeys = [];
+    state.daily.copyStatus = '';
+    if (!state.daily.feedback) {
+      setDailyFeedback('', 'muted');
+    }
+    renderDailyLandingCta();
+    renderDailyTab();
+    scheduleDailyCountdownRefresh();
+    return true;
+  } catch (error) {
+    state.daily.error = error instanceof Error ? error.message : 'Failed to load the daily airport game data.';
+    renderDailyLandingCta();
+    if (state.activeTab === 'daily') {
+      renderDailyErrorState(state.daily.error);
+    }
+    return false;
+  }
+}
+
+async function openDailyExperience(options = {}) {
+  if (options.syncHash !== false) {
+    updateUrlHash(DAILY_GAME_HASH, { replace: Boolean(options.replaceHash) });
+  }
+  elements.landingView.hidden = true;
+  elements.dashboard.hidden = false;
+  syncDashboardTabAvailability();
+  setActiveTab('daily');
+  const ready = await ensureDailyGameReady({ focusInput: options.focusInput !== false });
+  if (!ready) {
+    setBanner(state.daily.error || 'Daily airport data could not be loaded.', 'warning');
+  }
+}
+
+async function openDailyExperienceFromHash(options = {}) {
+  if (!isDailyHashRoute()) {
+    return false;
+  }
+  if (isLegacyDailyHashRoute()) {
+    updateUrlHash(DAILY_GAME_HASH, { replace: true });
+  }
+  await openDailyExperience({
+    focusInput: Boolean(options.focusInput),
+    syncHash: false,
+  });
+  return true;
+}
+
+function updateDailySuggestions() {
+  if (!state.daily.dataset?.airports || !state.daily.challenge) {
+    state.daily.suggestions = [];
+    state.daily.selectedSuggestionIndex = -1;
+    renderDailyTab();
+    return;
+  }
+  const guessedIds = new Set(getDailySession().guesses);
+  state.daily.suggestions = buildAirportSuggestions(
+    state.daily.dataset.airports,
+    state.daily.query,
+    guessedIds,
+  );
+  state.daily.selectedSuggestionIndex = state.daily.suggestions.length ? 0 : -1;
+  renderDailyTab();
+}
+
+function submitDailyGuessByAirport(airport) {
+  const challenge = state.daily.challenge;
+  if (!challenge || !airport) {
+    setDailyFeedback('Pick an airport from the suggestion list first.', 'warning');
+    renderDailyTab();
+    return;
+  }
+  const session = getDailySession(challenge.dayKey);
+  if (session.status !== 'in_progress' || session.guesses.length >= challenge.maxGuesses) {
+    setDailyFeedback('Today\'s board is already complete.', 'warning');
+    renderDailyTab();
+    return;
+  }
+  if (session.guesses.includes(airport.id)) {
+    setDailyFeedback('That airport is already on your board.', 'warning');
+    renderDailyTab();
+    return;
+  }
+  const previousStats = buildDailyStats(state.daily.history);
+  const nextGuesses = [...session.guesses, airport.id];
+  const solved = airport.id === challenge.target.id;
+  const status = solved
+    ? 'won'
+    : nextGuesses.length >= challenge.maxGuesses
+      ? 'lost'
+      : 'in_progress';
+  updateDailySession(challenge.dayKey, {
+    guesses: nextGuesses,
+    status,
+    hintRevealed: session.hintRevealed,
+    completedAt: status === 'in_progress' ? session.completedAt : new Date().toISOString(),
+  });
+  const nextStats = buildDailyStats(state.daily.history);
+  state.daily.pendingAnimatedGuessId = airport.id;
+  state.daily.copyStatus = '';
+  state.daily.pendingVictoryDayKey = solved ? challenge.dayKey : '';
+  state.daily.pendingStatCelebrateKeys = solved
+    ? [
+      nextStats.currentStreak !== previousStats.currentStreak ? 'streak' : '',
+      nextStats.winRate !== previousStats.winRate ? 'win-rate' : '',
+    ].filter(Boolean)
+    : [];
+  state.daily.query = '';
+  state.daily.suggestions = [];
+  state.daily.selectedSuggestionIndex = -1;
+  setDailyFeedback(
+    solved
+      ? `Nailed it in ${formatDailyGuessCount(nextGuesses.length)}.`
+      : status === 'lost'
+        ? 'Out of guesses. Today\'s airport is revealed below.'
+        : '',
+    solved ? 'success' : status === 'lost' ? 'warning' : 'muted',
+  );
+  renderDailyLandingCta();
+  renderDailyTab();
+}
+
+function revealDailyHint() {
+  const challenge = state.daily.challenge;
+  if (!challenge) {
+    return;
+  }
+  const session = getDailySession(challenge.dayKey);
+  if (session.hintRevealed || session.guesses.length < 3) {
+    return;
+  }
+  updateDailySession(challenge.dayKey, {
+    ...session,
+    hintRevealed: true,
+  });
+  setDailyFeedback('Hint revealed below.', 'success');
+  renderDailyTab();
+}
+
+async function copyDailyResultToClipboard() {
+  const challenge = state.daily.challenge;
+  const session = getDailySession();
+  if (!challenge || (session.status !== 'won' && session.status !== 'lost')) {
+    return;
+  }
+  const comparisons = session.guesses
+    .map((airportId) => state.daily.dataset?.airportsById?.get(airportId))
+    .filter(Boolean)
+    .map((airport) => buildAirportGuessComparison(airport, challenge.target));
+  const text = buildDailyShareText(challenge, session, comparisons, {
+    shareUrl: getDailyShareUrl(),
+  });
+  try {
+    await navigator.clipboard.writeText(text);
+    state.daily.copyStatus = 'copied';
+    setDailyFeedback(
+      session.status === 'won'
+        ? 'Results copied. Paste them anywhere.'
+        : 'Results copied. Paste them anywhere.',
+      'success',
+    );
+  } catch {
+    state.daily.copyStatus = 'error';
+    setDailyFeedback('Clipboard access failed in this browser. Try Copy results again.', 'warning');
+  }
+  renderDailyTab();
 }
 
 function wireBanner() {
@@ -1973,6 +3244,10 @@ function resetToLanding({
   state.aircraft.renderQueued = false;
   state.upload.fileName = '';
   state.upload.text = '';
+  state.daily.query = '';
+  state.daily.suggestions = [];
+  state.daily.selectedSuggestionIndex = -1;
+  setDailyFeedback('', 'muted');
   resetRegistrationModalState();
   resetModelRegsModalState();
   setRegistrationModalOpen(false, { restoreFocus: false });
@@ -1992,6 +3267,8 @@ function resetToLanding({
   elements.dashboard.hidden = true;
   elements.landingView.hidden = false;
   setDataToolsOpen(false);
+  syncDashboardTabAvailability();
+  renderDailyLandingCta();
 
   if (clearPersisted) {
     clearPersistedUpload();
@@ -2055,20 +3332,32 @@ function wireDataTools() {
 }
 
 function setActiveTab(tabId) {
+  const wantsCollectionTab = tabId === 'map' || tabId === 'aircraft';
+  if (wantsCollectionTab && !state.model) {
+    setBanner('Upload a Skycards export to unlock the Map and Deck tabs. DAILY works without an upload.', 'info', {
+      autoDismissMs: 5000,
+    });
+    tabId = 'daily';
+  }
   state.activeTab = tabId;
   const isMap = tabId === 'map';
-  if (isMap && state.ui.registrationModalOpen) {
+  const isAircraft = tabId === 'aircraft';
+  const isDaily = tabId === 'daily';
+  if (!isAircraft && state.ui.registrationModalOpen) {
     setRegistrationModalOpen(false, { restoreFocus: false });
   }
-  if (isMap && state.ui.modelRegsModalOpen) {
+  if (!isAircraft && state.ui.modelRegsModalOpen) {
     setModelRegsModalOpen(false, { restoreFocus: false });
   }
   elements.mapTabButton.classList.toggle('is-active', isMap);
-  elements.aircraftTabButton.classList.toggle('is-active', !isMap);
+  elements.aircraftTabButton.classList.toggle('is-active', isAircraft);
+  elements.dailyTabButton.classList.toggle('is-active', isDaily);
   elements.mapTabButton.setAttribute('aria-selected', String(isMap));
-  elements.aircraftTabButton.setAttribute('aria-selected', String(!isMap));
+  elements.aircraftTabButton.setAttribute('aria-selected', String(isAircraft));
+  elements.dailyTabButton.setAttribute('aria-selected', String(isDaily));
   elements.mapTabPanel.hidden = !isMap;
-  elements.aircraftTabPanel.hidden = isMap;
+  elements.aircraftTabPanel.hidden = !isAircraft;
+  elements.dailyTabPanel.hidden = !isDaily;
   if (isMap) {
     requestAnimationFrame(() => {
       if (state.map.instance) {
@@ -2077,17 +3366,43 @@ function setActiveTab(tabId) {
     });
     return;
   }
+  if (isAircraft) {
+    requestAnimationFrame(() => {
+      queueAircraftListRender();
+    });
+    return;
+  }
   requestAnimationFrame(() => {
-    queueAircraftListRender();
+    if (state.daily.challenge || state.daily.error) {
+      renderDailyTab();
+    } else {
+      void ensureDailyGameReady({ focusInput: true });
+    }
   });
 }
 
 function wireTabs() {
-  const buttons = [elements.mapTabButton, elements.aircraftTabButton];
+  const buttons = [elements.mapTabButton, elements.aircraftTabButton, elements.dailyTabButton];
+  const syncTabHash = (target) => {
+    if (target === 'daily') {
+      updateUrlHash(DAILY_GAME_HASH);
+      return;
+    }
+    if (isDailyHashRoute()) {
+      updateUrlHash('');
+    }
+  };
   for (const button of buttons) {
     button.addEventListener('click', () => {
+      if (button.disabled) {
+        setBanner('Upload a Skycards export to unlock the Map and Deck tabs. DAILY works without an upload.', 'info', {
+          autoDismissMs: 5000,
+        });
+        return;
+      }
       const target = button.dataset.tab;
       if (target) {
+        syncTabHash(target);
         setActiveTab(target);
       }
     });
@@ -2096,14 +3411,17 @@ function wireTabs() {
         return;
       }
       event.preventDefault();
-      const currentIndex = buttons.indexOf(button);
-      const nextIndex = event.key === 'ArrowRight'
-        ? (currentIndex + 1) % buttons.length
-        : (currentIndex - 1 + buttons.length) % buttons.length;
+      let nextIndex = buttons.indexOf(button);
+      do {
+        nextIndex = event.key === 'ArrowRight'
+          ? (nextIndex + 1) % buttons.length
+          : (nextIndex - 1 + buttons.length) % buttons.length;
+      } while (buttons[nextIndex].disabled && nextIndex !== buttons.indexOf(button));
       const nextButton = buttons[nextIndex];
       nextButton.focus();
       const target = nextButton.dataset.tab;
       if (target) {
+        syncTabHash(target);
         setActiveTab(target);
       }
     });
@@ -4100,6 +5418,7 @@ function renderDashboard(model, references = null) {
   elements.landingView.hidden = true;
   elements.dashboard.hidden = false;
   setDataToolsOpen(false);
+  syncDashboardTabAvailability();
   renderMapTab(model);
   renderAircraftTab(model);
   setActiveTab('map');
@@ -4395,6 +5714,153 @@ function wireMapCompletionControls() {
   };
 
   elements.mapDrillProgress.addEventListener('click', onCompletionRowClick);
+}
+
+function wireDailyGame() {
+  const syncDailyHelpOpenState = () => {
+    elements.dailyBoard.querySelectorAll('.daily-guess-tile').forEach((tile) => {
+      tile.classList.toggle('is-help-open', Boolean(tile.querySelector('.daily-tile-help[open]')));
+    });
+    elements.dailyBoard.querySelectorAll('.daily-board-step').forEach((step) => {
+      step.classList.toggle('is-help-open', Boolean(step.querySelector('.daily-tile-help[open]')));
+    });
+  };
+
+  elements.dailyLaunchButton?.addEventListener('click', (event) => {
+    event.preventDefault();
+    void openDailyExperience({ focusInput: true });
+  });
+
+  elements.dailyGuessInput.addEventListener('input', () => {
+    state.daily.query = elements.dailyGuessInput.value;
+    state.daily.selectedSuggestionIndex = -1;
+    if (!state.daily.query.trim()) {
+      state.daily.suggestions = [];
+      setDailyFeedback('', 'muted');
+      renderDailyTab();
+      return;
+    }
+    setDailyFeedback('', 'muted');
+    updateDailySuggestions();
+  });
+
+  elements.dailyGuessInput.addEventListener('keydown', (event) => {
+    if (!state.daily.suggestions.length) {
+      if (event.key === 'Escape') {
+        state.daily.query = '';
+        state.daily.suggestions = [];
+        elements.dailyGuessInput.value = '';
+        renderDailyTab();
+      }
+      return;
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const maxIndex = state.daily.suggestions.length - 1;
+      if (event.key === 'ArrowDown') {
+        state.daily.selectedSuggestionIndex = state.daily.selectedSuggestionIndex >= maxIndex
+          ? 0
+          : state.daily.selectedSuggestionIndex + 1;
+      } else {
+        state.daily.selectedSuggestionIndex = state.daily.selectedSuggestionIndex <= 0
+          ? maxIndex
+          : state.daily.selectedSuggestionIndex - 1;
+      }
+      renderDailyTab();
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      state.daily.suggestions = [];
+      state.daily.selectedSuggestionIndex = -1;
+      renderDailyTab();
+    }
+  });
+
+  elements.dailyGuessForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!state.daily.challenge || !state.daily.dataset) {
+      return;
+    }
+    const guessedIds = new Set(getDailySession().guesses);
+    const selectedAirport = state.daily.selectedSuggestionIndex >= 0
+      ? state.daily.suggestions[state.daily.selectedSuggestionIndex]
+      : null;
+    const resolvedAirport = selectedAirport
+      || resolveAirportGuess(state.daily.dataset.airports, state.daily.query, guessedIds)
+      || (state.daily.suggestions.length === 1 ? state.daily.suggestions[0] : null);
+    if (!resolvedAirport) {
+      setDailyFeedback('Choose an airport from the suggestion list or type an exact code.', 'warning');
+      renderDailyTab();
+      return;
+    }
+    submitDailyGuessByAirport(resolvedAirport);
+  });
+
+  elements.dailySuggestionList.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const button = target.closest('button[data-action="select-daily-suggestion"][data-airport-id]');
+    if (!(button instanceof HTMLButtonElement) || !state.daily.dataset) {
+      return;
+    }
+    const airportId = String(button.getAttribute('data-airport-id') || '');
+    const airport = state.daily.dataset.airportsById.get(airportId);
+    if (!airport) {
+      return;
+    }
+    submitDailyGuessByAirport(airport);
+  });
+
+  elements.dailyBoard.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const toggle = target.closest('.daily-tile-help-toggle');
+    const openPanels = elements.dailyBoard.querySelectorAll('.daily-tile-help[open]');
+    if (toggle) {
+      event.preventDefault();
+      const details = toggle.closest('.daily-tile-help');
+      if (!(details instanceof HTMLDetailsElement)) {
+        return;
+      }
+      const nextOpen = !details.open;
+      openPanels.forEach((panel) => {
+        if (panel !== details) {
+          panel.open = false;
+        }
+      });
+      details.open = nextOpen;
+      syncDailyHelpOpenState();
+      return;
+    }
+    if (target.closest('.daily-tile-help')) {
+      return;
+    }
+    openPanels.forEach((panel) => {
+      panel.open = false;
+    });
+    syncDailyHelpOpenState();
+  });
+
+  elements.dailyBriefing.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const revealButton = target.closest('button[data-action="reveal-daily-hint"]');
+    if (!revealButton) {
+      return;
+    }
+    revealDailyHint();
+  });
+
+  elements.dailyCopyResultButton.addEventListener('click', () => {
+    void copyDailyResultToClipboard();
+  });
 }
 
 function wireAircraftControls() {
@@ -4892,7 +6358,11 @@ async function bootstrap() {
   wireTabs();
   wireDataTools();
   wireMapCompletionControls();
+  wireDailyGame();
   wireAircraftControls();
+  window.addEventListener('hashchange', () => {
+    void openDailyExperienceFromHash({ focusInput: false });
+  });
   syncCompletionSortControls();
   syncAircraftSortControls();
   resetRegistrationModalState();
@@ -4903,8 +6373,11 @@ async function bootstrap() {
   syncRegistrationModalControls();
   renderRegistrationModalTrigger(null);
   state.manualRegistrationMappings = readManualRegistrationMappings();
+  state.daily.history = readDailyHistory();
+  renderDailyLandingCta();
   updateManualMappingStorageMeta(null);
   setPersistPreferenceChecked(readPersistPreference());
+  syncDashboardTabAvailability();
   syncDataToolsPanelState();
   const persistedUpload = readPersistedUpload();
   const shouldRestorePersistedUpload = elements.persistUpload.checked && Boolean(persistedUpload);
@@ -4928,6 +6401,12 @@ async function bootstrap() {
 
   try {
     const manifest = await loadReferenceManifest();
+    try {
+      state.daily.manifest = await loadAirportGameManifest();
+    } catch {
+      state.daily.manifest = null;
+    }
+    renderDailyLandingCta();
     const modelDate = formatDateFromMillis(manifest?.datasets?.models?.updatedAt);
     const airportDate = formatDateFromMillis(manifest?.datasets?.airports?.updatedAt);
     setReferenceStatus(`Reference snapshot: models ${modelDate}, airports ${airportDate}, client ${manifest?.clientVersion || 'unknown'}.`, 'ok');
@@ -4935,19 +6414,22 @@ async function bootstrap() {
       setBootState(true, 'Loading saved local data from this device...');
       await tryLoadPersistedUpload(persistedUpload);
     }
-    if (!state.model) {
+    const openedDailyFromHash = await openDailyExperienceFromHash({ focusInput: false });
+    if (!state.model && !openedDailyFromHash) {
       elements.landingView.hidden = false;
       elements.dashboard.hidden = true;
     }
   } catch (error) {
     setReferenceStatus('Reference manifest failed to load. Uploads will not work until committed data files are served.', 'warning');
     setBanner(error instanceof Error ? error.message : 'Reference manifest failed to load.', 'warning');
-    if (!state.model) {
+    const openedDailyFromHash = await openDailyExperienceFromHash({ focusInput: false });
+    if (!state.model && !openedDailyFromHash) {
       elements.landingView.hidden = false;
       elements.dashboard.hidden = true;
     }
   }
   setBootState(false);
+  scheduleDailyCountdownRefresh();
 
   if (!window.L) {
     setBanner('Leaflet did not load. The map tab will stay unavailable until the Leaflet script is reachable.', 'warning');

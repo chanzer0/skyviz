@@ -10,5 +10,8 @@ output/
 AGENTS.local.md
 
 site/data/reference/*
+site/data/airports/*.csv
+site/data/airports/daily-game.json
+site/data/airports/manifest.json
 skycards_user.json
 cdn_index.json

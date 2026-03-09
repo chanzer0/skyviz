@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://chanzer0.github.io/skyviz/sitemap.xml

@@ -123,10 +123,49 @@ def check_reference_data() -> None:
         print('reference aircraft lookup (resolved):', f"hex_rows={len(aircraft_lookup_resolved['byAircraftHex'])}")
 
 
+def check_airport_daily_game_data() -> None:
+    manifest_path = REPO_ROOT / 'site' / 'data' / 'airports' / 'manifest.json'
+    dataset_path = REPO_ROOT / 'site' / 'data' / 'airports' / 'daily-game.json'
+    manifest = _load_json(manifest_path)
+    dataset = _load_json(dataset_path)
+    if dataset.get('source') != 'OurAirports Open Data':
+        raise SystemExit('smoke_check: airport daily dataset source mismatch')
+    if not isinstance(dataset.get('airports'), list) or not dataset['airports']:
+        raise SystemExit('smoke_check: airport daily dataset has no airports')
+    if manifest.get('dailyDataPath') != './daily-game.json':
+        raise SystemExit('smoke_check: airport daily manifest dailyDataPath mismatch')
+    if int(manifest.get('guessableAirports') or 0) != len(dataset['airports']):
+        raise SystemExit('smoke_check: airport daily manifest guessableAirports does not match dataset length')
+    first_airport = dataset['airports'][0]
+    required_fields = {
+        'id',
+        'ident',
+        'displayCode',
+        'name',
+        'continent',
+        'countryCode',
+        'regionCode',
+        'runwayCount',
+        'navaidCount',
+        'targetTier',
+    }
+    missing = sorted(required_fields - set(first_airport))
+    if missing:
+        raise SystemExit(f'smoke_check: airport daily dataset first row missing fields: {missing}')
+    print(
+        'airport daily dataset:',
+        f"airports={len(dataset['airports'])}",
+        f"hub={manifest.get('targetTierCounts', {}).get('hub', 0)}",
+        f"regional={manifest.get('targetTierCounts', {}).get('regional', 0)}",
+        f"frontier={manifest.get('targetTierCounts', {}).get('frontier', 0)}",
+    )
+
+
 def main() -> int:
     check_repo_hygiene()
     check_sample_collection()
     check_reference_data()
+    check_airport_daily_game_data()
     print('smoke_check: ok')
     return 0
 
