@@ -126,7 +126,6 @@ const elements = {
   aircraftDetailOpenRegs: document.querySelector('#aircraft-detail-open-regs'),
   aircraftDetailKpis: document.querySelector('#aircraft-detail-kpis'),
   aircraftDetailMetaSections: document.querySelector('#aircraft-detail-meta-sections'),
-  dailyCopyResultButton: document.querySelector('#daily-copy-result'),
   dailyTitle: document.querySelector('#daily-title'),
   dailyHeroSummary: document.querySelector('#daily-hero-summary'),
   dailyMetaGrid: document.querySelector('#daily-meta-grid'),
@@ -236,6 +235,18 @@ const DAILY_TILE_HELP = Object.freeze({
     examples: 'If the card says 500 km with a northeast arrow, the target is 500 km to the northeast of your guess.',
   },
 });
+const DAILY_TRACKER_TILE_SPECS = Object.freeze([
+  { key: 'profile', label: 'Profile' },
+  { key: 'continent', label: 'Continent' },
+  { key: 'country', label: 'Country' },
+  { key: 'region', label: 'Region' },
+  { key: 'elevation', label: 'Elevation' },
+  { key: 'runways', label: 'Runways' },
+  { key: 'longest-runway', label: 'Longest runway' },
+  { key: 'navaids', label: 'Navaids' },
+  { key: 'layout', label: 'Layout' },
+  { key: 'distance', label: 'Distance' },
+]);
 const REGISTRATION_MODAL_FILTERS = new Set(['all', 'manual', 'high', 'medium', 'ambiguous', 'low']);
 const REGISTRATION_MODAL_CONFIDENCE_LABELS = {
   manual: 'Manual override',
@@ -639,17 +650,32 @@ function getDailyCopyButtonConfig(challenge, session, options = {}) {
     return {
       className: `region-action-button daily-copy-button${isVictory ? ' is-victory' : ' is-loss'} is-error`,
       label: 'Copy results',
+      note: 'Try again',
     };
   }
   return isVictory
     ? {
       className: `region-action-button daily-copy-button is-victory${celebrateSolve ? ' is-celebrating' : ''}`,
       label: 'Copy results',
+      note: `${formatDailyGuessCount(session.guesses.length)} logged`,
     }
     : {
       className: 'region-action-button daily-copy-button is-loss',
       label: 'Copy results',
+      note: 'Share-ready grid',
     };
+}
+
+function buildDailyCopyButtonHtml(copyButtonConfig) {
+  if (!copyButtonConfig) {
+    return '';
+  }
+  return `
+    <button class="${escapeHtml(copyButtonConfig.className)} daily-answer-copy-action" type="button" data-action="copy-daily-results">
+      <span class="daily-copy-button-label">${escapeHtml(copyButtonConfig.label)}</span>
+      ${copyButtonConfig.note ? `<span class="daily-copy-button-note">${escapeHtml(copyButtonConfig.note)}</span>` : ''}
+    </button>
+  `;
 }
 
 function buildDailyRunwayLightHtml(index, spentCount, status) {
@@ -843,6 +869,9 @@ function renderDailyIntel(challenge, session, options = {}) {
   const hint = buildAirportHint(target, { revealAnswer });
   if (session.status === 'won' || session.status === 'lost') {
     const guessesRemaining = Math.max((challenge.maxGuesses || 8) - session.guesses.length, 0);
+    const copyButtonConfig = session.status === 'won'
+      ? getDailyCopyButtonConfig(challenge, session, { celebrateSolve })
+      : null;
     elements.dailyIntel.hidden = false;
     elements.dailyIntel.innerHTML = `
       <div class="daily-answer-card${session.status === 'won' ? ' is-victory' : ''}${celebrateSolve ? ' is-celebrating' : ''}">
@@ -852,14 +881,9 @@ function renderDailyIntel(challenge, session, options = {}) {
             <p class="eyebrow">${session.status === 'won' ? 'Direct hit' : 'Revealed airport'}</p>
             <h4 class="daily-answer-title">${escapeHtml(target.name)}</h4>
             <p class="daily-answer-copy">${escapeHtml(buildAirportOptionLabel(target))}</p>
+            ${session.status === 'won' ? `<p class="daily-answer-status">${escapeHtml(`${formatDailyGuessCount(session.guesses.length)} with ${formatNumber(guessesRemaining)} ${guessesRemaining === 1 ? 'try' : 'tries'} to spare.`)}</p>` : ''}
           </div>
-          ${session.status === 'won' ? `
-            <div class="daily-victory-banner${celebrateSolve ? ' is-celebrating' : ''}">
-              <span class="daily-victory-banner-kicker">Fireworks</span>
-              <strong class="daily-victory-banner-value">${escapeHtml(formatDailyGuessCount(session.guesses.length))}</strong>
-              <span class="daily-victory-banner-note">${formatNumber(guessesRemaining)} ${guessesRemaining === 1 ? 'try' : 'tries'} to spare</span>
-            </div>
-          ` : ''}
+          ${buildDailyCopyButtonHtml(copyButtonConfig)}
         </div>
         <div class="daily-answer-facts">
           <div class="daily-answer-fact">
@@ -926,6 +950,146 @@ function buildDailyTransitionChipHtml(label, value, tone = 'flat') {
 
 function getDailyTileByKey(entry, key) {
   return entry?.comparison?.tiles?.find((tile) => tile.key === key) || null;
+}
+
+function getDailyTrackerNumericDelta(guessValue, targetValue) {
+  const safeGuess = Number(guessValue);
+  const safeTarget = Number(targetValue);
+  if (!Number.isFinite(safeGuess) || !Number.isFinite(safeTarget)) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return Math.abs(safeGuess - safeTarget);
+}
+
+function getDailyTrackerMetric(entry, key, targetAirport) {
+  const tile = getDailyTileByKey(entry, key);
+  if (!tile) {
+    return Number.POSITIVE_INFINITY;
+  }
+  switch (key) {
+    case 'profile': {
+      const guessRank = DAILY_PROFILE_RANKS[String(entry?.airport?.sizeBucket || '').toLowerCase()];
+      const targetRank = DAILY_PROFILE_RANKS[String(targetAirport?.sizeBucket || '').toLowerCase()];
+      return Number.isFinite(guessRank) && Number.isFinite(targetRank)
+        ? Math.abs(guessRank - targetRank)
+        : Number.POSITIVE_INFINITY;
+    }
+    case 'continent':
+    case 'country':
+    case 'region':
+    case 'layout':
+      return tile.tone === 'hit' ? 0 : tile.tone === 'near' ? 1 : 2;
+    case 'elevation':
+      return getDailyTrackerNumericDelta(entry?.airport?.elevationFt, targetAirport?.elevationFt);
+    case 'runways':
+      return getDailyTrackerNumericDelta(entry?.airport?.runwayCount, targetAirport?.runwayCount);
+    case 'longest-runway':
+      return getDailyTrackerNumericDelta(entry?.airport?.longestRunwayFt, targetAirport?.longestRunwayFt);
+    case 'navaids':
+      return getDailyTrackerNumericDelta(entry?.airport?.navaidCount, targetAirport?.navaidCount);
+    case 'distance':
+      return Number.isFinite(entry?.comparison?.distanceKm) ? entry.comparison.distanceKm : Number.POSITIVE_INFINITY;
+    default:
+      return Number.POSITIVE_INFINITY;
+  }
+}
+
+function pickDailyTrackerEntry(entries, key, targetAirport) {
+  return entries.reduce((bestEntry, entry) => {
+    if (!bestEntry) {
+      return entry;
+    }
+    const bestMetric = getDailyTrackerMetric(bestEntry, key, targetAirport);
+    const entryMetric = getDailyTrackerMetric(entry, key, targetAirport);
+    if (entryMetric !== bestMetric) {
+      return entryMetric < bestMetric ? entry : bestEntry;
+    }
+    const bestTone = DAILY_TONE_ORDER[getDailyTileByKey(bestEntry, key)?.tone] ?? -1;
+    const entryTone = DAILY_TONE_ORDER[getDailyTileByKey(entry, key)?.tone] ?? -1;
+    if (entryTone !== bestTone) {
+      return entryTone > bestTone ? entry : bestEntry;
+    }
+    return (entry?.guessNumber || 0) >= (bestEntry?.guessNumber || 0) ? entry : bestEntry;
+  }, null);
+}
+
+function buildDailyTrackerTiles(entries, targetAirport) {
+  return DAILY_TRACKER_TILE_SPECS.map((spec) => {
+    const bestEntry = pickDailyTrackerEntry(entries, spec.key, targetAirport);
+    if (!bestEntry) {
+      return {
+        ...spec,
+        tone: 'pending',
+        value: '--',
+        indicator: '',
+        meta: '',
+      };
+    }
+    const bestTile = getDailyTileByKey(bestEntry, spec.key);
+    return {
+      ...bestTile,
+      key: spec.key,
+      label: bestTile?.label || spec.label,
+    };
+  });
+}
+
+function shouldRenderDailyTileMeta(tile) {
+  return tile?.key === 'distance' && Boolean(String(tile?.meta || '').trim());
+}
+
+function buildDailyTileHtml(tile, tileIndex, options = {}) {
+  const tone = String(tile?.tone || 'pending').trim() || 'pending';
+  const value = tile?.value ?? '--';
+  const metaHtml = shouldRenderDailyTileMeta(tile)
+    ? `<span class="daily-tile-meta">${escapeHtml(tile.meta || '')}</span>`
+    : '';
+  const trackerClass = options.isTracker ? ' is-tracker-tile' : '';
+  return `
+    <div class="daily-guess-tile is-${escapeHtml(tone)}${trackerClass}" style="--tile-index:${tileIndex};">
+      <div class="daily-tile-head">
+        <span class="daily-tile-label">${escapeHtml(tile?.label || '')}</span>
+      </div>
+      <div class="daily-tile-value-row">
+        <strong class="daily-tile-value${tone === 'pending' ? ' is-pending' : ''}">${escapeHtml(String(value))}</strong>
+        ${tile?.indicator ? `<span class="daily-tile-indicator" aria-hidden="true">${escapeHtml(tile.indicator)}</span>` : ''}
+      </div>
+      ${metaHtml}
+      ${tile?.key ? buildDailyTileHelpHtml(tile.key) : ''}
+    </div>
+  `;
+}
+
+function buildDailyGuessGridHtml(tiles, options = {}) {
+  return `
+    <div class="daily-guess-grid">
+      ${tiles.map((tile, tileIndex) => buildDailyTileHtml(tile, tileIndex, options)).join('')}
+    </div>
+  `;
+}
+
+function buildDailyTrackerRowHtml(entries, targetAirport) {
+  const trackerTiles = buildDailyTrackerTiles(entries, targetAirport);
+  const exactCount = trackerTiles.filter((tile) => tile.tone === 'hit').length;
+  const hasEntries = entries.length > 0;
+  const subtitle = hasEntries
+    ? 'The strongest clue you have logged in each category stays pinned here.'
+    : 'Your strongest clue in each category will pin here after the first guess.';
+  const badge = hasEntries ? `${formatNumber(exactCount)} exact` : 'No guesses';
+  return `
+    <div class="daily-board-anchor">
+      <article class="daily-guess-row is-tracker${exactCount === trackerTiles.length && hasEntries ? ' is-solved' : ''}">
+        <div class="daily-guess-head">
+          <div>
+            <h4 class="daily-guess-title">Best so far</h4>
+            <p class="daily-guess-subtitle">${escapeHtml(subtitle)}</p>
+          </div>
+          <span class="daily-guess-badge is-tracker">${escapeHtml(badge)}</span>
+        </div>
+        ${buildDailyGuessGridHtml(trackerTiles, { isTracker: true })}
+      </article>
+    </div>
+  `;
 }
 
 function buildDailyToneShiftChip(label, previousTone, currentTone, nearCopy = 'closer') {
@@ -1101,10 +1265,12 @@ function renderDailyBoard(challenge, session) {
     .filter(Boolean);
   elements.dailyBoardMeta.hidden = true;
   elements.dailyBoardMeta.textContent = '';
+  const trackerRowHtml = session.status === 'won' ? '' : buildDailyTrackerRowHtml(entries, challenge.target);
   if (!entries.length) {
     elements.dailyBoard.innerHTML = `
+      ${trackerRowHtml}
       <div class="daily-board-empty">
-        Your guesses will drop here. Start with a likely airport, then follow the distance and direction clues.
+        Your guesses will stack below the tracker. Start with a likely airport, then follow the distance and direction clues.
       </div>
     `;
     return [];
@@ -1112,6 +1278,7 @@ function renderDailyBoard(challenge, session) {
   const displayEntries = [...entries].reverse();
   const animatedGuessId = state.daily.pendingAnimatedGuessId;
   elements.dailyBoard.innerHTML = `
+    ${trackerRowHtml}
     <div class="daily-board-stack">
       ${displayEntries.map((entry, index) => {
     const { airport, comparison, guessNumber } = entry;
@@ -1124,21 +1291,7 @@ function renderDailyBoard(challenge, session) {
           </div>
           <span class="daily-guess-badge${comparison.solved ? ' is-solved' : ''}">${comparison.solved ? 'Solved' : `Guess ${guessNumber}`}</span>
         </div>
-        <div class="daily-guess-grid">
-          ${comparison.tiles.map((tile, tileIndex) => `
-            <div class="daily-guess-tile is-${escapeHtml(tile.tone)}" style="--tile-index:${tileIndex};">
-              <div class="daily-tile-head">
-                <span class="daily-tile-label">${escapeHtml(tile.label)}</span>
-              </div>
-              <div class="daily-tile-value-row">
-                <strong class="daily-tile-value">${escapeHtml(tile.value)}</strong>
-                ${tile.indicator ? `<span class="daily-tile-indicator" aria-hidden="true">${escapeHtml(tile.indicator)}</span>` : ''}
-              </div>
-              <span class="daily-tile-meta">${escapeHtml(tile.meta || '')}</span>
-              ${buildDailyTileHelpHtml(tile.key)}
-            </div>
-          `).join('')}
-        </div>
+        ${buildDailyGuessGridHtml(comparison.tiles)}
       </article>
     `;
         return `
@@ -1215,7 +1368,6 @@ function renderDailyErrorState(message) {
       Daily data is unavailable right now. The rest of Skyviz still works normally.
     </div>
   `;
-  elements.dailyCopyResultButton.hidden = true;
 }
 
 function renderDailyTab() {
@@ -1244,7 +1396,6 @@ function renderDailyTab() {
     elements.dailyBoardMeta.hidden = true;
     elements.dailyBoardMeta.textContent = '';
     elements.dailyBoard.innerHTML = '<div class="daily-board-empty">Preparing today&apos;s board...</div>';
-    elements.dailyCopyResultButton.hidden = true;
     return;
   }
 
@@ -1296,17 +1447,6 @@ function renderDailyTab() {
   renderDailyBoard(challenge, session);
   renderDailyIntel(challenge, session, { celebrateSolve });
   elements.dailyCommandDeck?.classList.toggle('is-victorious', celebrateSolve);
-  const copyButtonConfig = getDailyCopyButtonConfig(challenge, session, { celebrateSolve });
-  elements.dailyCopyResultButton.hidden = !copyButtonConfig;
-  if (copyButtonConfig) {
-    elements.dailyCopyResultButton.className = copyButtonConfig.className;
-    elements.dailyCopyResultButton.innerHTML = `
-      <span class="daily-copy-button-label">${escapeHtml(copyButtonConfig.label)}</span>
-    `;
-  } else {
-    elements.dailyCopyResultButton.className = 'region-action-button daily-copy-button';
-    elements.dailyCopyResultButton.textContent = 'Copy results';
-  }
   if (state.ui.pendingDailyInputFocus) {
     focusDailyGuessInput();
   }
@@ -5858,7 +5998,15 @@ function wireDailyGame() {
     revealDailyHint();
   });
 
-  elements.dailyCopyResultButton.addEventListener('click', () => {
+  elements.dailyIntel.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const copyButton = target.closest('button[data-action="copy-daily-results"]');
+    if (!copyButton) {
+      return;
+    }
     void copyDailyResultToClipboard();
   });
 }

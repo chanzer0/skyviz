@@ -2274,6 +2274,10 @@ code {
   gap: 0.58rem;
 }
 
+.daily-board-anchor {
+  position: static;
+}
+
 .daily-board-meta {
   margin: 0;
   width: fit-content;
@@ -2375,6 +2379,17 @@ code {
 .daily-guess-row.is-solved {
   border-color: rgba(35, 131, 82, 0.26);
   box-shadow: 0 16px 34px rgba(28, 112, 71, 0.12);
+}
+
+.daily-guess-row.is-tracker {
+  border-color: rgba(15, 63, 112, 0.2);
+  background:
+    radial-gradient(circle at right top, rgba(22, 131, 146, 0.13), transparent 32%),
+    linear-gradient(155deg, rgba(251, 254, 255, 0.97), rgba(238, 245, 251, 0.94));
+  box-shadow:
+    0 20px 42px rgba(15, 43, 64, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.52);
+  backdrop-filter: blur(12px);
 }
 
 .daily-board-step.is-fresh .daily-guess-row {
@@ -2516,6 +2531,12 @@ code {
   color: #145f3b;
 }
 
+.daily-guess-badge.is-tracker {
+  border-color: rgba(15, 63, 112, 0.24);
+  background: rgba(227, 239, 249, 0.94);
+  color: #0f3f70;
+}
+
 .daily-guess-grid {
   margin-top: 0.6rem;
   display: grid;
@@ -2570,6 +2591,16 @@ code {
   background: rgba(241, 245, 249, 0.92);
 }
 
+.daily-guess-tile.is-pending {
+  border-style: dashed;
+  border-color: rgba(20, 45, 70, 0.18);
+  background: rgba(245, 248, 251, 0.86);
+}
+
+.daily-guess-tile.is-tracker-tile {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.26);
+}
+
 .daily-tile-label {
   display: block;
   font-size: 0.62rem;
@@ -2592,6 +2623,10 @@ code {
   line-height: 1.08;
   letter-spacing: -0.03em;
   color: var(--ink-950);
+}
+
+.daily-tile-value.is-pending {
+  color: rgba(18, 33, 53, 0.42);
 }
 
 .daily-tile-value-row {
@@ -2876,6 +2911,112 @@ code {
   color: rgba(18, 33, 53, 0.74);
   font-size: 0.84rem;
   line-height: 1.45;
+}
+
+.daily-answer-status {
+  margin: 0.28rem 0 0;
+  color: rgba(18, 33, 53, 0.62);
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.daily-answer-copy-action {
+  align-self: flex-start;
+  display: grid;
+  place-items: center;
+  justify-items: center;
+  gap: 0.34rem;
+  width: min(13rem, 100%);
+  min-width: 12rem;
+  min-height: 5.35rem;
+  padding: 1rem 1.12rem 1.06rem;
+  border-radius: 14px;
+  border-width: 1px;
+  border-style: solid;
+  text-align: center;
+  line-height: 1.1;
+  color: #48210f;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.74),
+    0 18px 40px rgba(255, 132, 88, 0.18);
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.daily-answer-copy-action .daily-copy-button-label,
+.daily-answer-copy-action .daily-copy-button-note {
+  width: 100%;
+  text-align: center;
+}
+
+.daily-answer-copy-action .daily-copy-button-label {
+  font-size: 0.88rem;
+  line-height: 1.05;
+}
+
+.daily-answer-copy-action .daily-copy-button-note {
+  font-size: 0.69rem;
+  line-height: 1.22;
+  color: rgba(72, 33, 15, 0.74);
+}
+
+.daily-answer-copy-action.is-victory {
+  border-color: rgba(239, 173, 88, 0.6);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 250, 240, 0.92), transparent 54%),
+    linear-gradient(180deg, rgba(255, 244, 219, 0.98), rgba(255, 214, 150, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.84),
+    0 20px 42px rgba(255, 132, 88, 0.22);
+}
+
+.daily-answer-copy-action.is-victory .daily-copy-button-note {
+  color: rgba(72, 33, 15, 0.74);
+}
+
+.daily-answer-copy-action.is-copied {
+  border-color: rgba(154, 218, 182, 0.42);
+  background:
+    linear-gradient(180deg, rgba(229, 251, 239, 0.98), rgba(198, 239, 219, 0.9));
+  color: #145f3b;
+}
+
+.daily-answer-copy-action.is-copied .daily-copy-button-note {
+  color: rgba(20, 95, 59, 0.72);
+}
+
+.daily-answer-copy-action.is-error {
+  border-color: rgba(242, 182, 135, 0.46);
+  background:
+    linear-gradient(180deg, rgba(255, 243, 226, 0.98), rgba(255, 220, 200, 0.92));
+  color: #8b4a1b;
+}
+
+.daily-answer-copy-action.is-error .daily-copy-button-note {
+  color: rgba(139, 74, 27, 0.72);
+}
+
+.daily-answer-copy-action.is-loss {
+  border-color: rgba(173, 200, 225, 0.36);
+  background:
+    linear-gradient(180deg, rgba(242, 248, 253, 0.98), rgba(223, 235, 248, 0.92));
+  color: var(--ink-900);
+}
+
+.daily-answer-copy-action.is-loss .daily-copy-button-note {
+  color: rgba(27, 50, 77, 0.68);
+}
+
+.daily-answer-copy-action:hover,
+.daily-answer-copy-action:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(224, 154, 66, 0.72);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 252, 244, 0.96), transparent 54%),
+    linear-gradient(180deg, rgba(255, 246, 226, 0.99), rgba(255, 223, 173, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 24px 48px rgba(255, 132, 88, 0.26);
 }
 
 .daily-victory-banner {
@@ -5287,6 +5428,11 @@ button.registration-summary-chip {
     align-items: stretch;
   }
 
+  .daily-answer-copy-action {
+    width: 100%;
+    min-width: 0;
+  }
+
   .daily-briefing-controls,
   .daily-hint-button {
     width: 100%;
@@ -5492,6 +5638,199 @@ button.registration-summary-chip {
   }
 }
 
+@media (max-width: 540px) {
+  .daily-board {
+    gap: 0.68rem;
+  }
+
+  .daily-board-stack {
+    gap: 0.56rem;
+  }
+
+  .daily-board-step {
+    gap: 0.42rem;
+  }
+
+  .daily-board-step-rail {
+    gap: 0.34rem;
+  }
+
+  .daily-board-step-node {
+    width: 1.72rem;
+    height: 1.72rem;
+    font-size: 0.6rem;
+    letter-spacing: 0.06em;
+  }
+
+  .daily-board-step-line {
+    min-width: 1.9rem;
+  }
+
+  .daily-board-step-body {
+    gap: 0.34rem;
+  }
+
+  .daily-board-empty {
+    padding: 0.74rem 0.82rem;
+    border-radius: 14px;
+    font-size: 0.84rem;
+  }
+
+  .daily-guess-row {
+    border-radius: 16px;
+    padding: 0.64rem;
+    box-shadow: 0 10px 22px rgba(15, 43, 64, 0.07);
+  }
+
+  .daily-guess-row.is-tracker {
+    box-shadow:
+      0 14px 28px rgba(15, 43, 64, 0.09),
+      0 0 0 1px rgba(255, 255, 255, 0.44);
+    backdrop-filter: none;
+  }
+
+  .daily-guess-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.3rem 0.5rem;
+    align-items: start;
+  }
+
+  .daily-guess-title {
+    font-size: 1rem;
+    line-height: 1.02;
+  }
+
+  .daily-guess-row:not(.is-tracker) .daily-guess-subtitle {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+
+  .daily-guess-subtitle,
+  .daily-guess-meta {
+    margin-top: 0.12rem;
+    font-size: 0.66rem;
+    line-height: 1.25;
+  }
+
+  .daily-guess-badge {
+    align-self: start;
+    min-height: 1.56rem;
+    padding: 0.1rem 0.5rem;
+    font-size: 0.58rem;
+    letter-spacing: 0.08em;
+  }
+
+  .daily-guess-grid {
+    margin-top: 0.45rem;
+    gap: 0.3rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .daily-guess-tile {
+    min-height: 72px;
+    border-radius: 12px;
+    padding: 0.52rem 0.5rem 0.46rem;
+    gap: 0.16rem;
+  }
+
+  .daily-tile-head {
+    padding-right: 1.18rem;
+  }
+
+  .daily-tile-label {
+    font-size: 0.5rem;
+    letter-spacing: 0.12em;
+  }
+
+  .daily-tile-value {
+    font-size: clamp(0.92rem, 2.7vw + 0.5rem, 1.04rem);
+    line-height: 1.02;
+  }
+
+  .daily-tile-value-row {
+    gap: 0.22rem;
+    padding-right: 1rem;
+  }
+
+  .daily-tile-meta {
+    font-size: 0.58rem;
+    line-height: 1.15;
+  }
+
+  .daily-tile-indicator {
+    margin-top: 0.02rem;
+    font-size: 0.82rem;
+  }
+
+  .daily-tile-help {
+    top: 0.36rem;
+    right: 0.36rem;
+  }
+
+  .daily-tile-help-toggle {
+    width: 1.02rem;
+    height: 1.02rem;
+    font-size: 0.58rem;
+  }
+
+  .daily-tile-help-panel {
+    width: min(200px, calc(100vw - 1.5rem));
+    padding: 0.58rem 0.62rem;
+  }
+
+  .daily-tile-help-title {
+    font-size: 0.62rem;
+  }
+
+  .daily-tile-help-copy {
+    font-size: 0.68rem;
+    line-height: 1.38;
+  }
+
+  .daily-guess-transition {
+    grid-template-columns: 1fr;
+    gap: 0.22rem;
+    padding: 0;
+  }
+
+  .daily-transition-label {
+    font-size: 0.56rem;
+    letter-spacing: 0.1em;
+  }
+
+  .daily-transition-rail {
+    flex-wrap: nowrap;
+    gap: 0.24rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 0.14rem;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+  }
+
+  .daily-transition-rail::-webkit-scrollbar {
+    display: none;
+  }
+
+  .daily-transition-chip {
+    flex: 0 0 auto;
+    min-height: 1.5rem;
+    padding: 0.12rem 0.44rem;
+    font-size: 0.63rem;
+    white-space: nowrap;
+    scroll-snap-align: start;
+  }
+
+  .daily-transition-chip-label {
+    padding: 0.1rem 0.28rem;
+    font-size: 0.54rem;
+  }
+}
+
 @media (max-width: 360px) {
   .aircraft-deck-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5500,7 +5839,24 @@ button.registration-summary-chip {
 
 @media (max-width: 390px) {
   .daily-guess-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .daily-guess-row {
+    padding: 0.56rem;
+  }
+
+  .daily-guess-tile {
+    min-height: 68px;
+    padding: 0.46rem 0.44rem 0.4rem;
+  }
+
+  .daily-tile-value {
+    font-size: 0.9rem;
+  }
+
+  .daily-transition-chip {
+    padding-inline: 0.38rem;
   }
 
   .aircraft-detail-kpis,
