@@ -23,5 +23,7 @@ jobs:
         run: python scripts/build_aircraft_lookup_from_db.py --db-path aircraft_data.db
       - name: Refresh manifest from generated reference data
         run: python scripts/refresh_reference_data.py --manifest-only
+      - name: Refresh airport daily game data
+        run: python scripts/refresh_airport_game_data.py
       - name: Run smoke check
         run: python scripts/smoke_check.py
