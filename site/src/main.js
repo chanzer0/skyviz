@@ -3,6 +3,7 @@ import {
   buildDashboardModel,
   loadAirportGameData,
   loadAirportGameManifest,
+  loadCardleReferenceData,
   loadReferenceData,
   loadReferenceManifest,
   parseUserCollection,
@@ -25,7 +26,25 @@ import {
   selectDailyAirport,
   serializeDailyHistory,
 } from './daily.js';
-import { escapeHtml, formatCompact, formatDateFromMillis, formatNumber, formatPercent } from './format.js';
+import {
+  CARDLE_GAME_NAME,
+  CARDLE_HASH,
+  CARDLE_MAP_REVEAL_GUESS,
+  CARDLE_MAX_GUESSES,
+  CARDLE_MODEL_REVEAL_GUESS,
+  CARDLE_TILE_SPECS,
+  buildCardleDataset,
+  buildCardleGuessComparison,
+  buildCardleHotspotUrl,
+  buildCardleModelCandidates,
+  buildCardleOptionLabel,
+  buildCardleShareText,
+  buildCardleSuggestions,
+  normalizeCardleHotspotPayload,
+  resolveCardleGuess,
+  selectDailyCardModel,
+} from './cardle.js';
+import { escapeHtml, formatCompact, formatDateFromMillis, formatLabel, formatNumber, formatPercent, sanitizeText } from './format.js';
 
 const elements = {
   bootLoader: document.querySelector('#boot-loader'),
@@ -34,18 +53,23 @@ const elements = {
   fileInput: document.querySelector('#file-input'),
   dropzone: document.querySelector('#dropzone'),
   viewExampleButton: document.querySelector('#view-example'),
-  dailyLaunchButton: document.querySelector('#daily-launch'),
-  dailyLandingSummary: document.querySelector('#daily-landing-summary'),
-  dailyLandingStats: document.querySelector('#daily-landing-stats'),
-  dailyLandingTeaser: document.querySelector('#daily-landing-teaser'),
+  dailyLaunchButton: document.querySelector('#navdle-launch'),
+  dailyLandingSummary: document.querySelector('#navdle-landing-summary'),
+  dailyLandingStats: document.querySelector('#navdle-landing-stats'),
+  dailyLandingTeaser: document.querySelector('#navdle-landing-teaser'),
+  cardleLaunchButton: document.querySelector('#cardle-launch'),
+  cardleLandingSummary: document.querySelector('#cardle-landing-summary'),
+  cardleLandingStats: document.querySelector('#cardle-landing-stats'),
+  cardleLandingTeaser: document.querySelector('#cardle-landing-teaser'),
   persistUpload: document.querySelector('#persist-upload'),
   uploadStatus: document.querySelector('#upload-status'),
   referenceStatus: document.querySelector('#reference-status'),
   banner: document.querySelector('#message-banner'),
   dashboard: document.querySelector('#dashboard'),
+  cardleTabButton: document.querySelector('#tab-cardle-button'),
   mapTabButton: document.querySelector('#tab-map-button'),
   aircraftTabButton: document.querySelector('#tab-aircraft-button'),
-  dailyTabButton: document.querySelector('#tab-daily-button'),
+  dailyTabButton: document.querySelector('#tab-navdle-button'),
   dataToolsTrigger: document.querySelector('#data-tools-trigger'),
   dataToolsMenu: document.querySelector('#data-tools-menu'),
   dataToolsPersistUpload: document.querySelector('#data-tools-persist-upload'),
@@ -57,6 +81,7 @@ const elements = {
   mapTabPanel: document.querySelector('#tab-map'),
   aircraftTabPanel: document.querySelector('#tab-aircraft'),
   dailyTabPanel: document.querySelector('#navdle'),
+  cardleTabPanel: document.querySelector('#cardle'),
   mapSide: document.querySelector('#map-side'),
   mapCanvas: document.querySelector('#map-canvas'),
   mapLegend: document.querySelector('#map-legend'),
@@ -139,6 +164,18 @@ const elements = {
   dailyIntel: document.querySelector('#daily-intel'),
   dailyBoardMeta: document.querySelector('#daily-board-meta'),
   dailyBoard: document.querySelector('#daily-board'),
+  cardleTitle: document.querySelector('#cardle-title'),
+  cardleHeroSummary: document.querySelector('#cardle-hero-summary'),
+  cardleMetaGrid: document.querySelector('#cardle-meta-grid'),
+  cardleCommandDeck: document.querySelector('.cardle-command-deck'),
+  cardleGuessForm: document.querySelector('#cardle-guess-form'),
+  cardleGuessInput: document.querySelector('#cardle-guess-input'),
+  cardleSuggestionList: document.querySelector('#cardle-suggestion-list'),
+  cardleFeedback: document.querySelector('#cardle-feedback'),
+  cardleBriefing: document.querySelector('#cardle-briefing'),
+  cardleIntelPanel: document.querySelector('#cardle-intel-panel'),
+  cardleBoardMeta: document.querySelector('#cardle-board-meta'),
+  cardleBoard: document.querySelector('#cardle-board'),
 };
 
 const AIRCRAFT_CARD_HEIGHT_MOBILE = 428;
@@ -158,12 +195,19 @@ const PERSIST_PREFERENCE_KEY = 'skyviz.persistUploadPreference.v1';
 const MANUAL_REGISTRATION_MAPPINGS_KEY = 'skyviz.manualRegistrationMappings.v1';
 const MANUAL_REGISTRATION_MAPPINGS_EXPORT_SCHEMA = 'skyviz.manualRegistrationMappings.v1';
 const DAILY_GAME_HISTORY_KEY = 'skyviz.dailyAirportHistory.v1';
+const CARDLE_GAME_HISTORY_KEY = 'skyviz.dailyCardleHistory.v1';
 const DAILY_GAME_HASH = '#navdle';
+const CARDLE_GAME_HASH = CARDLE_HASH;
 const LEGACY_DAILY_GAME_HASHES = new Set(['#tab-daily']);
 const EXAMPLE_DECK_PATH = './data/example/try_now_user.json';
 const COMPLETION_SORT_CATEGORIES = new Set(['percent', 'total', 'captured', 'name']);
 const COMPLETION_SORT_DIRECTIONS = new Set(['asc', 'desc']);
+const LEAFLET_TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+const LEAFLET_TILE_ATTRIBUTION = '&copy; OpenStreetMap contributors &copy; CARTO';
 const MAP_BASE_VIEW = Object.freeze({ center: [16, 0], zoom: 2 });
+const CARDLE_MAP_BASE_VIEW = Object.freeze({ center: [18, 0], zoom: 1.75 });
+const CARDLE_MAP_MAX_ZOOM = 6;
+const CARDLE_MAP_SINGLE_POINT_ZOOM = 4.25;
 const MAP_MARKER_SCALE_PER_ZOOM = 0.24;
 const MAP_MAX_MARKER_RADIUS = 10.5;
 const MAP_HIGHLIGHT_EXTRA_RADIUS = 1.8;
@@ -189,10 +233,32 @@ const DAILY_TONE_ORDER = Object.freeze({
   near: 1,
   hit: 2,
 });
+const CARDLE_TONE_ORDER = Object.freeze({
+  miss: 0,
+  near: 1,
+  hit: 2,
+});
 const DAILY_PROFILE_RANKS = Object.freeze({
   small: 0,
   medium: 1,
   large: 2,
+});
+const CARDLE_ENGINE_TYPE_LABELS = Object.freeze({
+  J: 'Jet',
+  P: 'Piston',
+  T: 'Turboprop',
+  E: 'Electric',
+  R: 'Rocket',
+  _: 'Other',
+});
+const CARDLE_TYPE_LABELS = Object.freeze({
+  L: 'Landplane',
+  H: 'Helicopter',
+  A: 'Amphibious',
+  G: 'Gyro / Rotorcraft',
+  T: 'Tiltrotor',
+  _: 'Specialty',
+  unknown: 'Unknown',
 });
 const DAILY_TILE_HELP = Object.freeze({
   profile: {
@@ -336,6 +402,40 @@ const state = {
     history: { days: {} },
     countdownTimer: null,
   },
+  cardle: {
+    dataset: null,
+    dayKey: '',
+    challenge: null,
+    error: '',
+    query: '',
+    feedback: '',
+    feedbackTone: 'muted',
+    suggestions: [],
+    selectedSuggestionIndex: -1,
+    pendingAnimatedGuessId: '',
+    pendingVictoryDayKey: '',
+    pendingStatCelebrateKeys: [],
+    copyStatus: '',
+    history: { days: {} },
+    hotspot: {
+      modelId: '',
+      loading: false,
+      error: '',
+      data: null,
+    },
+    modelStage: {
+      modelId: '',
+      loading: false,
+      available: null,
+      error: '',
+      resolvedUrl: '',
+    },
+    map: {
+      instance: null,
+      markerLayer: null,
+      modelId: '',
+    },
+  },
   ui: {
     dataToolsOpen: false,
     bannerDismissTimer: null,
@@ -354,7 +454,8 @@ const state = {
     aircraftDetailModelId: null,
     aircraftDetailFocusModelId: null,
     aircraftDetailMediaKey: '',
-  pendingDailyInputFocus: false,
+    pendingDailyInputFocus: false,
+    pendingCardleInputFocus: false,
   },
 };
 
@@ -455,26 +556,46 @@ function setReferenceStatus(message, tone = 'quiet') {
 
 function setBootState(isVisible, statusMessage = '') {
   elements.bootLoader.hidden = !isVisible;
+  document.body.classList.toggle('is-booting', Boolean(isVisible));
   if (statusMessage) {
     elements.bootStatus.textContent = statusMessage;
   }
+  if (isVisible) {
+    window.scrollTo(0, 0);
+  }
 }
 
-function readDailyHistory() {
+function readStoredHistory(storageKey) {
   try {
-    return parseDailyHistory(window.localStorage.getItem(DAILY_GAME_HISTORY_KEY));
+    return parseDailyHistory(window.localStorage.getItem(storageKey));
   } catch {
     return { days: {} };
   }
 }
 
-function writeDailyHistory() {
+function writeStoredHistory(storageKey, history) {
   try {
-    window.localStorage.setItem(DAILY_GAME_HISTORY_KEY, serializeDailyHistory(state.daily.history));
+    window.localStorage.setItem(storageKey, serializeDailyHistory(history));
     return true;
   } catch {
     return false;
   }
+}
+
+function readDailyHistory() {
+  return readStoredHistory(DAILY_GAME_HISTORY_KEY);
+}
+
+function writeDailyHistory() {
+  return writeStoredHistory(DAILY_GAME_HISTORY_KEY, state.daily.history);
+}
+
+function readCardleHistory() {
+  return readStoredHistory(CARDLE_GAME_HISTORY_KEY);
+}
+
+function writeCardleHistory() {
+  return writeStoredHistory(CARDLE_GAME_HISTORY_KEY, state.cardle.history);
 }
 
 function getDailySession(dayKey = state.daily.dayKey || getUtcDayKey()) {
@@ -509,6 +630,38 @@ function updateDailySession(dayKey, nextSession) {
   writeDailyHistory();
 }
 
+function getCardleSession(dayKey = state.cardle.dayKey || getUtcDayKey()) {
+  const source = state.cardle.history?.days?.[dayKey];
+  const hintRevealCount = Number.isFinite(Number(source?.hintRevealCount))
+    ? Math.max(0, Math.floor(Number(source.hintRevealCount)))
+    : source?.hintRevealed
+      ? 1
+      : 0;
+  return {
+    guesses: Array.isArray(source?.guesses) ? source.guesses.filter(Boolean) : [],
+    status: source?.status === 'won' || source?.status === 'lost' ? source.status : 'in_progress',
+    hintRevealCount,
+    hintRevealed: hintRevealCount > 0,
+    completedAt: typeof source?.completedAt === 'string' ? source.completedAt : '',
+  };
+}
+
+function updateCardleSession(dayKey, nextSession) {
+  const hintRevealCount = Number.isFinite(Number(nextSession?.hintRevealCount))
+    ? Math.max(0, Math.floor(Number(nextSession.hintRevealCount)))
+    : nextSession?.hintRevealed
+      ? 1
+      : 0;
+  state.cardle.history.days[dayKey] = {
+    guesses: Array.isArray(nextSession?.guesses) ? nextSession.guesses.filter(Boolean) : [],
+    status: nextSession?.status === 'won' || nextSession?.status === 'lost' ? nextSession.status : 'in_progress',
+    hintRevealCount,
+    hintRevealed: hintRevealCount > 0,
+    completedAt: typeof nextSession?.completedAt === 'string' ? nextSession.completedAt : '',
+  };
+  writeCardleHistory();
+}
+
 function clearDailyCountdownTimer() {
   if (!state.daily.countdownTimer) {
     return;
@@ -518,7 +671,7 @@ function clearDailyCountdownTimer() {
 }
 
 function focusDailyGuessInput() {
-  if (state.activeTab !== 'daily' || elements.dashboard.hidden || elements.dailyGuessInput.disabled) {
+  if (state.activeTab !== 'navdle' || elements.dashboard.hidden || elements.dailyGuessInput.disabled) {
     state.ui.pendingDailyInputFocus = false;
     return;
   }
@@ -526,6 +679,18 @@ function focusDailyGuessInput() {
   requestAnimationFrame(() => {
     elements.dailyGuessInput.focus();
     elements.dailyGuessInput.select();
+  });
+}
+
+function focusCardleGuessInput() {
+  if (state.activeTab !== 'cardle' || elements.dashboard.hidden || elements.cardleGuessInput.disabled) {
+    state.ui.pendingCardleInputFocus = false;
+    return;
+  }
+  state.ui.pendingCardleInputFocus = false;
+  requestAnimationFrame(() => {
+    elements.cardleGuessInput.focus();
+    elements.cardleGuessInput.select();
   });
 }
 
@@ -572,7 +737,7 @@ function renderDailyLandingCta() {
     return;
   }
   if (todaySession.status === 'lost') {
-    elements.dailyLandingTeaser.textContent = 'Today\'s board is complete. Review the answer and reset timer from the DAILY tab.';
+    elements.dailyLandingTeaser.textContent = 'Today\'s board is complete. Review the answer and reset timer from the Navdle tab.';
     elements.dailyLaunchButton.textContent = `Review ${DAILY_GAME_NAME}`;
     return;
   }
@@ -586,6 +751,61 @@ function renderDailyLandingCta() {
     ? `${formatNumber(guessableAirports)} guessable airports are in the rotation. Search by airport, city, or code and watch each clue category update after every guess.`
     : 'A fresh airport rotates in every UTC day. Search by airport, city, or code and watch each clue category update after every guess.';
   elements.dailyLaunchButton.textContent = `Play ${DAILY_GAME_NAME}`;
+}
+
+function renderCardleLandingCta() {
+  const todayKey = getUtcDayKey();
+  const todaySession = getCardleSession(todayKey);
+  const stats = buildDailyStats(state.cardle.history);
+  const countdown = formatCountdown(getNextUtcResetTime().getTime() - Date.now());
+  const statsHtml = [
+    buildDailyLandingChipHtml('Streak', `${formatNumber(stats.currentStreak)}`),
+    buildDailyLandingChipHtml('Reset', countdown),
+  ].join('');
+  elements.cardleLandingStats.innerHTML = statsHtml;
+  elements.cardleLandingSummary.textContent = state.cardle.error
+    ? 'Cardle data is unavailable right now. Try refreshing after the reference snapshot finishes loading.'
+    : 'Guess today\'s aircraft using eight stats, a hotspot map, and a delayed 3D reveal.';
+  if (state.cardle.error) {
+    elements.cardleLandingTeaser.textContent = state.cardle.error;
+    elements.cardleLaunchButton.textContent = `Open ${CARDLE_GAME_NAME}`;
+    return;
+  }
+  if (todaySession.status === 'won') {
+    elements.cardleLandingTeaser.textContent = `You cleared today in ${formatDailyGuessCount(todaySession.guesses.length)}. Win rate: ${formatNumber(stats.winRate)}%.`;
+    elements.cardleLaunchButton.textContent = `Review ${CARDLE_GAME_NAME}`;
+    return;
+  }
+  if (todaySession.status === 'lost') {
+    elements.cardleLandingTeaser.textContent = 'Today\'s model is already revealed. Review the answer, hotspot map, and reset timer from the Cardle tab.';
+    elements.cardleLaunchButton.textContent = `Review ${CARDLE_GAME_NAME}`;
+    return;
+  }
+  if (todaySession.guesses.length) {
+    elements.cardleLandingTeaser.textContent = `${formatDailyGuessCount(todaySession.guesses.length)} logged so far. The hotspot map unlocks on guess ${formatNumber(CARDLE_MAP_REVEAL_GUESS)} and the 3D reveal opens on guess ${formatNumber(CARDLE_MODEL_REVEAL_GUESS)}.`;
+    elements.cardleLaunchButton.textContent = `Continue ${CARDLE_GAME_NAME}`;
+    return;
+  }
+  const guessableModels = Number(state.cardle.dataset?.guessableModels || state.references?.manifest?.datasets?.models?.rows || 0);
+  elements.cardleLandingTeaser.textContent = guessableModels
+    ? `${formatNumber(guessableModels)} playable aircraft models are in the rotation. Search by ICAO, manufacturer, or alias and watch each stat cell flip higher or lower after every guess.`
+    : 'A fresh aircraft model rotates in every UTC day. Search by ICAO, manufacturer, or alias and watch each stat cell flip higher or lower after every guess.';
+  elements.cardleLaunchButton.textContent = `Play ${CARDLE_GAME_NAME}`;
+}
+
+function renderLandingDailyCtas() {
+  renderDailyLandingCta();
+  renderCardleLandingCta();
+}
+
+function isDailyGameReadyForToday() {
+  const todayKey = getUtcDayKey();
+  return Boolean(state.daily.challenge && state.daily.dataset && state.daily.dayKey === todayKey);
+}
+
+function isCardleGameReadyForToday() {
+  const todayKey = getUtcDayKey();
+  return Boolean(state.cardle.challenge && state.cardle.dataset && state.cardle.dayKey === todayKey);
 }
 
 function buildDailyMetaChipHtml(label, value, note, options = {}) {
@@ -1552,24 +1772,50 @@ function renderDailyTab() {
 
 function scheduleDailyCountdownRefresh() {
   clearDailyCountdownTimer();
-  renderDailyLandingCta();
-  if (state.activeTab === 'daily') {
+  renderLandingDailyCtas();
+  if (state.activeTab === 'navdle') {
     renderDailyTab();
+  } else if (state.activeTab === 'cardle') {
+    renderCardleTab();
   }
   state.daily.countdownTimer = window.setInterval(() => {
     const nextDayKey = getUtcDayKey();
+    let requiresReload = false;
     if (state.daily.dayKey && state.daily.dayKey !== nextDayKey) {
       state.daily.challenge = null;
       state.daily.dayKey = '';
       state.daily.query = '';
       state.daily.suggestions = [];
       state.daily.selectedSuggestionIndex = -1;
-      void ensureDailyGameReady({ focusInput: state.activeTab === 'daily' });
+      requiresReload = true;
+    }
+    if (state.cardle.dayKey && state.cardle.dayKey !== nextDayKey) {
+      state.cardle.challenge = null;
+      state.cardle.dayKey = '';
+      state.cardle.query = '';
+      state.cardle.suggestions = [];
+      state.cardle.selectedSuggestionIndex = -1;
+      resetCardleHotspotState();
+      resetCardleModelStageState();
+      requiresReload = true;
+    }
+    if (requiresReload) {
+      if (state.activeTab === 'navdle') {
+        void ensureDailyGameReady({ focusInput: true });
+      } else if (state.activeTab === 'cardle') {
+        void ensureCardleGameReady({ focusInput: true });
+      } else {
+        renderLandingDailyCtas();
+      }
       return;
     }
-    renderDailyLandingCta();
-    if (state.activeTab === 'daily' && document.activeElement !== elements.dailyGuessInput) {
+    renderLandingDailyCtas();
+    if (state.activeTab === 'navdle' && document.activeElement !== elements.dailyGuessInput) {
       renderDailyTab();
+      return;
+    }
+    if (state.activeTab === 'cardle' && document.activeElement !== elements.cardleGuessInput) {
+      renderCardleTab();
     }
   }, 30000);
 }
@@ -1580,7 +1826,7 @@ async function ensureDailyGameReady(options = {}) {
     if (options.focusInput) {
       state.ui.pendingDailyInputFocus = true;
     }
-    renderDailyLandingCta();
+    renderLandingDailyCtas();
     renderDailyTab();
     scheduleDailyCountdownRefresh();
     return true;
@@ -1618,14 +1864,14 @@ async function ensureDailyGameReady(options = {}) {
     if (!state.daily.feedback) {
       setDailyFeedback('', 'muted');
     }
-    renderDailyLandingCta();
+    renderLandingDailyCtas();
     renderDailyTab();
     scheduleDailyCountdownRefresh();
     return true;
   } catch (error) {
     state.daily.error = error instanceof Error ? error.message : 'Failed to load the daily airport game data.';
-    renderDailyLandingCta();
-    if (state.activeTab === 'daily') {
+    renderLandingDailyCtas();
+    if (state.activeTab === 'navdle') {
       renderDailyErrorState(state.daily.error);
     }
     return false;
@@ -1636,11 +1882,29 @@ async function openDailyExperience(options = {}) {
   if (options.syncHash !== false) {
     updateUrlHash(DAILY_GAME_HASH, { replace: Boolean(options.replaceHash) });
   }
-  elements.landingView.hidden = true;
-  elements.dashboard.hidden = false;
+  const revealShellBeforeReady = options.revealShellBeforeReady !== false;
+  const showBlockingLoader = options.showBlockingLoader !== false && !isDailyGameReadyForToday();
+  const previousVisibility = showBlockingLoader
+    ? beginDashboardLoadingState(`Loading ${DAILY_GAME_NAME}...`)
+    : null;
+  if (revealShellBeforeReady && !showBlockingLoader) {
+    elements.landingView.hidden = true;
+    elements.dashboard.hidden = false;
+  }
   syncDashboardTabAvailability();
-  setActiveTab('daily');
+  setActiveTab('navdle', { skipAutoEnsure: true });
+  if (revealShellBeforeReady && !showBlockingLoader) {
+    renderDailyTab();
+  }
   const ready = await ensureDailyGameReady({ focusInput: options.focusInput !== false });
+  if (showBlockingLoader || !revealShellBeforeReady) {
+    elements.landingView.hidden = true;
+    elements.dashboard.hidden = false;
+    syncDashboardTabAvailability();
+  }
+  if (showBlockingLoader) {
+    endDashboardLoadingState(previousVisibility, false);
+  }
   if (!ready) {
     setBanner(state.daily.error || 'Daily airport data could not be loaded.', 'warning');
   }
@@ -1655,6 +1919,8 @@ async function openDailyExperienceFromHash(options = {}) {
   }
   await openDailyExperience({
     focusInput: Boolean(options.focusInput),
+    revealShellBeforeReady: options.revealShellBeforeReady,
+    showBlockingLoader: options.showBlockingLoader,
     syncHash: false,
   });
   return true;
@@ -1741,7 +2007,7 @@ function submitDailyGuessByAirport(airport) {
             : '',
     solved ? 'success' : status === 'lost' ? 'warning' : newlyRevealedHintCount ? 'success' : 'muted',
   );
-  renderDailyLandingCta();
+  renderLandingDailyCtas();
   renderDailyTab();
 }
 
@@ -1772,6 +2038,1446 @@ async function copyDailyResultToClipboard() {
     setDailyFeedback('Clipboard access failed in this browser. Try Copy results again.', 'warning');
   }
   renderDailyTab();
+}
+
+function setCardleFeedback(message, tone = 'muted') {
+  state.cardle.feedback = message;
+  state.cardle.feedbackTone = tone;
+}
+
+function getCardleShareUrl() {
+  if (typeof window === 'undefined' || !window.location) {
+    return CARDLE_GAME_HASH;
+  }
+  const url = new URL(window.location.href);
+  url.hash = CARDLE_GAME_HASH.slice(1);
+  return url.toString();
+}
+
+function getCardleHintState(session) {
+  const revealAll = session.status === 'won' || session.status === 'lost';
+  const mapUnlocked = revealAll || session.guesses.length >= CARDLE_MAP_REVEAL_GUESS;
+  const modelUnlocked = revealAll || session.guesses.length >= CARDLE_MODEL_REVEAL_GUESS;
+  return {
+    revealAll,
+    mapUnlocked,
+    modelUnlocked,
+    revealCount: (mapUnlocked ? 1 : 0) + (modelUnlocked ? 1 : 0),
+  };
+}
+
+function resetCardleHotspotState() {
+  disposeCardleHotspotMap();
+  state.cardle.hotspot = {
+    modelId: '',
+    loading: false,
+    error: '',
+    data: null,
+  };
+}
+
+function resetCardleModelStageState() {
+  state.cardle.modelStage = {
+    modelId: '',
+    loading: false,
+    available: null,
+    error: '',
+    resolvedUrl: '',
+  };
+}
+
+function disposeCardleHotspotMap() {
+  if (state.cardle.map.instance) {
+    state.cardle.map.instance.remove();
+  }
+  state.cardle.map.instance = null;
+  state.cardle.map.markerLayer = null;
+  state.cardle.map.modelId = '';
+}
+
+function ensureCardleHotspotMapInstance() {
+  if (!window.L) {
+    return null;
+  }
+  const mapCanvas = elements.cardleIntelPanel.querySelector('#cardle-hotspot-map-canvas');
+  if (!(mapCanvas instanceof HTMLElement)) {
+    disposeCardleHotspotMap();
+    return null;
+  }
+  if (state.cardle.map.instance && state.cardle.map.instance.getContainer() === mapCanvas) {
+    return state.cardle.map.instance;
+  }
+  if (state.cardle.map.instance) {
+    disposeCardleHotspotMap();
+  }
+  const map = window.L.map(mapCanvas, {
+    worldCopyJump: true,
+    minZoom: 1,
+    maxZoom: CARDLE_MAP_MAX_ZOOM,
+    zoomControl: true,
+    zoomSnap: 0.25,
+    zoomDelta: 0.5,
+    preferCanvas: true,
+  });
+  window.L.tileLayer(LEAFLET_TILE_URL, {
+    attribution: LEAFLET_TILE_ATTRIBUTION,
+  }).addTo(map);
+  map.setView(CARDLE_MAP_BASE_VIEW.center, CARDLE_MAP_BASE_VIEW.zoom);
+  state.cardle.map.instance = map;
+  state.cardle.map.markerLayer = null;
+  state.cardle.map.modelId = '';
+  return map;
+}
+
+function invalidateLeafletMap(map) {
+  if (!map || typeof map.invalidateSize !== 'function') {
+    return;
+  }
+  const container = typeof map.getContainer === 'function' ? map.getContainer() : null;
+  if (!(container instanceof HTMLElement) || !container.isConnected) {
+    return;
+  }
+  try {
+    map.invalidateSize();
+  } catch {
+    // Leaflet can throw if the container was removed during a rerender.
+  }
+}
+
+function syncCardleHotspotMap(challenge, session) {
+  const target = challenge?.target;
+  const hintState = getCardleHintState(session);
+  if (!target || !hintState.mapUnlocked || !window.L) {
+    disposeCardleHotspotMap();
+    return;
+  }
+  const map = ensureCardleHotspotMapInstance();
+  if (!map) {
+    return;
+  }
+  if (state.cardle.map.markerLayer) {
+    map.removeLayer(state.cardle.map.markerLayer);
+    state.cardle.map.markerLayer = null;
+  }
+  const coordinates = state.cardle.hotspot.modelId === target.id && Array.isArray(state.cardle.hotspot.data?.coordinates)
+    ? state.cardle.hotspot.data.coordinates
+    : [];
+  const markers = coordinates
+    .map((point, index) => {
+      const longitude = Number(point?.[0]);
+      const latitude = Number(point?.[1]);
+      if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+        return null;
+      }
+      const marker = window.L.circleMarker([latitude, longitude], {
+        radius: 5.5,
+        color: '#ec7f35',
+        weight: 1.1,
+        fillColor: '#ec7f35',
+        fillOpacity: 0.42,
+      });
+      marker.bindPopup(
+        `<strong>Hotspot ${formatNumber(index + 1)}</strong><br>Lat ${latitude.toFixed(2)} / Lon ${longitude.toFixed(2)}`,
+        { maxWidth: 220 },
+      );
+      return marker;
+    })
+    .filter(Boolean);
+  if (markers.length) {
+    const markerLayer = window.L.layerGroup(markers);
+    markerLayer.addTo(map);
+    state.cardle.map.markerLayer = markerLayer;
+    if (markers.length === 1) {
+      map.setView(markers[0].getLatLng(), CARDLE_MAP_SINGLE_POINT_ZOOM);
+    } else {
+      const bounds = window.L.latLngBounds(markers.map((marker) => marker.getLatLng()));
+      map.fitBounds(bounds.pad(0.3), {
+        padding: [18, 18],
+        maxZoom: CARDLE_MAP_MAX_ZOOM,
+      });
+    }
+  } else {
+    map.setView(CARDLE_MAP_BASE_VIEW.center, CARDLE_MAP_BASE_VIEW.zoom);
+  }
+  state.cardle.map.modelId = target.id;
+  requestAnimationFrame(() => {
+    invalidateLeafletMap(map);
+  });
+}
+
+function getCardleTargetValue(row, key) {
+  if (!row) {
+    return null;
+  }
+  if (key === 'firstFlight') {
+    return row.firstFlight;
+  }
+  if (key === 'rarity') {
+    return row.rareness;
+  }
+  if (key === 'wingspan') {
+    return row.wingspan;
+  }
+  if (key === 'speed') {
+    return row.maxSpeed;
+  }
+  if (key === 'range') {
+    return row.range;
+  }
+  if (key === 'ceiling') {
+    return row.ceiling;
+  }
+  if (key === 'seats') {
+    return row.seats;
+  }
+  if (key === 'weight') {
+    return row.mtow;
+  }
+  return null;
+}
+
+function formatCardleRange(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? `${formatNumber(number)} nm` : 'N/A';
+}
+
+function formatCardleCeiling(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? `${formatNumber(number)} ft` : 'N/A';
+}
+
+function formatCardleLength(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? `${formatNumber(number)} m` : 'N/A';
+}
+
+function formatCardleCatchableRegistrations(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? formatNumber(number) : 'N/A';
+}
+
+function formatCardleEngineProfile(row) {
+  const count = Number(row?.engNum);
+  const engineLabel = CARDLE_ENGINE_TYPE_LABELS[String(row?.engType || '').trim().toUpperCase()] || 'Engine';
+  if (Number.isFinite(count) && count > 0) {
+    return `${formatNumber(count)} x ${engineLabel}`;
+  }
+  return engineLabel;
+}
+
+function formatCardleType(value) {
+  const key = String(value || '').trim().toUpperCase() || 'unknown';
+  return CARDLE_TYPE_LABELS[key] || CARDLE_TYPE_LABELS.unknown;
+}
+
+function formatCardleCategory(value) {
+  return value ? formatLabel(value) : 'Unknown';
+}
+
+function formatCardleService(row) {
+  return row?.military ? 'Military' : 'Civil';
+}
+
+function buildCardleSupportItems(row, options = {}) {
+  const revealed = options.revealed !== false;
+  const hiddenValue = 'Locked';
+  return [
+    {
+      label: 'Type',
+      value: row && revealed ? formatCardleType(row.type) : hiddenValue,
+    },
+    {
+      label: 'Category',
+      value: row && revealed ? formatCardleCategory(row.category) : hiddenValue,
+    },
+    {
+      label: 'Propulsion',
+      value: row && revealed ? formatCardleEngineProfile(row) : hiddenValue,
+    },
+    {
+      label: 'Length',
+      value: row && revealed ? formatCardleLength(row.length) : hiddenValue,
+    },
+    {
+      label: 'Catchable regs',
+      value: row && revealed ? formatCardleCatchableRegistrations(row.possibleRegistrations) : hiddenValue,
+    },
+    {
+      label: 'Service',
+      value: row && revealed ? formatCardleService(row) : hiddenValue,
+    },
+  ];
+}
+
+const CARDLE_SUPPORT_TRACKER_SPECS = Object.freeze([
+  {
+    key: 'manufacturer',
+    label: 'Manufacturer',
+    mode: 'exact',
+    placeholder: '?',
+    getRawValue: (row) => row?.manufacturer,
+    formatTargetValue: (row) => row?.manufacturer || '?',
+  },
+  {
+    key: 'name',
+    label: 'Name',
+    mode: 'reveal-only',
+    placeholder: '?',
+    formatTargetValue: (row) => row?.name || '?',
+  },
+  {
+    key: 'type',
+    label: 'Type',
+    mode: 'exact',
+    placeholder: '?',
+    getRawValue: (row) => row?.type,
+    formatTargetValue: (row) => formatCardleType(row?.type),
+  },
+  {
+    key: 'category',
+    label: 'Category',
+    mode: 'exact',
+    placeholder: '?',
+    getRawValue: (row) => row?.category,
+    formatTargetValue: (row) => formatCardleCategory(row?.category),
+  },
+  {
+    key: 'propulsion',
+    label: 'Propulsion',
+    mode: 'exact',
+    placeholder: '?',
+    getRawValue: (row) => `${Number(row?.engNum) || 0}|${String(row?.engType || '').trim().toUpperCase()}`,
+    formatTargetValue: (row) => formatCardleEngineProfile(row),
+  },
+  {
+    key: 'length',
+    label: 'Length',
+    mode: 'numeric',
+    placeholder: '--',
+    getRawValue: (row) => row?.length,
+    formatTargetValue: (row) => formatCardleLength(row?.length),
+    formatNumericValue: (value) => formatCardleLength(value),
+    getNearThreshold: (targetValue) => Math.max(1.5, Number(targetValue) * 0.08),
+  },
+  {
+    key: 'catchable-registrations',
+    label: 'Catchable regs',
+    mode: 'numeric',
+    placeholder: '--',
+    getRawValue: (row) => row?.possibleRegistrations,
+    formatTargetValue: (row) => formatCardleCatchableRegistrations(row?.possibleRegistrations),
+    formatNumericValue: (value) => formatCardleCatchableRegistrations(value),
+    getNearThreshold: (targetValue) => Math.max(25, Number(targetValue) * 0.12),
+  },
+  {
+    key: 'service',
+    label: 'Service',
+    mode: 'exact',
+    placeholder: '?',
+    getRawValue: (row) => row?.military ? 'military' : 'civil',
+    formatTargetValue: (row) => formatCardleService(row),
+  },
+]);
+
+function normalizeCardleTrackerToken(value) {
+  return sanitizeText(value).trim().toUpperCase();
+}
+
+function getCardleTrackerTile(entry, key) {
+  return entry?.comparison?.tiles?.find((tile) => tile.key === key) || null;
+}
+
+function getCardleTrackerMetric(entry, key, target) {
+  const tile = getCardleTrackerTile(entry, key);
+  const guessValue = Number(tile?.rawValue);
+  const targetValue = Number(getCardleTargetValue(target, key));
+  if (!Number.isFinite(guessValue) || !Number.isFinite(targetValue)) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return Math.abs(guessValue - targetValue);
+}
+
+function pickCardleTrackerEntry(entries, key, target) {
+  return entries.reduce((bestEntry, entry) => {
+    if (!bestEntry) {
+      return entry;
+    }
+    const bestMetric = getCardleTrackerMetric(bestEntry, key, target);
+    const entryMetric = getCardleTrackerMetric(entry, key, target);
+    if (entryMetric !== bestMetric) {
+      return entryMetric < bestMetric ? entry : bestEntry;
+    }
+    const bestTone = CARDLE_TONE_ORDER[getCardleTrackerTile(bestEntry, key)?.tone] ?? -1;
+    const entryTone = CARDLE_TONE_ORDER[getCardleTrackerTile(entry, key)?.tone] ?? -1;
+    if (entryTone !== bestTone) {
+      return entryTone > bestTone ? entry : bestEntry;
+    }
+    return (entry?.guessNumber || 0) >= (bestEntry?.guessNumber || 0) ? entry : bestEntry;
+  }, null);
+}
+
+function buildCardleTrackerTiles(entries, target) {
+  return CARDLE_TILE_SPECS.map((spec) => {
+    const bestEntry = pickCardleTrackerEntry(entries, spec.key, target);
+    if (!bestEntry) {
+      return {
+        ...spec,
+        tone: 'pending',
+        value: '--',
+        indicator: '',
+        rawValue: null,
+      };
+    }
+    const bestTile = getCardleTrackerTile(bestEntry, spec.key);
+    return {
+      ...bestTile,
+      key: spec.key,
+      label: bestTile?.label || spec.label,
+    };
+  });
+}
+
+function buildCardleNumericSupportItem(spec, entries, target) {
+  const targetValue = Number(spec.getRawValue(target));
+  if (!Number.isFinite(targetValue)) {
+    return {
+      label: spec.label,
+      value: spec.placeholder,
+      tone: 'pending',
+      indicator: '',
+    };
+  }
+  const bestEntry = entries.reduce((bestMatch, entry) => {
+    const entryValue = Number(spec.getRawValue(entry?.model));
+    if (!Number.isFinite(entryValue)) {
+      return bestMatch;
+    }
+    if (!bestMatch) {
+      return entry;
+    }
+    const bestValue = Number(spec.getRawValue(bestMatch?.model));
+    const bestMetric = Math.abs(bestValue - targetValue);
+    const entryMetric = Math.abs(entryValue - targetValue);
+    if (entryMetric !== bestMetric) {
+      return entryMetric < bestMetric ? entry : bestMatch;
+    }
+    return (entry?.guessNumber || 0) >= (bestMatch?.guessNumber || 0) ? entry : bestMatch;
+  }, null);
+  if (!bestEntry) {
+    return {
+      label: spec.label,
+      value: spec.placeholder,
+      tone: 'pending',
+      indicator: '',
+    };
+  }
+  const guessValue = Number(spec.getRawValue(bestEntry.model));
+  const delta = Math.abs(guessValue - targetValue);
+  const tone = delta <= 0.05
+    ? 'hit'
+    : delta <= spec.getNearThreshold(targetValue)
+      ? 'near'
+      : 'miss';
+  return {
+    label: spec.label,
+    value: spec.formatNumericValue(guessValue),
+    tone,
+    indicator: tone === 'hit' ? '' : guessValue < targetValue ? '\u2191' : '\u2193',
+  };
+}
+
+function buildCardleTrackerSupportItems(entries, target, options = {}) {
+  const revealed = options.revealed === true;
+  return CARDLE_SUPPORT_TRACKER_SPECS.map((spec) => {
+    if (revealed) {
+      return {
+        label: spec.label,
+        value: spec.formatTargetValue(target),
+        tone: 'hit',
+        indicator: '',
+      };
+    }
+    if (spec.mode === 'reveal-only') {
+      return {
+        label: spec.label,
+        value: spec.placeholder,
+        tone: 'pending',
+        indicator: '',
+      };
+    }
+    if (spec.mode === 'numeric') {
+      return buildCardleNumericSupportItem(spec, entries, target);
+    }
+    const targetValue = normalizeCardleTrackerToken(spec.getRawValue(target));
+    const matchedEntry = targetValue
+      ? entries.reduce((latestMatch, entry) => (
+        normalizeCardleTrackerToken(spec.getRawValue(entry?.model)) === targetValue ? entry : latestMatch
+      ), null)
+      : null;
+    if (!matchedEntry) {
+      return {
+        label: spec.label,
+        value: spec.placeholder,
+        tone: 'pending',
+        indicator: '',
+      };
+    }
+    return {
+      label: spec.label,
+      value: spec.formatTargetValue(target),
+      tone: 'hit',
+      indicator: '',
+    };
+  });
+}
+
+function buildCardleCardStatsHtml(comparison) {
+  return `
+    <dl class="aircraft-card-stats cardle-card-stats">
+      ${comparison.tiles.map((tile) => `
+        <div class="aircraft-card-stat is-${escapeHtml(tile.tone)}">
+          <dt>${escapeHtml(tile.label)}</dt>
+          <dd>
+            <span>${escapeHtml(tile.value)}</span>
+            ${tile.indicator ? `<span class="cardle-stat-indicator" aria-hidden="true">${escapeHtml(tile.indicator)}</span>` : ''}
+          </dd>
+        </div>
+      `).join('')}
+    </dl>
+  `;
+}
+
+function buildCardleSupportPillHtml(item, options = {}) {
+  const compactClass = options.compact ? ' is-compact' : '';
+  const toneClass = item?.tone ? ` is-${item.tone}` : '';
+  return `
+    <span class="cardle-support-pill${compactClass}${toneClass}">
+      <span class="cardle-support-pill-label">${escapeHtml(item.label)}</span>
+      <span class="cardle-support-pill-main">
+        <strong class="cardle-support-pill-value${item?.tone === 'pending' ? ' is-pending' : ''}">${escapeHtml(item.value)}</strong>
+        ${item?.indicator ? `<span class="cardle-support-pill-indicator" aria-hidden="true">${escapeHtml(item.indicator)}</span>` : ''}
+      </span>
+    </span>
+  `;
+}
+
+function buildCardleGuessCardHtml(entry, options = {}) {
+  const row = entry.model;
+  const comparison = entry.comparison;
+  const imageCandidates = buildAircraftImageCandidates(row);
+  const imageUrl = imageCandidates[0] || '';
+  const supportItems = buildCardleSupportItems(row).slice(0, 3);
+  const summaryText = comparison.solved
+    ? `Solved in ${formatDailyGuessCount(entry.guessNumber)}`
+    : `${formatNumber(comparison.exactCount)} exact / ${formatNumber(comparison.nearCount)} near`;
+  return `
+    <article class="aircraft-card cardle-guess-card${comparison.solved ? ' is-solved' : ''}${options.isFresh ? ' is-fresh' : ''}">
+      <div class="aircraft-card-media${imageUrl ? '' : ' is-fallback'}">
+        ${imageUrl
+    ? `<img
+            class="aircraft-card-image"
+            src="${escapeHtml(imageUrl)}"
+            data-image-candidates="${escapeHtml(imageCandidates.join('|'))}"
+            data-image-index="0"
+            alt="${escapeHtml(row.displayName)}"
+            loading="lazy"
+            decoding="async"
+            referrerpolicy="no-referrer"
+          >`
+    : ''}
+        <div class="aircraft-card-image-fallback">Image unavailable</div>
+      </div>
+      <div class="aircraft-card-body">
+        <div class="aircraft-card-head">
+          <div class="aircraft-card-title-block">
+            <p class="aircraft-card-manufacturer">${escapeHtml(row.manufacturer)}</p>
+            <h4 class="aircraft-card-name" title="${escapeHtml(row.name)}">${escapeHtml(row.name)}</h4>
+            <div class="aircraft-card-inline-metrics cardle-guess-inline-metrics">
+              <span class="cardle-inline-pill">${escapeHtml(summaryText)}</span>
+            </div>
+            <div class="cardle-guess-support">
+              ${supportItems.map((item) => buildCardleSupportPillHtml(item, { compact: true })).join('')}
+            </div>
+          </div>
+          <div class="aircraft-card-badges">
+            <span class="cardle-guess-badge${comparison.solved ? ' is-solved' : ''}">${escapeHtml(comparison.solved ? 'Solved' : `Guess ${entry.guessNumber}`)}</span>
+          </div>
+        </div>
+        <div class="aircraft-card-stats-block">
+          <p class="aircraft-card-model">ICAO ${escapeHtml(row.icao)}</p>
+          ${buildCardleCardStatsHtml(comparison)}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function buildCardleEntries(challenge, session) {
+  return session.guesses
+    .map((modelId, index) => {
+      const model = state.cardle.dataset?.modelsById?.get(modelId);
+      if (!model) {
+        return null;
+      }
+      return {
+        model,
+        guessNumber: index + 1,
+        comparison: buildCardleGuessComparison(model, challenge.target),
+      };
+    })
+    .filter(Boolean);
+}
+
+function renderCardleBoard(challenge, session, entries = buildCardleEntries(challenge, session)) {
+  elements.cardleBoardMeta.hidden = false;
+  elements.cardleBoardMeta.textContent = `Best-so-far clues stay pinned above while newest guesses stack here. The hotspot map unlocks on guess ${formatNumber(CARDLE_MAP_REVEAL_GUESS)} and the 3D reveal on guess ${formatNumber(CARDLE_MODEL_REVEAL_GUESS)}.`;
+  if (!entries.length) {
+    elements.cardleBoard.innerHTML = `
+      <div class="daily-board-empty">
+        Compact guess cards will stack here. The tracker above will keep your strongest clue in each category after the first guess.
+      </div>
+    `;
+    return [];
+  }
+  const displayEntries = [...entries].reverse();
+  const animatedGuessId = state.cardle.pendingAnimatedGuessId;
+  elements.cardleBoard.innerHTML = `
+    <div class="cardle-board-stack">
+      ${displayEntries.map((entry) => buildCardleGuessCardHtml(entry, { isFresh: animatedGuessId && entry.model.id === animatedGuessId })).join('')}
+    </div>
+  `;
+  if (animatedGuessId) {
+    state.cardle.pendingAnimatedGuessId = '';
+  }
+  return displayEntries.map((entry) => entry.comparison);
+}
+
+function renderCardleBriefing(challenge, session) {
+  const maxGuesses = Number(challenge?.maxGuesses || CARDLE_MAX_GUESSES);
+  const remainingGuesses = Math.max(maxGuesses - session.guesses.length, 0);
+  const hintState = getCardleHintState(session);
+  const mapRemaining = Math.max(CARDLE_MAP_REVEAL_GUESS - session.guesses.length, 0);
+  const modelRemaining = Math.max(CARDLE_MODEL_REVEAL_GUESS - session.guesses.length, 0);
+  let statusCopy = 'The hotspot map unlocks on guess 3 and the 3D reveal on guess 5.';
+  if (session.status === 'won') {
+    statusCopy = 'Board cleared. The answer, hotspot map, and 3D reveal are now fully open below.';
+  } else if (session.status === 'lost') {
+    statusCopy = 'Out of guesses. The answer and both reveals are now fully open below.';
+  } else if (!hintState.mapUnlocked) {
+    statusCopy = `Hotspot map unlocks after ${formatNumber(mapRemaining)} more ${mapRemaining === 1 ? 'guess' : 'guesses'}.`;
+  } else if (!hintState.modelUnlocked) {
+    statusCopy = `Hotspot map live. The 3D reveal unlocks after ${formatNumber(modelRemaining)} more ${modelRemaining === 1 ? 'guess' : 'guesses'}.`;
+  } else {
+    statusCopy = 'Hotspot map and 3D reveal are both live. Keep following the pinned clues below.';
+  }
+  elements.cardleBriefing.innerHTML = `
+    <div class="daily-briefing-card">
+      <div class="daily-briefing-head">
+        <div class="daily-briefing-copy">
+          <div class="daily-widget-head">
+            <span class="daily-widget-kicker">Guesses left</span>
+            <strong class="daily-widget-value">${formatNumber(remainingGuesses)}</strong>
+            <span class="daily-widget-note">of ${formatNumber(maxGuesses)} left</span>
+          </div>
+        </div>
+      </div>
+      <div class="daily-runway-lights" aria-hidden="true">
+        ${Array.from({ length: maxGuesses }, (_, index) => buildDailyRunwayLightHtml(index, session.guesses.length, session.status)).join('')}
+      </div>
+      <div class="daily-briefing-foot">
+        <p class="daily-hint-note">${escapeHtml(statusCopy)}</p>
+      </div>
+    </div>
+  `;
+}
+
+function getCardleCopyButtonConfig(challenge, session, options = {}) {
+  if (!challenge || (session.status !== 'won' && session.status !== 'lost')) {
+    return null;
+  }
+  const celebrateSolve = Boolean(options?.celebrateSolve);
+  const isVictory = session.status === 'won';
+  if (state.cardle.copyStatus === 'copied') {
+    return {
+      className: `region-action-button daily-copy-button${isVictory ? ' is-victory' : ' is-loss'} is-copied`,
+      label: 'Copied',
+    };
+  }
+  if (state.cardle.copyStatus === 'error') {
+    return {
+      className: `region-action-button daily-copy-button${isVictory ? ' is-victory' : ' is-loss'} is-error`,
+      label: 'Copy results',
+      note: 'Try again',
+    };
+  }
+  return {
+    className: `region-action-button daily-copy-button${isVictory ? ` is-victory${celebrateSolve ? ' is-celebrating' : ''}` : ' is-loss'}`,
+    label: 'Copy results',
+    note: isVictory ? `${formatDailyGuessCount(session.guesses.length)} logged` : 'Share-ready grid',
+  };
+}
+
+function buildCardleTargetComparison(target) {
+  return buildCardleGuessComparison(target, target);
+}
+
+function buildCardleTrackerStatsHtml(entries, target, revealed) {
+  return buildCardleCardStatsHtml(
+    revealed
+      ? buildCardleTargetComparison(target)
+      : { tiles: buildCardleTrackerTiles(entries, target) },
+  );
+}
+
+function buildCardleIntelStatusCopy(session, entries = []) {
+  const hintState = getCardleHintState(session);
+  if (session.status === 'won') {
+    return 'Board cleared. The full target profile, hotspot map, 3D reveal, and share-ready result are all live.';
+  }
+  if (session.status === 'lost') {
+    return 'Board complete. The target profile is fully revealed so you can review it against the guesses below.';
+  }
+  if (!entries.length) {
+    return 'Placeholders stay pinned until the first guess. Exact matches lock in green while closer values replace weaker clues.';
+  }
+  if (!hintState.mapUnlocked) {
+    const remaining = Math.max(CARDLE_MAP_REVEAL_GUESS - session.guesses.length, 0);
+    return `Each box keeps your closest clue so far. The hotspot map unlocks after ${formatNumber(remaining)} more ${remaining === 1 ? 'guess' : 'guesses'}.`;
+  }
+  if (!hintState.modelUnlocked) {
+    const remaining = Math.max(CARDLE_MODEL_REVEAL_GUESS - session.guesses.length, 0);
+    return `Each box keeps your closest clue so far. The hotspot map is live and the 3D reveal unlocks after ${formatNumber(remaining)} more ${remaining === 1 ? 'guess' : 'guesses'}.`;
+  }
+  return 'Each box keeps your closest clue so far. The hotspot map and 3D reveal are both live.';
+}
+
+function buildCardleStageOverlayHtml({ label = '', badge = '', live = false, footPills = [] } = {}) {
+  const pills = (Array.isArray(footPills) ? footPills : [])
+    .map((pill) => ({
+      text: sanitizeText(pill?.text),
+      tone: sanitizeText(pill?.tone),
+    }))
+    .filter((pill) => pill.text);
+  return `
+    <div class="cardle-stage-overlay" aria-hidden="true">
+      <div class="cardle-stage-overlay-top">
+        ${label ? `<span class="cardle-stage-overlay-label">${escapeHtml(label)}</span>` : '<span></span>'}
+        ${badge ? `<span class="cardle-stage-chip${live ? ' is-live' : ''}">${escapeHtml(badge)}</span>` : ''}
+      </div>
+      ${pills.length ? `
+        <div class="cardle-stage-overlay-foot">
+          ${pills.map((pill) => `<span class="cardle-stage-overlay-pill${pill.tone ? ` is-${pill.tone}` : ''}">${escapeHtml(pill.text)}</span>`).join('')}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function buildCardleModelStageHtml(challenge, session) {
+  const target = challenge?.target;
+  if (!target) {
+    return '';
+  }
+  const hintState = getCardleHintState(session);
+  const revealed = hintState.modelUnlocked;
+  if (revealed) {
+    void ensureCardleModelStageAsset(challenge, session);
+  }
+  const modelViewerReady = typeof window.customElements?.get === 'function'
+    && Boolean(window.customElements.get('model-viewer'));
+  const stageState = state.cardle.modelStage.modelId === target.id
+    ? state.cardle.modelStage
+    : {
+      loading: false,
+      available: null,
+      error: '',
+      resolvedUrl: '',
+    };
+  const modelUrl = stageState.resolvedUrl || '';
+  const fallbackLabel = revealed
+    ? stageState.loading
+      ? 'Checking 3D asset'
+      : !modelUrl
+        ? '3D asset unavailable'
+        : !modelViewerReady
+          ? '3D viewer unavailable'
+          : ''
+    : '';
+  const overlayPills = revealed
+    ? stageState.loading
+      ? [{ text: 'Checking GLB', tone: 'warning' }]
+      : !modelUrl
+        ? [{ text: 'GLB unavailable', tone: 'muted' }]
+        : !modelViewerReady
+          ? [{ text: 'Viewer unavailable', tone: 'muted' }]
+          : []
+    : [];
+  return `
+    <section class="cardle-reveal-panel is-model-stage">
+      <div class="cardle-model-shell${revealed ? ' is-revealed' : ' is-concealed'}">
+        ${buildCardleStageOverlayHtml({
+    label: '3D reveal',
+    badge: revealed ? 'Live' : `Guess ${CARDLE_MODEL_REVEAL_GUESS}`,
+    live: revealed,
+    footPills: overlayPills,
+  })}
+        ${revealed && modelUrl && modelViewerReady ? `
+          <model-viewer
+            class="cardle-target-model"
+            src="${escapeHtml(modelUrl)}"
+            camera-controls
+            auto-rotate
+            disable-pan
+          ></model-viewer>
+        ` : ''}
+        ${fallbackLabel ? `<div class="aircraft-card-image-fallback">${escapeHtml(fallbackLabel)}</div>` : ''}
+        ${revealed ? '' : `
+          <div class="cardle-stage-redaction" aria-hidden="true">
+            <span class="cardle-stage-redaction-label">Unlock on guess ${escapeHtml(formatNumber(CARDLE_MODEL_REVEAL_GUESS))}</span>
+          </div>
+        `}
+      </div>
+    </section>
+  `;
+}
+
+function buildCardleMapStageHtml(challenge, session) {
+  const target = challenge?.target;
+  if (!target) {
+    return '';
+  }
+  const hintState = getCardleHintState(session);
+  if (hintState.mapUnlocked) {
+    void ensureCardleHotspotHint(challenge, session);
+  }
+  const coordinates = Array.isArray(state.cardle.hotspot.data?.coordinates)
+    ? state.cardle.hotspot.data.coordinates
+    : [];
+  const leafletReady = Boolean(window.L);
+  const overlayCopy = hintState.mapUnlocked && !leafletReady ? 'Interactive map unavailable' : '';
+  const overlayPills = hintState.mapUnlocked
+    ? !leafletReady
+      ? [{ text: 'Map unavailable', tone: 'muted' }]
+      : state.cardle.hotspot.loading
+        ? [{ text: 'Syncing live hotspots', tone: 'warning' }]
+        : state.cardle.hotspot.error
+          ? [{ text: 'Live feed unavailable', tone: 'muted' }]
+          : coordinates.length
+            ? [{ text: `${formatNumber(coordinates.length)} hotspots`, tone: 'live' }]
+            : [{ text: 'No hotspots returned', tone: 'muted' }]
+    : [];
+  return `
+    <section class="cardle-reveal-panel is-map-stage">
+      <div class="cardle-hotspot-shell${hintState.mapUnlocked ? ' is-revealed' : ' is-concealed'}">
+        ${buildCardleStageOverlayHtml({
+    label: 'Registration origins',
+    badge: hintState.mapUnlocked ? 'Live' : `Guess ${CARDLE_MAP_REVEAL_GUESS}`,
+    live: hintState.mapUnlocked,
+    footPills: overlayPills,
+  })}
+        <div class="cardle-hotspot-map">
+          ${hintState.mapUnlocked && leafletReady ? `
+            <div
+              id="cardle-hotspot-map-canvas"
+              class="cardle-hotspot-map-canvas"
+              aria-label="Interactive registration-origin hotspot map"
+            ></div>
+          ` : ''}
+          ${overlayCopy ? `<p class="cardle-hotspot-empty">${escapeHtml(overlayCopy)}</p>` : ''}
+        </div>
+        ${hintState.mapUnlocked ? '' : `
+          <div class="cardle-stage-redaction" aria-hidden="true">
+            <span class="cardle-stage-redaction-label">Unlock on guess ${escapeHtml(formatNumber(CARDLE_MAP_REVEAL_GUESS))}</span>
+          </div>
+        `}
+      </div>
+    </section>
+  `;
+}
+
+function setCardleIntelPanelVisualState(options = {}) {
+  elements.cardleIntelPanel.classList.toggle('is-revealed', Boolean(options.revealed));
+  elements.cardleIntelPanel.classList.toggle('is-victory', Boolean(options.victory));
+  elements.cardleIntelPanel.classList.toggle('is-celebrating', Boolean(options.celebrating));
+}
+
+function renderCardleIntelPanel(challenge, session, entries = buildCardleEntries(challenge, session), options = {}) {
+  if (!challenge?.target) {
+    disposeCardleHotspotMap();
+    setCardleIntelPanelVisualState();
+    elements.cardleIntelPanel.innerHTML = '';
+    return;
+  }
+  disposeCardleHotspotMap();
+  const target = challenge.target;
+  const revealTarget = session.status === 'won' || session.status === 'lost';
+  const celebrateSolve = revealTarget && session.status === 'won' && Boolean(options?.celebrateSolve);
+  setCardleIntelPanelVisualState({
+    revealed: revealTarget,
+    victory: session.status === 'won',
+    celebrating: celebrateSolve,
+  });
+  const supportItems = buildCardleTrackerSupportItems(entries, target, {
+    revealed: revealTarget,
+  });
+  const copyButtonConfig = revealTarget ? getCardleCopyButtonConfig(challenge, session, { celebrateSolve }) : null;
+  const primaryTitle = revealTarget
+    ? target.displayName
+    : 'Best so far';
+  const primarySubtitle = revealTarget
+    ? session.status === 'won'
+      ? `Solved in ${formatDailyGuessCount(session.guesses.length)}. ICAO ${target.icao}.`
+      : `Board revealed after ${formatDailyGuessCount(session.guesses.length)}. ICAO ${target.icao}.`
+    : entries.length
+      ? 'Each category keeps the strongest clue you have logged so far.'
+      : 'Your strongest clue in each category will pin here after the first guess.';
+  const statusCopy = buildCardleIntelStatusCopy(session, entries);
+  const statMetaLabel = revealTarget ? `ICAO ${target.icao}` : 'ICAO ?';
+  const victoryBannerHtml = session.status === 'won'
+    ? `
+      <div class="daily-victory-banner${celebrateSolve ? ' is-celebrating' : ''}">
+        <span class="daily-victory-banner-kicker">Solved</span>
+        <strong class="daily-victory-banner-value">${escapeHtml(formatDailyGuessCount(session.guesses.length))}</strong>
+        <span class="daily-victory-banner-note">${escapeHtml(statusCopy)}</span>
+      </div>
+    `
+    : '';
+  elements.cardleIntelPanel.innerHTML = `
+    ${celebrateSolve ? buildDailyVictoryOverlayHtml() : ''}
+    <div class="cardle-intel-head">
+      <div class="cardle-intel-title-block">
+        <p class="eyebrow">${escapeHtml(
+    revealTarget
+      ? (session.status === 'won' ? 'Direct hit' : 'Revealed aircraft')
+      : 'Live comparison',
+  )}</p>
+        <h4 class="cardle-intel-title">${escapeHtml(primaryTitle)}</h4>
+        <p class="cardle-intel-subtitle">${escapeHtml(primarySubtitle)}</p>
+      </div>
+      ${copyButtonConfig ? `<div class="cardle-intel-actions">${buildDailyCopyButtonHtml(copyButtonConfig)}</div>` : ''}
+    </div>
+    <div class="cardle-intel-layout">
+      <div class="cardle-intel-primary">
+        ${victoryBannerHtml || `<p class="cardle-intel-note">${escapeHtml(statusCopy)}</p>`}
+        <div class="cardle-support-grid">
+          ${supportItems.map((item) => buildCardleSupportPillHtml(item)).join('')}
+        </div>
+        <div class="aircraft-card-stats-block">
+          <p class="aircraft-card-model">${escapeHtml(statMetaLabel)}</p>
+          ${buildCardleTrackerStatsHtml(entries, target, revealTarget)}
+        </div>
+      </div>
+      <div class="cardle-intel-visuals">
+        ${buildCardleMapStageHtml(challenge, session)}
+        ${buildCardleModelStageHtml(challenge, session)}
+      </div>
+    </div>
+  `;
+  syncCardleHotspotMap(challenge, session);
+}
+
+function renderCardleErrorState(message) {
+  disposeCardleHotspotMap();
+  elements.cardleCommandDeck?.classList.remove('is-victorious');
+  setCardleIntelPanelVisualState();
+  elements.cardleTitle.textContent = CARDLE_GAME_NAME;
+  elements.cardleHeroSummary.textContent = 'Board offline';
+  elements.cardleMetaGrid.innerHTML = [
+    buildDailyStatusBadgeHtml('Reset', '--', 'UTC', { tone: 'reset' }),
+    buildDailyStatCardHtml('Streak', '--', 'Unavailable'),
+    buildDailyStatCardHtml('Win rate', '--', 'Unavailable'),
+  ].join('');
+  elements.cardleGuessInput.disabled = true;
+  elements.cardleGuessInput.value = '';
+  elements.cardleGuessInput.setAttribute('aria-expanded', 'false');
+  elements.cardleSuggestionList.innerHTML = '';
+  elements.cardleFeedback.hidden = false;
+  elements.cardleFeedback.className = 'daily-feedback is-warning';
+  elements.cardleFeedback.textContent = message;
+  elements.cardleBriefing.innerHTML = '';
+  elements.cardleIntelPanel.innerHTML = `
+    <div class="daily-briefing-card is-warning">
+      <div class="daily-briefing-head">
+        <div class="daily-briefing-copy">
+          <div class="daily-widget-head">
+            <span class="daily-widget-kicker">Daily status</span>
+            <strong class="daily-widget-value">Unavailable</strong>
+          </div>
+          <p class="daily-briefing-note">${escapeHtml(message)}</p>
+        </div>
+      </div>
+    </div>
+  `;
+  elements.cardleBoardMeta.hidden = true;
+  elements.cardleBoard.innerHTML = `
+    <div class="daily-board-empty">
+      Cardle data is unavailable right now. The rest of Skyviz still works normally.
+    </div>
+  `;
+}
+
+async function ensureCardleModelStageAsset(challenge, session) {
+  if (!challenge?.target || !getCardleHintState(session).modelUnlocked) {
+    return;
+  }
+  const modelId = String(challenge.target.id || '').trim().toUpperCase();
+  if (!modelId) {
+    return;
+  }
+  if (state.cardle.modelStage.modelId === modelId) {
+    if (state.cardle.modelStage.loading) {
+      return;
+    }
+    if (state.cardle.modelStage.available !== null) {
+      return;
+    }
+  }
+  const candidates = buildCardleModelCandidates(challenge.target);
+  if (!candidates.length) {
+    state.cardle.modelStage = {
+      modelId,
+      loading: false,
+      available: false,
+      error: 'No optimized GLB is available for this model.',
+      resolvedUrl: '',
+    };
+    if (state.activeTab === 'cardle') {
+      renderCardleIntelPanel(challenge, session);
+    }
+    return;
+  }
+  state.cardle.modelStage = {
+    modelId,
+    loading: true,
+    available: null,
+    error: '',
+    resolvedUrl: '',
+  };
+  if (state.activeTab === 'cardle') {
+    renderCardleIntelPanel(challenge, session);
+  }
+  for (const candidate of candidates) {
+    try {
+      const response = await fetch(candidate, {
+        method: 'HEAD',
+        cache: 'no-store',
+      });
+      if (response.ok) {
+        state.cardle.modelStage = {
+          modelId,
+          loading: false,
+          available: true,
+          error: '',
+          resolvedUrl: candidate,
+        };
+        if (state.activeTab === 'cardle') {
+          renderCardleIntelPanel(challenge, session);
+        }
+        return;
+      }
+    } catch {
+      continue;
+    }
+  }
+  state.cardle.modelStage = {
+    modelId,
+    loading: false,
+    available: false,
+    error: 'No optimized GLB is available for this model.',
+    resolvedUrl: '',
+  };
+  if (state.activeTab === 'cardle') {
+    renderCardleIntelPanel(challenge, session);
+  }
+}
+
+async function ensureCardleHotspotHint(challenge, session) {
+  if (!challenge?.target || !getCardleHintState(session).mapUnlocked) {
+    return;
+  }
+  const modelId = String(challenge.target.id || '').trim().toUpperCase();
+  if (!modelId) {
+    return;
+  }
+  if (state.cardle.hotspot.loading && state.cardle.hotspot.modelId === modelId) {
+    return;
+  }
+  if (state.cardle.hotspot.modelId === modelId && (state.cardle.hotspot.data || state.cardle.hotspot.error)) {
+    return;
+  }
+  state.cardle.hotspot = {
+    modelId,
+    loading: true,
+    error: '',
+    data: null,
+  };
+  if (state.activeTab === 'cardle') {
+    renderCardleIntelPanel(challenge, session);
+  }
+  try {
+    const response = await fetch(buildCardleHotspotUrl(modelId), {
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json',
+        'x-client-version': state.cardle.dataset?.manifest?.clientVersion || state.references?.manifest?.clientVersion || '2.0.24',
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Hotspot hint failed to load (${response.status}).`);
+    }
+    const payload = normalizeCardleHotspotPayload(await response.json());
+    state.cardle.hotspot = {
+      modelId,
+      loading: false,
+      error: '',
+      data: payload,
+    };
+  } catch (error) {
+    state.cardle.hotspot = {
+      modelId,
+      loading: false,
+      error: error instanceof Error ? error.message : 'Hotspot hint failed to load.',
+      data: null,
+    };
+  }
+  if (state.cardle.challenge?.target?.id === modelId && state.activeTab === 'cardle') {
+    renderCardleTab();
+  }
+}
+
+function renderCardleTab() {
+  if (state.cardle.error) {
+    renderCardleErrorState(state.cardle.error);
+    return;
+  }
+  const challenge = state.cardle.challenge;
+  if (!challenge || !state.cardle.dataset) {
+    elements.cardleCommandDeck?.classList.remove('is-victorious');
+    setCardleIntelPanelVisualState();
+    elements.cardleTitle.textContent = CARDLE_GAME_NAME;
+    elements.cardleHeroSummary.textContent = 'Signal warming up';
+    elements.cardleMetaGrid.innerHTML = [
+      buildDailyStatusBadgeHtml('Reset', formatCountdown(getNextUtcResetTime().getTime() - Date.now()), 'UTC', { tone: 'reset' }),
+      buildDailyStatCardHtml('Streak', '--', 'Loading'),
+      buildDailyStatCardHtml('Win rate', '--', 'Loading'),
+    ].join('');
+    elements.cardleGuessInput.disabled = true;
+    elements.cardleGuessInput.value = '';
+    elements.cardleSuggestionList.innerHTML = '';
+    elements.cardleFeedback.hidden = false;
+    elements.cardleFeedback.className = 'daily-feedback is-muted';
+    elements.cardleFeedback.textContent = 'Loading model data...';
+    elements.cardleBriefing.innerHTML = '';
+    disposeCardleHotspotMap();
+    elements.cardleIntelPanel.innerHTML = '<div class="daily-board-empty">Preparing today&apos;s best-so-far tracker...</div>';
+    elements.cardleBoardMeta.hidden = true;
+    elements.cardleBoard.innerHTML = '<div class="daily-board-empty">Preparing today&apos;s model board...</div>';
+    return;
+  }
+
+  const session = getCardleSession(challenge.dayKey);
+  const entries = buildCardleEntries(challenge, session);
+  const stats = buildDailyStats(state.cardle.history);
+  const celebrateSolve = session.status === 'won' && state.cardle.pendingVictoryDayKey === challenge.dayKey;
+  const statCelebrateKeys = new Set(celebrateSolve ? state.cardle.pendingStatCelebrateKeys : []);
+  const countdown = formatCountdown(getNextUtcResetTime().getTime() - Date.now());
+  const maxGuesses = Number(challenge?.maxGuesses || CARDLE_MAX_GUESSES);
+  const canGuess = session.status === 'in_progress' && session.guesses.length < maxGuesses;
+  elements.cardleTitle.textContent = CARDLE_GAME_NAME;
+  elements.cardleHeroSummary.textContent = canGuess
+    ? 'Type an ICAO, manufacturer, or alias. Each guess feeds a pinned best-so-far tracker while the hotspot map and 3D reveal unlock in sequence.'
+    : session.status === 'won'
+      ? 'Board cleared. Review the revealed aircraft, 3D model, hotspot map, and share-ready grid.'
+      : 'Board complete. Review the revealed aircraft, hotspot map, and 3D model.';
+  elements.cardleMetaGrid.innerHTML = buildDailyMetaGridHtml(challenge, session, stats, countdown, statCelebrateKeys);
+  elements.cardleGuessInput.disabled = !canGuess;
+  elements.cardleGuessInput.value = state.cardle.query;
+  elements.cardleGuessInput.setAttribute('aria-expanded', String(canGuess && state.cardle.suggestions.length > 0));
+  elements.cardleSuggestionList.innerHTML = canGuess
+    ? state.cardle.suggestions.map((model, index) => `
+        <button
+          class="daily-suggestion-button${index === state.cardle.selectedSuggestionIndex ? ' is-active' : ''}"
+          type="button"
+          role="option"
+          aria-selected="${index === state.cardle.selectedSuggestionIndex}"
+          data-action="select-cardle-suggestion"
+          data-model-id="${escapeHtml(model.id)}"
+        >
+          <span class="daily-suggestion-label">${escapeHtml(buildCardleOptionLabel(model))}</span>
+          <span class="daily-suggestion-meta">${escapeHtml([
+      formatAircraftYear(model.firstFlight),
+      formatCardleRange(model.range),
+      `${formatNumber(model.seats)} seats`,
+    ].join(' / '))}</span>
+        </button>
+      `).join('')
+    : '';
+  const defaultFeedback = canGuess
+    ? (session.guesses.length ? '' : 'Pick a result to submit your next guess, or press Enter on an exact ICAO / model match.')
+    : session.status === 'won'
+      ? 'Board solved.'
+      : 'Board complete.';
+  const feedbackText = state.cardle.feedback || defaultFeedback;
+  elements.cardleFeedback.hidden = !feedbackText;
+  elements.cardleFeedback.className = `daily-feedback is-${escapeHtml(state.cardle.feedbackTone || 'muted')}`;
+  elements.cardleFeedback.textContent = feedbackText;
+  renderCardleBriefing(challenge, session);
+  renderCardleIntelPanel(challenge, session, entries, { celebrateSolve });
+  renderCardleBoard(challenge, session, entries);
+  elements.cardleCommandDeck?.classList.toggle('is-victorious', celebrateSolve);
+  if (state.ui.pendingCardleInputFocus) {
+    focusCardleGuessInput();
+  }
+  if ((session.status === 'won' || session.status === 'lost') && !state.cardle.feedback) {
+    setCardleFeedback(
+      session.status === 'won'
+        ? `Cleared in ${formatDailyGuessCount(session.guesses.length)}. The share grid is ready.`
+        : 'No solve today. The answer, hotspot map, and 3D reveal are shown above.',
+      session.status === 'won' ? 'success' : 'warning',
+    );
+    elements.cardleFeedback.className = `daily-feedback is-${escapeHtml(state.cardle.feedbackTone)}`;
+    elements.cardleFeedback.textContent = state.cardle.feedback;
+  }
+  if (celebrateSolve) {
+    state.cardle.pendingVictoryDayKey = '';
+    state.cardle.pendingStatCelebrateKeys = [];
+  }
+}
+
+async function ensureCardleGameReady(options = {}) {
+  const todayKey = getUtcDayKey();
+  if (isCardleGameReadyForToday()) {
+    if (options.focusInput) {
+      state.ui.pendingCardleInputFocus = true;
+    }
+    renderLandingDailyCtas();
+    renderCardleTab();
+    scheduleDailyCountdownRefresh();
+    return true;
+  }
+  state.cardle.error = '';
+  if (options.focusInput) {
+    state.ui.pendingCardleInputFocus = true;
+  }
+  try {
+    const references = state.references?.referenceModels
+      ? state.references
+      : await loadCardleReferenceData();
+    if (!state.references) {
+      state.references = references;
+    }
+    if (!state.cardle.dataset) {
+      state.cardle.dataset = buildCardleDataset(references);
+    }
+    const selection = selectDailyCardModel(state.cardle.dataset.models, todayKey);
+    if (!selection?.model) {
+      throw new Error('No aircraft model could be selected for today.');
+    }
+    const previousTargetId = state.cardle.challenge?.target?.id || '';
+    state.cardle.dayKey = todayKey;
+    state.cardle.challenge = {
+      dayKey: todayKey,
+      target: selection.model,
+      maxGuesses: CARDLE_MAX_GUESSES,
+    };
+    state.cardle.query = '';
+    state.cardle.suggestions = [];
+    state.cardle.selectedSuggestionIndex = -1;
+    state.cardle.pendingVictoryDayKey = '';
+    state.cardle.pendingStatCelebrateKeys = [];
+    state.cardle.copyStatus = '';
+    if (previousTargetId !== selection.model.id) {
+      resetCardleHotspotState();
+      resetCardleModelStageState();
+    }
+    if (!state.cardle.feedback) {
+      setCardleFeedback('', 'muted');
+    }
+    renderLandingDailyCtas();
+    renderCardleTab();
+    scheduleDailyCountdownRefresh();
+    return true;
+  } catch (error) {
+    state.cardle.error = error instanceof Error ? error.message : 'Failed to load the daily aircraft game data.';
+    renderLandingDailyCtas();
+    if (state.activeTab === 'cardle') {
+      renderCardleErrorState(state.cardle.error);
+    }
+    return false;
+  }
+}
+
+async function openCardleExperience(options = {}) {
+  if (options.syncHash !== false) {
+    updateUrlHash(CARDLE_GAME_HASH, { replace: Boolean(options.replaceHash) });
+  }
+  const revealShellBeforeReady = options.revealShellBeforeReady !== false;
+  const showBlockingLoader = options.showBlockingLoader !== false && !isCardleGameReadyForToday();
+  const previousVisibility = showBlockingLoader
+    ? beginDashboardLoadingState(`Loading ${CARDLE_GAME_NAME}...`)
+    : null;
+  if (revealShellBeforeReady && !showBlockingLoader) {
+    elements.landingView.hidden = true;
+    elements.dashboard.hidden = false;
+  }
+  syncDashboardTabAvailability();
+  setActiveTab('cardle', { skipAutoEnsure: true });
+  if (revealShellBeforeReady && !showBlockingLoader) {
+    renderCardleTab();
+  }
+  const ready = await ensureCardleGameReady({ focusInput: options.focusInput !== false });
+  if (showBlockingLoader || !revealShellBeforeReady) {
+    elements.landingView.hidden = true;
+    elements.dashboard.hidden = false;
+    syncDashboardTabAvailability();
+  }
+  if (showBlockingLoader) {
+    endDashboardLoadingState(previousVisibility, false);
+  }
+  if (!ready) {
+    setBanner(state.cardle.error || 'Daily aircraft data could not be loaded.', 'warning');
+  }
+}
+
+function isCardleHashRoute(hash = typeof window !== 'undefined' ? window.location?.hash : '') {
+  return normalizeHashRoute(hash) === CARDLE_GAME_HASH;
+}
+
+async function openCardleExperienceFromHash(options = {}) {
+  if (!isCardleHashRoute()) {
+    return false;
+  }
+  await openCardleExperience({
+    focusInput: Boolean(options.focusInput),
+    revealShellBeforeReady: options.revealShellBeforeReady,
+    showBlockingLoader: options.showBlockingLoader,
+    syncHash: false,
+  });
+  return true;
+}
+
+async function openExperienceFromHash(options = {}) {
+  if (await openCardleExperienceFromHash(options)) {
+    return true;
+  }
+  return openDailyExperienceFromHash(options);
+}
+
+function updateCardleSuggestions() {
+  if (!state.cardle.dataset?.models || !state.cardle.challenge) {
+    state.cardle.suggestions = [];
+    state.cardle.selectedSuggestionIndex = -1;
+    renderCardleTab();
+    return;
+  }
+  const guessedIds = new Set(getCardleSession().guesses);
+  state.cardle.suggestions = buildCardleSuggestions(
+    state.cardle.dataset.models,
+    state.cardle.query,
+    guessedIds,
+  );
+  state.cardle.selectedSuggestionIndex = state.cardle.suggestions.length ? 0 : -1;
+  renderCardleTab();
+}
+
+function submitCardleGuessByModel(model) {
+  const challenge = state.cardle.challenge;
+  if (!challenge || !model) {
+    setCardleFeedback('Pick an aircraft model from the suggestion list first.', 'warning');
+    renderCardleTab();
+    return;
+  }
+  const maxGuesses = Number(challenge?.maxGuesses || CARDLE_MAX_GUESSES);
+  const session = getCardleSession(challenge.dayKey);
+  if (session.status !== 'in_progress' || session.guesses.length >= maxGuesses) {
+    setCardleFeedback('Today\'s board is already complete.', 'warning');
+    renderCardleTab();
+    return;
+  }
+  if (session.guesses.includes(model.id)) {
+    setCardleFeedback('That model is already on your board.', 'warning');
+    renderCardleTab();
+    return;
+  }
+  const previousStats = buildDailyStats(state.cardle.history);
+  const previousHintState = getCardleHintState(session);
+  const nextGuesses = [...session.guesses, model.id];
+  const solved = model.id === challenge.target.id;
+  const status = solved
+    ? 'won'
+    : nextGuesses.length >= maxGuesses
+      ? 'lost'
+      : 'in_progress';
+  const nextSession = {
+    guesses: nextGuesses,
+    status,
+    completedAt: status === 'in_progress' ? session.completedAt : new Date().toISOString(),
+  };
+  const nextHintState = getCardleHintState(nextSession);
+  updateCardleSession(challenge.dayKey, {
+    ...nextSession,
+    hintRevealCount: nextHintState.revealCount,
+  });
+  const nextStats = buildDailyStats(state.cardle.history);
+  state.cardle.pendingAnimatedGuessId = model.id;
+  state.cardle.copyStatus = '';
+  state.cardle.pendingVictoryDayKey = solved ? challenge.dayKey : '';
+  state.cardle.pendingStatCelebrateKeys = solved
+    ? [
+      nextStats.currentStreak !== previousStats.currentStreak ? 'streak' : '',
+      nextStats.winRate !== previousStats.winRate ? 'win-rate' : '',
+    ].filter(Boolean)
+    : [];
+  state.cardle.query = '';
+  state.cardle.suggestions = [];
+  state.cardle.selectedSuggestionIndex = -1;
+  const unlockedHotspot = !previousHintState.mapUnlocked && nextHintState.mapUnlocked;
+  const unlockedModel = !previousHintState.modelUnlocked && nextHintState.modelUnlocked;
+  let feedback = '';
+  let tone = 'muted';
+  if (solved) {
+    feedback = `Nailed it in ${formatDailyGuessCount(nextGuesses.length)}.`;
+    tone = 'success';
+  } else if (status === 'lost') {
+    feedback = 'Out of guesses. Today\'s aircraft is revealed above.';
+    tone = 'warning';
+  } else if (unlockedHotspot && unlockedModel) {
+    feedback = 'Hotspot map and 3D reveal are both unlocked.';
+    tone = 'success';
+  } else if (unlockedHotspot) {
+    feedback = 'Hotspot map unlocked above.';
+    tone = 'success';
+  } else if (unlockedModel) {
+    feedback = '3D reveal unlocked above.';
+    tone = 'success';
+  }
+  setCardleFeedback(feedback, tone);
+  renderLandingDailyCtas();
+  renderCardleTab();
+}
+
+async function copyCardleResultToClipboard() {
+  const challenge = state.cardle.challenge;
+  const session = getCardleSession();
+  if (!challenge || (session.status !== 'won' && session.status !== 'lost')) {
+    return;
+  }
+  const comparisons = session.guesses
+    .map((modelId) => state.cardle.dataset?.modelsById?.get(modelId))
+    .filter(Boolean)
+    .map((model) => buildCardleGuessComparison(model, challenge.target));
+  const text = buildCardleShareText(challenge, session, comparisons, {
+    shareUrl: getCardleShareUrl(),
+  });
+  try {
+    await navigator.clipboard.writeText(text);
+    state.cardle.copyStatus = 'copied';
+    setCardleFeedback('Results copied. Paste them anywhere.', 'success');
+  } catch {
+    state.cardle.copyStatus = 'error';
+    setCardleFeedback('Clipboard access failed in this browser. Try Copy results again.', 'warning');
+  }
+  renderCardleTab();
 }
 
 function wireBanner() {
@@ -2048,7 +3754,7 @@ function describePersistPreferenceSummary() {
 
 function describeDataToolsCollectionSummary() {
   if (!state.upload.text) {
-    return 'Upload a Skycards export JSON file to start a dashboard in this browser.';
+  return 'Upload a collection export JSON file to start a dashboard in this browser.';
   }
   if (state.upload.fileName === 'skyviz_try_now_user.json') {
     return 'Built-in sample deck is active. Uploading a JSON export replaces the current in-browser view.';
@@ -2258,7 +3964,7 @@ function applyManualRegistrationMapping(row, modelIdInput = '') {
     return;
   }
   if (!state.references.modelsById.has(selectedModelId)) {
-    setBanner(`"${selectedModelId}" was not found in the current Skycards models reference snapshot.`, 'warning');
+  setBanner(`"${selectedModelId}" was not found in the current aircraft reference snapshot.`, 'warning');
     return;
   }
   state.manualRegistrationMappings.set(row.manualMappingKey, {
@@ -3027,7 +4733,7 @@ function renderAircraftDetailModal(model = state.model) {
     : 'Model registration universe incomplete';
   const { options, selected } = getAircraftDetailMediaState(row);
   const mediaHeading = '3D studio';
-  const mediaNote = selected?.note || 'Optimized GLB from the Skycards CDN.';
+  const mediaNote = selected?.note || 'Optimized GLB from the model CDN.';
   const modelViewerReady = typeof window.customElements?.get === 'function'
     && Boolean(window.customElements.get('model-viewer'));
 
@@ -3486,7 +5192,7 @@ function resetToLanding({
   elements.landingView.hidden = false;
   setDataToolsOpen(false);
   syncDashboardTabAvailability();
-  renderDailyLandingCta();
+  renderLandingDailyCtas();
 
   if (clearPersisted) {
     clearPersistedUpload();
@@ -3549,33 +5255,40 @@ function wireDataTools() {
   });
 }
 
-function setActiveTab(tabId) {
+function setActiveTab(tabId, options = {}) {
   const wantsCollectionTab = tabId === 'map' || tabId === 'aircraft';
   if (wantsCollectionTab && !state.model) {
-    setBanner('Upload a Skycards export to unlock the Map and Deck tabs. DAILY works without an upload.', 'info', {
+      setBanner('Upload a collection export to unlock the Map and Deck tabs. Navdle and Cardle work without an upload.', 'info', {
       autoDismissMs: 5000,
     });
-    tabId = 'daily';
+    tabId = 'navdle';
   }
   state.activeTab = tabId;
+  const isNavdle = tabId === 'navdle';
+  const isCardle = tabId === 'cardle';
   const isMap = tabId === 'map';
   const isAircraft = tabId === 'aircraft';
-  const isDaily = tabId === 'daily';
   if (!isAircraft && state.ui.registrationModalOpen) {
     setRegistrationModalOpen(false, { restoreFocus: false });
   }
   if (!isAircraft && state.ui.modelRegsModalOpen) {
     setModelRegsModalOpen(false, { restoreFocus: false });
   }
+  elements.dailyTabButton.classList.toggle('is-active', isNavdle);
+  elements.cardleTabButton.classList.toggle('is-active', isCardle);
   elements.mapTabButton.classList.toggle('is-active', isMap);
   elements.aircraftTabButton.classList.toggle('is-active', isAircraft);
-  elements.dailyTabButton.classList.toggle('is-active', isDaily);
+  elements.dailyTabButton.setAttribute('aria-selected', String(isNavdle));
+  elements.cardleTabButton.setAttribute('aria-selected', String(isCardle));
   elements.mapTabButton.setAttribute('aria-selected', String(isMap));
   elements.aircraftTabButton.setAttribute('aria-selected', String(isAircraft));
-  elements.dailyTabButton.setAttribute('aria-selected', String(isDaily));
+  elements.dailyTabPanel.hidden = !isNavdle;
+  elements.cardleTabPanel.hidden = !isCardle;
   elements.mapTabPanel.hidden = !isMap;
   elements.aircraftTabPanel.hidden = !isAircraft;
-  elements.dailyTabPanel.hidden = !isDaily;
+  if (options.skipAutoEnsure) {
+    return;
+  }
   if (isMap) {
     requestAnimationFrame(() => {
       if (state.map.instance) {
@@ -3590,6 +5303,16 @@ function setActiveTab(tabId) {
     });
     return;
   }
+  if (isCardle) {
+    requestAnimationFrame(() => {
+      if (state.cardle.challenge || state.cardle.error) {
+        renderCardleTab();
+      } else {
+        void ensureCardleGameReady({ focusInput: true });
+      }
+    });
+    return;
+  }
   requestAnimationFrame(() => {
     if (state.daily.challenge || state.daily.error) {
       renderDailyTab();
@@ -3600,28 +5323,43 @@ function setActiveTab(tabId) {
 }
 
 function wireTabs() {
-  const buttons = [elements.mapTabButton, elements.aircraftTabButton, elements.dailyTabButton];
+  const buttons = [elements.dailyTabButton, elements.cardleTabButton, elements.mapTabButton, elements.aircraftTabButton];
   const syncTabHash = (target) => {
-    if (target === 'daily') {
+    if (target === 'navdle') {
       updateUrlHash(DAILY_GAME_HASH);
       return;
     }
-    if (isDailyHashRoute()) {
+    if (target === 'cardle') {
+      updateUrlHash(CARDLE_GAME_HASH);
+      return;
+    }
+    if (isDailyHashRoute() || isCardleHashRoute()) {
       updateUrlHash('');
     }
+  };
+  const activateTabTarget = (target) => {
+    if (target === 'navdle') {
+      void openDailyExperience({ focusInput: true });
+      return;
+    }
+    if (target === 'cardle') {
+      void openCardleExperience({ focusInput: true });
+      return;
+    }
+    syncTabHash(target);
+    setActiveTab(target);
   };
   for (const button of buttons) {
     button.addEventListener('click', () => {
       if (button.disabled) {
-        setBanner('Upload a Skycards export to unlock the Map and Deck tabs. DAILY works without an upload.', 'info', {
+        setBanner('Upload a collection export to unlock the Map and Deck tabs. Navdle and Cardle work without an upload.', 'info', {
           autoDismissMs: 5000,
         });
         return;
       }
       const target = button.dataset.tab;
       if (target) {
-        syncTabHash(target);
-        setActiveTab(target);
+        activateTabTarget(target);
       }
     });
     button.addEventListener('keydown', (event) => {
@@ -3639,8 +5377,7 @@ function wireTabs() {
       nextButton.focus();
       const target = nextButton.dataset.tab;
       if (target) {
-        syncTabHash(target);
-        setActiveTab(target);
+        activateTabTarget(target);
       }
     });
   }
@@ -4373,8 +6110,8 @@ function ensureMapInstance() {
     zoomControl: true,
     preferCanvas: true,
   });
-  window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+  window.L.tileLayer(LEAFLET_TILE_URL, {
+    attribution: LEAFLET_TILE_ATTRIBUTION,
   }).addTo(map);
   map.setView(MAP_BASE_VIEW.center, MAP_BASE_VIEW.zoom);
   map.on('zoom', () => {
@@ -6077,6 +7814,150 @@ function wireDailyGame() {
   });
 }
 
+function wireCardleGame() {
+  elements.cardleLaunchButton?.addEventListener('click', (event) => {
+    event.preventDefault();
+    void openCardleExperience({ focusInput: true });
+  });
+
+  elements.cardleGuessInput.addEventListener('input', () => {
+    state.cardle.query = elements.cardleGuessInput.value;
+    state.cardle.selectedSuggestionIndex = -1;
+    if (!state.cardle.query.trim()) {
+      state.cardle.suggestions = [];
+      setCardleFeedback('', 'muted');
+      renderCardleTab();
+      return;
+    }
+    setCardleFeedback('', 'muted');
+    updateCardleSuggestions();
+  });
+
+  elements.cardleGuessInput.addEventListener('keydown', (event) => {
+    if (!state.cardle.suggestions.length) {
+      if (event.key === 'Escape') {
+        state.cardle.query = '';
+        state.cardle.suggestions = [];
+        elements.cardleGuessInput.value = '';
+        renderCardleTab();
+      }
+      return;
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const maxIndex = state.cardle.suggestions.length - 1;
+      if (event.key === 'ArrowDown') {
+        state.cardle.selectedSuggestionIndex = state.cardle.selectedSuggestionIndex >= maxIndex
+          ? 0
+          : state.cardle.selectedSuggestionIndex + 1;
+      } else {
+        state.cardle.selectedSuggestionIndex = state.cardle.selectedSuggestionIndex <= 0
+          ? maxIndex
+          : state.cardle.selectedSuggestionIndex - 1;
+      }
+      renderCardleTab();
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      state.cardle.suggestions = [];
+      state.cardle.selectedSuggestionIndex = -1;
+      renderCardleTab();
+    }
+  });
+
+  elements.cardleGuessForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!state.cardle.challenge || !state.cardle.dataset) {
+      return;
+    }
+    const guessedIds = new Set(getCardleSession().guesses);
+    const selectedModel = state.cardle.selectedSuggestionIndex >= 0
+      ? state.cardle.suggestions[state.cardle.selectedSuggestionIndex]
+      : null;
+    const resolvedModel = selectedModel
+      || resolveCardleGuess(state.cardle.dataset.models, state.cardle.query, guessedIds)
+      || (state.cardle.suggestions.length === 1 ? state.cardle.suggestions[0] : null);
+    if (!resolvedModel) {
+      setCardleFeedback('Choose an aircraft model from the suggestion list or type an exact ICAO code.', 'warning');
+      renderCardleTab();
+      return;
+    }
+    submitCardleGuessByModel(resolvedModel);
+  });
+
+  elements.cardleSuggestionList.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const button = target.closest('button[data-action="select-cardle-suggestion"][data-model-id]');
+    if (!(button instanceof HTMLButtonElement) || !state.cardle.dataset) {
+      return;
+    }
+    const modelId = String(button.getAttribute('data-model-id') || '');
+    const model = state.cardle.dataset.modelsById.get(modelId);
+    if (!model) {
+      return;
+    }
+    submitCardleGuessByModel(model);
+  });
+
+  elements.cardleIntelPanel.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const copyButton = target.closest('button[data-action="copy-daily-results"]');
+    if (!copyButton) {
+      return;
+    }
+    void copyCardleResultToClipboard();
+  });
+
+  elements.cardleBoard.addEventListener('error', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLImageElement) || !target.classList.contains('aircraft-card-image')) {
+      return;
+    }
+    const encodedCandidates = target.dataset.imageCandidates || '';
+    const candidates = encodedCandidates ? encodedCandidates.split('|').filter(Boolean) : [];
+    const currentIndex = Number.parseInt(target.dataset.imageIndex || '0', 10);
+    const nextIndex = Number.isFinite(currentIndex) ? currentIndex + 1 : 1;
+    if (nextIndex < candidates.length) {
+      target.dataset.imageIndex = String(nextIndex);
+      target.src = candidates[nextIndex];
+      return;
+    }
+    const media = target.closest('.aircraft-card-media');
+    if (media) {
+      media.classList.add('is-fallback');
+    }
+    target.remove();
+  }, true);
+
+  elements.cardleIntelPanel.addEventListener('error', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || target.tagName.toLowerCase() !== 'model-viewer') {
+      return;
+    }
+    const modelId = String(state.cardle.challenge?.target?.id || '').trim().toUpperCase();
+    if (modelId) {
+      state.cardle.modelStage = {
+        modelId,
+        loading: false,
+        available: false,
+        error: '3D asset unavailable for this model.',
+        resolvedUrl: '',
+      };
+    }
+    target.remove();
+    if (state.activeTab === 'cardle' && state.cardle.challenge) {
+      renderCardleTab();
+    }
+  }, true);
+}
+
 function wireAircraftControls() {
   elements.aircraftDeckMetrics?.addEventListener('click', (event) => {
     const target = event.target;
@@ -6557,10 +8438,16 @@ function wireAircraftControls() {
 
   window.addEventListener('resize', () => {
     if (!state.model) {
+      if (state.activeTab === 'cardle' && state.cardle.map.instance) {
+        invalidateLeafletMap(state.cardle.map.instance);
+      }
       return;
     }
     if (state.activeTab === 'map' && state.map.instance) {
       state.map.instance.invalidateSize();
+    }
+    if (state.activeTab === 'cardle' && state.cardle.map.instance) {
+      invalidateLeafletMap(state.cardle.map.instance);
     }
     queueAircraftListRender();
   });
@@ -6573,9 +8460,10 @@ async function bootstrap() {
   wireDataTools();
   wireMapCompletionControls();
   wireDailyGame();
+  wireCardleGame();
   wireAircraftControls();
   window.addEventListener('hashchange', () => {
-    void openDailyExperienceFromHash({ focusInput: false });
+    void openExperienceFromHash({ focusInput: false });
   });
   syncCompletionSortControls();
   syncAircraftSortControls();
@@ -6588,7 +8476,8 @@ async function bootstrap() {
   renderRegistrationModalTrigger(null);
   state.manualRegistrationMappings = readManualRegistrationMappings();
   state.daily.history = readDailyHistory();
-  renderDailyLandingCta();
+  state.cardle.history = readCardleHistory();
+  renderLandingDailyCtas();
   updateManualMappingStorageMeta(null);
   setPersistPreferenceChecked(readPersistPreference());
   syncDashboardTabAvailability();
@@ -6620,7 +8509,7 @@ async function bootstrap() {
     } catch {
       state.daily.manifest = null;
     }
-    renderDailyLandingCta();
+    renderLandingDailyCtas();
     const modelDate = formatDateFromMillis(manifest?.datasets?.models?.updatedAt);
     const airportDate = formatDateFromMillis(manifest?.datasets?.airports?.updatedAt);
     setReferenceStatus(`Reference snapshot: models ${modelDate}, airports ${airportDate}, client ${manifest?.clientVersion || 'unknown'}.`, 'ok');
@@ -6628,16 +8517,24 @@ async function bootstrap() {
       setBootState(true, 'Loading saved local data from this device...');
       await tryLoadPersistedUpload(persistedUpload);
     }
-    const openedDailyFromHash = await openDailyExperienceFromHash({ focusInput: false });
-    if (!state.model && !openedDailyFromHash) {
+    const openedFromHash = await openExperienceFromHash({
+      focusInput: false,
+      revealShellBeforeReady: false,
+      showBlockingLoader: false,
+    });
+    if (!state.model && !openedFromHash) {
       elements.landingView.hidden = false;
       elements.dashboard.hidden = true;
     }
   } catch (error) {
     setReferenceStatus('Reference manifest failed to load. Uploads will not work until committed data files are served.', 'warning');
     setBanner(error instanceof Error ? error.message : 'Reference manifest failed to load.', 'warning');
-    const openedDailyFromHash = await openDailyExperienceFromHash({ focusInput: false });
-    if (!state.model && !openedDailyFromHash) {
+    const openedFromHash = await openExperienceFromHash({
+      focusInput: false,
+      revealShellBeforeReady: false,
+      showBlockingLoader: false,
+    });
+    if (!state.model && !openedFromHash) {
       elements.landingView.hidden = false;
       elements.dashboard.hidden = true;
     }

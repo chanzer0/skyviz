@@ -8,6 +8,14 @@
 - For visual bug fixes, reproduce the bug with Playwright before edits and confirm the fix with Playwright after edits.
 - Use a browser pass when the environment supports it.
 
+## Daily game change
+
+- Update the relevant files in `site/`.
+- Update `README.md` and `docs/architecture.md`.
+- If the work adds or changes a durable runtime surface, update the repo-local skill references.
+- Run `python scripts/smoke_check.py`.
+- Use a browser pass when the environment supports it.
+
 ## Reference data contract change
 
 - Update `scripts/refresh_reference_data.py`.

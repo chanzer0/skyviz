@@ -47,6 +47,10 @@ body.has-modal-open {
   overflow: hidden;
 }
 
+body.is-booting {
+  overflow: hidden;
+}
+
 body::before {
   content: '';
   position: fixed;
@@ -268,8 +272,8 @@ code {
   border: 1px solid rgba(12, 49, 78, 0.16);
   overflow: hidden;
   display: grid;
-  gap: 0.9rem;
-  grid-template-columns: minmax(0, 1.18fr) minmax(260px, 0.82fr);
+  gap: 1rem;
+  grid-template-columns: 1fr;
   background:
     radial-gradient(circle at top left, rgba(22, 131, 146, 0.22), transparent 36%),
     radial-gradient(circle at right center, rgba(236, 127, 53, 0.22), transparent 34%),
@@ -311,25 +315,80 @@ code {
 .landing-daily-copy {
   display: grid;
   gap: 0.42rem;
+  align-content: start;
+  max-width: 28rem;
 }
 
 .landing-daily-title {
   margin: 0;
   font-family: 'DM Serif Display', serif;
-  font-size: clamp(2.55rem, 5.2vw, 4.35rem);
+  font-size: clamp(2.05rem, 4vw, 3.3rem);
   font-weight: 700;
-  line-height: 0.9;
+  line-height: 0.94;
   letter-spacing: -0.045em;
   color: #f6fbff;
   text-shadow: 0 10px 22px rgba(7, 25, 41, 0.28);
+  max-width: none;
 }
 
 .landing-daily-summary {
   margin: 0;
-  max-width: 34ch;
+  max-width: 26ch;
   color: rgba(235, 246, 255, 0.84);
   font-size: 1rem;
   line-height: 1.55;
+}
+
+.landing-daily-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 0.78rem;
+  grid-template-columns: 1fr;
+}
+
+.landing-daily-game-card {
+  display: grid;
+  gap: 0.62rem;
+  align-content: start;
+  min-height: 100%;
+  padding: 0.9rem 0.92rem;
+  border-radius: 18px;
+  border: 1px solid rgba(188, 221, 248, 0.18);
+  background: rgba(242, 248, 255, 0.1);
+  backdrop-filter: blur(10px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.landing-daily-game-card.is-cardle {
+  background:
+    radial-gradient(circle at top right, rgba(244, 200, 141, 0.18), transparent 38%),
+    rgba(255, 248, 240, 0.1);
+}
+
+.landing-daily-game-kicker {
+  margin: 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(236, 246, 255, 0.72);
+}
+
+.landing-daily-game-title {
+  margin: 0;
+  font-family: 'DM Serif Display', serif;
+  font-size: clamp(1.8rem, 2.8vw, 2.5rem);
+  line-height: 0.94;
+  letter-spacing: -0.035em;
+  color: #f6fbff;
+}
+
+.landing-daily-game-summary {
+  margin: 0;
+  color: rgba(235, 246, 255, 0.84);
+  font-size: 0.94rem;
+  line-height: 1.5;
 }
 
 .landing-daily-meta {
@@ -396,6 +455,7 @@ code {
   cursor: pointer;
   text-decoration: none;
   transition: transform 170ms ease, box-shadow 170ms ease, border-color 170ms ease;
+  width: fit-content;
 }
 
 .daily-launch-button:hover,
@@ -1965,8 +2025,8 @@ code {
 
 .daily-briefing-card {
   display: grid;
-  gap: 0.72rem;
-  padding: 0.92rem 0.98rem;
+  gap: 0.54rem;
+  padding: 0.76rem 0.88rem;
   border: 1px solid rgba(210, 232, 247, 0.18);
   background:
     linear-gradient(145deg, rgba(245, 251, 255, 0.14), rgba(217, 235, 247, 0.08)),
@@ -2008,8 +2068,8 @@ code {
 .daily-hint-note,
 .daily-source-note {
   margin: 0;
-  font-size: 0.8rem;
-  line-height: 1.5;
+  font-size: 0.76rem;
+  line-height: 1.42;
   color: rgba(223, 238, 251, 0.78);
 }
 
@@ -2017,7 +2077,7 @@ code {
   flex-wrap: wrap;
   display: flex;
   align-items: baseline;
-  gap: 0.42rem;
+  gap: 0.32rem;
 }
 
 .daily-widget-kicker,
@@ -2037,28 +2097,28 @@ code {
 }
 
 .daily-widget-value {
-  font-size: 1.36rem;
+  font-size: 1.2rem;
   font-weight: 700;
   line-height: 1;
 }
 
 .daily-widget-note {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   color: rgba(223, 238, 251, 0.72);
 }
 
 .daily-runway-lights {
   display: grid;
   grid-template-columns: repeat(8, minmax(0, 1fr));
-  gap: 0.36rem;
+  gap: 0.28rem;
   position: relative;
   z-index: 1;
-  margin-top: 0.04rem;
+  margin-top: 0;
 }
 
 .daily-runway-light {
   box-sizing: border-box;
-  height: 0.52rem;
+  height: 0.38rem;
   border-radius: 999px;
   background: rgba(217, 233, 247, 0.18);
   box-shadow: inset 0 0 0 1px rgba(217, 233, 247, 0.08);
@@ -2083,9 +2143,9 @@ code {
   z-index: 1;
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 0.44rem 0.9rem;
+  gap: 0.32rem 0.8rem;
 }
 
 .daily-source-note {
@@ -3385,6 +3445,21 @@ code {
   }
 }
 
+@keyframes cardle-reveal-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .placeholder-panel {
   background:
     linear-gradient(150deg, rgba(15, 63, 112, 0.08), rgba(236, 127, 53, 0.12)),
@@ -4032,6 +4107,777 @@ code {
   line-height: 1.14;
   color: var(--ink-900);
   white-space: nowrap;
+}
+
+.cardle-layout {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.cardle-unified-panel {
+  display: grid;
+  gap: 0.88rem;
+}
+
+.cardle-hero-grid {
+  display: grid;
+  gap: 0.88rem;
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+.cardle-command-deck {
+  min-height: auto;
+}
+
+.cardle-command-strip {
+  margin-top: 0.08rem;
+}
+
+.cardle-intel-section {
+  min-width: 0;
+}
+
+.cardle-intel-panel {
+  position: relative;
+  display: grid;
+  gap: 0.92rem;
+  padding: 0.95rem 1rem 1rem;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top right, rgba(236, 127, 53, 0.14), transparent 32%),
+    radial-gradient(circle at 12% 18%, rgba(22, 131, 146, 0.08), transparent 28%),
+    linear-gradient(162deg, rgba(255, 255, 255, 0.95), rgba(247, 251, 245, 0.94));
+}
+
+.cardle-intel-panel > :not(.daily-victory-overlay) {
+  position: relative;
+  z-index: 1;
+}
+
+.cardle-intel-panel.is-victory {
+  border-color: rgba(255, 191, 126, 0.34);
+  background:
+    radial-gradient(circle at 12% 16%, rgba(255, 224, 160, 0.22), transparent 18%),
+    radial-gradient(circle at 88% 18%, rgba(255, 138, 91, 0.16), transparent 20%),
+    radial-gradient(circle at top right, rgba(236, 127, 53, 0.12), transparent 32%),
+    linear-gradient(162deg, rgba(255, 252, 245, 0.98), rgba(248, 251, 244, 0.96));
+  box-shadow:
+    0 20px 46px rgba(15, 43, 64, 0.12),
+    0 0 0 1px rgba(255, 223, 176, 0.18);
+}
+
+.cardle-intel-panel.is-celebrating {
+  animation: daily-answer-celebration 1.1s cubic-bezier(0.2, 0.88, 0.24, 1) both;
+}
+
+.cardle-intel-panel.is-victory::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 241, 214, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 241, 214, 0.08) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.92), rgba(0, 0, 0, 0.34));
+  pointer-events: none;
+}
+
+.cardle-intel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem 1rem;
+}
+
+.cardle-intel-title-block {
+  min-width: 0;
+  display: grid;
+  gap: 0.18rem;
+  max-width: 44rem;
+}
+
+.cardle-intel-title {
+  margin: 0;
+  font-family: 'DM Serif Display', serif;
+  font-size: clamp(1.28rem, 2vw, 1.7rem);
+  letter-spacing: -0.02em;
+  line-height: 1.02;
+  color: var(--ink-950);
+}
+
+.cardle-intel-subtitle {
+  margin: 0;
+  max-width: 56ch;
+  color: rgba(18, 33, 53, 0.72);
+  font-size: 0.82rem;
+  line-height: 1.48;
+}
+
+.cardle-intel-actions {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: end;
+  align-content: start;
+}
+
+.cardle-intel-actions .daily-answer-copy-action {
+  align-self: start;
+}
+
+.cardle-intel-layout {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: minmax(300px, 0.82fr) minmax(0, 1.18fr);
+  align-items: start;
+}
+
+.cardle-intel-primary {
+  min-width: 0;
+  display: grid;
+  gap: 0.74rem;
+}
+
+.cardle-intel-note {
+  margin: 0;
+  max-width: 62ch;
+  color: rgba(18, 33, 53, 0.72);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.cardle-intel-primary .daily-victory-banner {
+  width: fit-content;
+  max-width: min(100%, 34rem);
+}
+
+.cardle-support-grid {
+  display: grid;
+  gap: 0.46rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.cardle-support-pill {
+  min-width: 0;
+  display: grid;
+  gap: 0.14rem;
+  border: 1px solid rgba(20, 45, 70, 0.1);
+  border-radius: 14px;
+  padding: 0.58rem 0.68rem;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.cardle-support-pill.is-hit {
+  border-color: rgba(47, 158, 97, 0.26);
+  background: rgba(220, 248, 232, 0.9);
+}
+
+.cardle-support-pill.is-near {
+  border-color: rgba(244, 185, 77, 0.34);
+  background: rgba(255, 243, 207, 0.94);
+}
+
+.cardle-support-pill.is-miss {
+  border-color: rgba(107, 128, 150, 0.18);
+  background: rgba(236, 241, 247, 0.92);
+}
+
+.cardle-support-pill.is-pending {
+  border-color: rgba(20, 45, 70, 0.12);
+  background: rgba(246, 248, 251, 0.92);
+}
+
+.cardle-support-pill.is-compact {
+  display: inline-grid;
+  grid-auto-flow: column;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  padding: 0.24rem 0.42rem;
+  background: rgba(243, 247, 252, 0.9);
+}
+
+.cardle-support-pill-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3rem;
+}
+
+.cardle-support-pill-label {
+  color: var(--ink-500);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+
+.cardle-support-pill-value {
+  min-width: 0;
+  color: var(--ink-900);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cardle-support-pill-value.is-pending {
+  color: rgba(18, 33, 53, 0.56);
+}
+
+.cardle-support-pill-indicator {
+  flex: 0 0 auto;
+  color: rgba(18, 33, 53, 0.72);
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.cardle-support-pill.is-compact .cardle-support-pill-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.24rem;
+}
+
+.cardle-support-pill.is-compact .cardle-support-pill-label {
+  font-size: 0.52rem;
+}
+
+.cardle-support-pill.is-compact .cardle-support-pill-value {
+  font-size: 0.66rem;
+}
+
+.cardle-intel-panel.is-celebrating .cardle-support-pill,
+.cardle-intel-panel.is-celebrating .aircraft-card-stats-block,
+.cardle-intel-panel.is-celebrating .cardle-reveal-panel {
+  animation: cardle-reveal-rise 880ms cubic-bezier(0.2, 0.88, 0.24, 1) both;
+}
+
+.cardle-intel-panel.is-celebrating .cardle-support-pill:nth-child(2),
+.cardle-intel-panel.is-celebrating .cardle-reveal-panel:nth-child(2) {
+  animation-delay: 90ms;
+}
+
+.cardle-intel-panel.is-celebrating .cardle-support-pill:nth-child(3),
+.cardle-intel-panel.is-celebrating .cardle-reveal-panel:nth-child(3) {
+  animation-delay: 160ms;
+}
+
+.cardle-intel-panel.is-celebrating .cardle-support-pill:nth-child(4),
+.cardle-intel-panel.is-celebrating .cardle-reveal-panel:nth-child(4) {
+  animation-delay: 220ms;
+}
+
+.cardle-intel-primary .aircraft-card-stats-block {
+  display: grid;
+  gap: 0.3rem;
+  border: 1px solid rgba(20, 45, 70, 0.12);
+  border-radius: 18px;
+  padding: 0.74rem 0.76rem 0.8rem;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.cardle-intel-primary .aircraft-card-model {
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+}
+
+.cardle-intel-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 0.9rem;
+}
+
+.cardle-intel-footnote {
+  margin: 0;
+  color: rgba(18, 33, 53, 0.6);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.cardle-intel-visuals {
+  min-width: 0;
+  display: grid;
+  gap: 0.72rem;
+  grid-template-columns: minmax(0, 1.34fr) minmax(260px, 0.66fr);
+}
+
+.cardle-reveal-panel {
+  min-width: 0;
+  display: grid;
+  gap: 0;
+  align-content: start;
+  border: 1px solid rgba(20, 45, 70, 0.12);
+  border-radius: 18px;
+  padding: 0.62rem;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.82), rgba(247, 250, 245, 0.92)),
+    rgba(255, 255, 255, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34);
+}
+
+.cardle-reveal-panel.is-map-stage,
+.cardle-reveal-panel.is-model-stage {
+  align-content: stretch;
+}
+
+.cardle-intel-panel.is-victory .cardle-reveal-panel,
+.cardle-intel-panel.is-victory .cardle-intel-primary .aircraft-card-stats-block {
+  border-color: rgba(239, 173, 88, 0.28);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.9), rgba(255, 248, 236, 0.94)),
+    rgba(255, 255, 255, 0.86);
+}
+
+.cardle-stage-chip,
+.cardle-guess-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.44rem;
+  border-radius: 999px;
+  border: 1px solid rgba(20, 45, 70, 0.18);
+  padding: 0.12rem 0.52rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.86);
+  color: rgba(18, 33, 53, 0.82);
+  white-space: nowrap;
+}
+
+.cardle-model-shell .cardle-stage-chip,
+.cardle-hotspot-shell .cardle-stage-chip {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(15, 23, 36, 0.7);
+  color: rgba(246, 250, 255, 0.94);
+  backdrop-filter: blur(10px);
+}
+
+.cardle-stage-chip.is-live,
+.cardle-guess-badge.is-solved {
+  border-color: rgba(47, 158, 97, 0.28);
+  background: rgba(217, 248, 231, 0.85);
+  color: #16663f;
+}
+
+.cardle-model-shell .cardle-stage-chip.is-live,
+.cardle-hotspot-shell .cardle-stage-chip.is-live {
+  border-color: rgba(164, 225, 191, 0.32);
+  background: rgba(28, 114, 70, 0.84);
+  color: #effaf3;
+}
+
+.cardle-stage-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.55rem;
+  padding: 0.62rem;
+  pointer-events: none;
+}
+
+.cardle-stage-overlay-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.48rem;
+}
+
+.cardle-stage-overlay-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.44rem;
+  border-radius: 999px;
+  padding: 0.14rem 0.54rem;
+  background: rgba(15, 23, 36, 0.72);
+  color: rgba(246, 250, 255, 0.92);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  backdrop-filter: blur(10px);
+}
+
+.cardle-stage-overlay-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.34rem;
+  align-items: flex-end;
+}
+
+.cardle-stage-overlay-pill {
+  max-width: min(100%, 15rem);
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.44rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 0.16rem 0.56rem;
+  background: rgba(15, 23, 36, 0.72);
+  color: rgba(239, 244, 250, 0.94);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  backdrop-filter: blur(10px);
+}
+
+.cardle-stage-overlay-pill.is-live {
+  border-color: rgba(164, 225, 191, 0.32);
+  background: rgba(28, 114, 70, 0.84);
+  color: #effaf3;
+}
+
+.cardle-stage-overlay-pill.is-warning {
+  border-color: rgba(255, 217, 137, 0.32);
+  background: rgba(122, 78, 18, 0.84);
+  color: #fff4d5;
+}
+
+.cardle-stage-overlay-pill.is-muted {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(15, 23, 36, 0.72);
+  color: rgba(239, 244, 250, 0.94);
+}
+
+.cardle-model-shell,
+.cardle-hotspot-shell {
+  position: relative;
+  min-height: 248px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(20, 45, 70, 0.14);
+}
+
+.cardle-reveal-panel.is-map-stage .cardle-hotspot-shell {
+  min-height: 260px;
+}
+
+.cardle-model-shell {
+  background:
+    radial-gradient(circle at 74% 16%, rgba(236, 127, 53, 0.18), transparent 36%),
+    linear-gradient(160deg, rgba(18, 48, 77, 0.1), rgba(236, 243, 255, 0.84));
+}
+
+.cardle-model-shell .aircraft-card-image-fallback {
+  display: flex;
+  background:
+    radial-gradient(circle at 78% 18%, rgba(236, 127, 53, 0.18), transparent 36%),
+    linear-gradient(160deg, rgba(18, 48, 77, 0.1), rgba(236, 243, 255, 0.84));
+}
+
+.cardle-target-model {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  --progress-bar-color: rgba(15, 63, 112, 0.88);
+  --poster-color: transparent;
+  background: transparent;
+}
+
+.cardle-target-model:not(:defined) {
+  display: none;
+}
+
+.cardle-model-shell.is-concealed .cardle-target-model {
+  filter: blur(18px) saturate(0) brightness(0.42);
+  transform: scale(1.1);
+}
+
+.cardle-stage-redaction {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  background:
+    linear-gradient(135deg, rgba(9, 22, 35, 0.5), rgba(9, 22, 35, 0.7)),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0 10px, rgba(255, 255, 255, 0) 10px 20px);
+  backdrop-filter: blur(4px);
+}
+
+.cardle-stage-redaction-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 200, 141, 0.36);
+  padding: 0.34rem 0.8rem;
+  color: #ffebc6;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: rgba(15, 23, 36, 0.62);
+}
+
+.cardle-hotspot-shell {
+  background:
+    radial-gradient(circle at 80% 10%, rgba(22, 131, 146, 0.14), transparent 32%),
+    linear-gradient(160deg, rgba(18, 48, 77, 0.08), rgba(244, 200, 141, 0.12));
+}
+
+.cardle-hotspot-map {
+  position: relative;
+  display: flex;
+  min-height: inherit;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 16% 18%, rgba(22, 131, 146, 0.18), transparent 28%),
+    linear-gradient(160deg, rgba(18, 48, 77, 0.08), rgba(244, 200, 141, 0.12));
+}
+
+.cardle-hotspot-shell.is-concealed .cardle-hotspot-map {
+  filter: blur(14px) saturate(0) brightness(0.58);
+  transform: scale(1.04);
+}
+
+.cardle-hotspot-map-canvas {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: inherit;
+  height: 100%;
+}
+
+.cardle-hotspot-map .leaflet-container {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  background: #dfe7ef;
+}
+
+.cardle-hotspot-map .leaflet-control-zoom {
+  margin: 0.55rem 0 0 0.55rem;
+  box-shadow: 0 10px 24px rgba(15, 43, 64, 0.12);
+}
+
+.cardle-hotspot-map .leaflet-control-attribution {
+  margin: 0 0.4rem 0.4rem 0;
+  border-radius: 999px;
+  padding: 0.08rem 0.36rem;
+  background: rgba(255, 255, 255, 0.9);
+  color: rgba(18, 33, 53, 0.66);
+  font-size: 0.52rem;
+}
+
+.cardle-hotspot-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 1rem;
+  text-align: center;
+  color: rgba(18, 33, 53, 0.74);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  pointer-events: none;
+}
+
+.cardle-board-section {
+  display: grid;
+  gap: 0.64rem;
+}
+
+.cardle-board {
+  display: grid;
+  gap: 0.72rem;
+}
+
+.cardle-board-stack {
+  display: grid;
+  gap: 0.62rem;
+}
+
+.cardle-guess-card {
+  position: static;
+  width: 100%;
+  height: auto;
+  transform: none !important;
+  cursor: default;
+  display: grid;
+  grid-template-columns: clamp(176px, 20vw, 220px) minmax(0, 1fr);
+  align-items: stretch;
+  box-shadow: 0 8px 22px rgba(15, 43, 64, 0.1);
+}
+
+.cardle-guess-card:hover,
+.cardle-guess-card:focus-visible {
+  border-color: rgba(20, 45, 70, 0.14);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 8px 22px rgba(15, 43, 64, 0.1);
+}
+
+.cardle-guess-card.is-solved {
+  border-color: rgba(47, 158, 97, 0.26);
+}
+
+.cardle-guess-card.is-fresh {
+  box-shadow:
+    0 18px 38px rgba(15, 43, 64, 0.16),
+    0 0 0 2px rgba(15, 63, 112, 0.08);
+}
+
+.cardle-guess-card .aircraft-card-media {
+  min-height: 100%;
+  border-right: 1px solid rgba(20, 45, 70, 0.1);
+  border-bottom: 0;
+  flex: none;
+}
+
+.cardle-guess-card .aircraft-card-image {
+  height: 100%;
+  object-position: center 56%;
+}
+
+.cardle-guess-card .aircraft-card-image-fallback {
+  background:
+    radial-gradient(circle at 78% 18%, rgba(236, 127, 53, 0.18), transparent 42%),
+    linear-gradient(160deg, rgba(18, 48, 77, 0.08), rgba(236, 243, 255, 0.88));
+}
+
+.cardle-guess-card .aircraft-card-body {
+  padding: 0.56rem 0.62rem 0.62rem;
+  gap: 0.34rem;
+}
+
+.cardle-guess-card .aircraft-card-head {
+  gap: 0.45rem;
+}
+
+.cardle-guess-card .aircraft-card-title-block {
+  gap: 0.14rem;
+}
+
+.cardle-guess-card .aircraft-card-manufacturer {
+  font-size: 0.54rem;
+  letter-spacing: 0.11em;
+}
+
+.cardle-guess-card .aircraft-card-name {
+  font-size: 0.92rem;
+  line-height: 1.04;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.cardle-guess-card .aircraft-card-model {
+  font-size: 0.56rem;
+}
+
+.cardle-guess-inline-metrics {
+  margin-top: 0.16rem;
+}
+
+.cardle-inline-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.1rem;
+  border-radius: 999px;
+  padding: 0.06rem 0.38rem;
+  background: rgba(15, 63, 112, 0.09);
+  color: #0f3f70;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.cardle-guess-support {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.22rem;
+  margin-top: 0.18rem;
+}
+
+.cardle-guess-card .aircraft-card-badges {
+  gap: 0.28rem;
+}
+
+.cardle-guess-card .aircraft-card-stats-block {
+  gap: 0.3rem;
+}
+
+.cardle-card-stats {
+  gap: 0.3rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.cardle-card-stats .aircraft-card-stat {
+  border: 1px solid rgba(20, 45, 70, 0.1);
+  border-top-width: 1px;
+  border-radius: 12px;
+  padding: 0.34rem 0.42rem 0.36rem;
+  background: rgba(250, 252, 247, 0.92);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.cardle-card-stats .aircraft-card-stat dt {
+  white-space: normal;
+  font-size: 0.5rem;
+  line-height: 1.18;
+}
+
+.cardle-card-stats .aircraft-card-stat dd {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.24rem;
+  margin-top: 0.14rem;
+  color: var(--ink-900);
+  font-size: 0.7rem;
+  line-height: 1.12;
+  white-space: normal;
+}
+
+.cardle-card-stats .aircraft-card-stat dd > span:first-child {
+  min-width: 0;
+}
+
+.cardle-card-stats .aircraft-card-stat.is-hit {
+  border-color: rgba(47, 158, 97, 0.3);
+  background: rgba(220, 248, 232, 0.95);
+}
+
+.cardle-card-stats .aircraft-card-stat.is-near {
+  border-color: rgba(244, 185, 77, 0.34);
+  background: rgba(255, 243, 207, 0.96);
+}
+
+.cardle-card-stats .aircraft-card-stat.is-miss {
+  border-color: rgba(107, 128, 150, 0.2);
+  background: rgba(236, 241, 247, 0.96);
+}
+
+.cardle-card-stats .aircraft-card-stat.is-pending {
+  border-color: rgba(20, 45, 70, 0.12);
+  background: rgba(246, 248, 251, 0.92);
+}
+
+.cardle-stat-indicator {
+  flex: 0 0 auto;
+  color: rgba(18, 33, 53, 0.72);
+  font-size: 0.82rem;
+  line-height: 1;
 }
 
 .bar-list {
@@ -5228,6 +6074,15 @@ button.registration-summary-chip {
   .daily-context-grid {
     grid-template-columns: 1fr;
   }
+
+  .cardle-intel-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .cardle-intel-actions {
+    width: 100%;
+    justify-items: start;
+  }
 }
 
 @media (max-width: 900px) {
@@ -5307,7 +6162,16 @@ button.registration-summary-chip {
   }
 
   .landing-daily-title {
-    font-size: clamp(2.3rem, 12vw, 3.2rem);
+    font-size: clamp(2rem, 10vw, 2.8rem);
+    max-width: none;
+  }
+
+  .landing-daily-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-daily-game-card .daily-launch-button {
+    width: 100%;
   }
 
   .upload-cta {
@@ -5358,6 +6222,10 @@ button.registration-summary-chip {
     font-size: 0.82rem;
   }
 
+  .dashboard-tabs {
+    flex-wrap: wrap;
+  }
+
   .data-tools-trigger {
     width: 2.15rem;
     height: 2.15rem;
@@ -5396,6 +6264,32 @@ button.registration-summary-chip {
 
   .daily-guess-form {
     grid-template-columns: 1fr;
+  }
+
+  .cardle-intel-panel {
+    padding: 0.82rem 0.84rem 0.88rem;
+  }
+
+  .cardle-support-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cardle-intel-visuals {
+    grid-template-columns: 1fr;
+  }
+
+  .cardle-guess-card {
+    grid-template-columns: 1fr;
+  }
+
+  .cardle-guess-card .aircraft-card-media {
+    min-height: 112px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(20, 45, 70, 0.1);
+  }
+
+  .cardle-card-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .daily-command-deck {

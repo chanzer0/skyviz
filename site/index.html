@@ -3,30 +3,30 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Navdle by Skyviz | Daily Airport Game</title>
+    <title>Skyviz | Navdle and Cardle Daily Aviation Games</title>
     <meta
       name="description"
-      content="Play Navdle, a free daily airport game for aviation fans, and explore Skyviz's browser-only map and aircraft dashboard built from Skycards exports."
+      content="Play Navdle and Cardle, two free daily aviation games from Skyviz, and explore the browser-only map and aircraft dashboard built from collection exports."
     >
     <meta name="robots" content="index,follow,max-image-preview:large">
     <link rel="canonical" href="https://chanzer0.github.io/skyviz/">
     <meta property="og:type" content="website">
-    <meta property="og:title" content="Navdle by Skyviz | Daily Airport Game">
-    <meta property="og:description" content="Play Navdle, a free daily airport game for aviation fans, and explore Skyviz's browser-only map and aircraft dashboard.">
+    <meta property="og:title" content="Skyviz | Navdle and Cardle Daily Aviation Games">
+    <meta property="og:description" content="Play Navdle and Cardle, two free daily aviation games from Skyviz, and explore the browser-only map and aircraft dashboard.">
     <meta property="og:url" content="https://chanzer0.github.io/skyviz/">
     <meta property="og:site_name" content="Skyviz">
     <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="Navdle by Skyviz | Daily Airport Game">
-    <meta name="twitter:description" content="Play Navdle, a free daily airport game for aviation fans, and explore Skyviz's browser-only map and aircraft dashboard.">
+    <meta name="twitter:title" content="Skyviz | Navdle and Cardle Daily Aviation Games">
+    <meta name="twitter:description" content="Play Navdle and Cardle, two free daily aviation games from Skyviz, and explore the browser-only map and aircraft dashboard.">
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "WebSite",
         "name": "Skyviz",
-        "alternateName": "Navdle",
+        "alternateName": "Navdle and Cardle",
         "url": "https://chanzer0.github.io/skyviz/",
-        "description": "Play Navdle, a free daily airport game for aviation fans, and explore a browser-only aviation dashboard for Skycards exports.",
-        "keywords": "daily airport game, daily aviation game, airport guessing game, aviation game, Navdle"
+        "description": "Play Navdle and Cardle, two free daily aviation games, and explore a browser-only aviation dashboard for collection exports.",
+        "keywords": "daily airport game, daily aircraft game, daily aviation game, airport guessing game, aircraft guessing game, aviation game, Navdle, Cardle"
       }
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -73,22 +73,42 @@
 
             <section class="landing-daily-feature" aria-labelledby="daily-feature-title">
               <div class="landing-daily-copy">
-                <p class="landing-step-kicker">New daily game</p>
-                <h2 id="daily-feature-title" class="landing-daily-title">Navdle</h2>
-                <p id="daily-landing-summary" class="landing-daily-summary">
-                  Navdle is a daily airport game for aviation fans. Guess the airport of the day using geography, runway, navaid, and layout clues.
-                </p>
+                <p class="landing-step-kicker">Daily games</p>
+                <h2 id="daily-feature-title" class="landing-daily-title">Daily games</h2>
+                <p class="landing-daily-summary">Two quick aviation dailies. No upload required.</p>
               </div>
-              <div class="landing-daily-meta">
-                <div id="daily-landing-stats" class="landing-daily-stats" aria-live="polite"></div>
-                <p id="daily-landing-teaser" class="landing-daily-teaser">
-                  Loading today&apos;s briefing...
-                </p>
-                <a id="daily-launch" class="daily-launch-button" href="#navdle">Play Navdle</a>
-                <p class="landing-daily-credit">
-                  Airport data courtesy of
-                  <a href="https://ourairports.com/data/" target="_blank" rel="noopener noreferrer">OurAirports open data</a>.
-                </p>
+              <div class="landing-daily-grid">
+                <article class="landing-daily-game-card is-navdle">
+                  <p class="landing-daily-game-kicker">Airport</p>
+                  <h3 class="landing-daily-game-title">Navdle</h3>
+                  <p id="navdle-landing-summary" class="landing-daily-game-summary">
+                    Find the airport through geography, runway, and layout clues.
+                  </p>
+                  <div id="navdle-landing-stats" class="landing-daily-stats" aria-live="polite"></div>
+                  <p id="navdle-landing-teaser" class="landing-daily-teaser">
+                    Loading today&apos;s briefing...
+                  </p>
+                  <a id="navdle-launch" class="daily-launch-button" href="#navdle">Play Navdle</a>
+                  <p class="landing-daily-credit">
+                    Airport data courtesy of
+                    <a href="https://ourairports.com/data/" target="_blank" rel="noopener noreferrer">OurAirports open data</a>.
+                  </p>
+                </article>
+                <article class="landing-daily-game-card is-cardle">
+                  <p class="landing-daily-game-kicker">Aircraft</p>
+                  <h3 class="landing-daily-game-title">Cardle</h3>
+                  <p id="cardle-landing-summary" class="landing-daily-game-summary">
+                    Find the aircraft through eight stats, a hotspot map, and a delayed 3D reveal.
+                  </p>
+                  <div id="cardle-landing-stats" class="landing-daily-stats" aria-live="polite"></div>
+                  <p id="cardle-landing-teaser" class="landing-daily-teaser">
+                    Loading today&apos;s model brief...
+                  </p>
+                  <a id="cardle-launch" class="daily-launch-button" href="#cardle">Play Cardle</a>
+                  <p class="landing-daily-credit">
+                    Uses the committed model catalog plus live origin hotspots.
+                  </p>
+                </article>
               </div>
             </section>
 
@@ -110,7 +130,7 @@
               </div>
 
               <p class="landing-support" id="upload-support">
-                  Expected after upload: two private local views, <strong>Map</strong> and <strong>Deck</strong>. Accepted input: Skycards export JSON (for local testing, use <code>skycards_user.json</code>).
+                  Expected after upload: two private local views, <strong>Map</strong> and <strong>Deck</strong>. Accepted input: collection export JSON.
               </p>
             </section>
 
@@ -128,30 +148,19 @@
 
             <section class="landing-step export-guide" aria-labelledby="export-guide-title">
               <p class="landing-step-kicker">Step 3</p>
-              <h2 id="export-guide-title">Need your Skycards export JSON first?</h2>
+              <h2 id="export-guide-title">Need your collection export first?</h2>
               <ol>
                 <li>
                   Open the guide:
                   <a href="https://github.com/mfkp/skycards-export" target="_blank" rel="noopener noreferrer">
-                    github.com/mfkp/skycards-export
+                    Export guide repository
                   </a>
                 </li>
                 <li>
-                  Run one of the official export scripts:
-                  <div class="export-guide-snippet">
-                    <strong>Windows PowerShell</strong>
-                    <code>Invoke-WebRequest -Uri https://raw.githubusercontent.com/mfkp/skycards-export/main/skycards_export.ps1 -OutFile skycards_export.ps1</code>
-                    <code>powershell -ExecutionPolicy Bypass -File .\skycards_export.ps1</code>
-                  </div>
-                  <div class="export-guide-snippet">
-                    <strong>macOS / Linux / Git Bash</strong>
-                    <code>curl -O https://raw.githubusercontent.com/mfkp/skycards-export/main/skycards_export.sh</code>
-                    <code>chmod +x skycards_export.sh</code>
-                    <code>./skycards_export.sh</code>
-                  </div>
+                  Run one of the provided export scripts from that guide.
                 </li>
                 <li>
-                  The script saves <code>skycards_user.json</code> in your current folder. Upload that file here.
+                  Upload the generated JSON file here.
                 </li>
               </ol>
             </section>
@@ -166,11 +175,33 @@
           <div class="dashboard-tabs-tools">
             <nav class="dashboard-tabs" role="tablist" aria-label="Dashboard tabs">
               <button
-                id="tab-map-button"
+                id="tab-navdle-button"
                 class="dashboard-tab-button is-active"
                 type="button"
                 role="tab"
                 aria-selected="true"
+                aria-controls="navdle"
+                data-tab="navdle"
+              >
+                Navdle
+              </button>
+              <button
+                id="tab-cardle-button"
+                class="dashboard-tab-button"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="cardle"
+                data-tab="cardle"
+              >
+                Cardle
+              </button>
+              <button
+                id="tab-map-button"
+                class="dashboard-tab-button"
+                type="button"
+                role="tab"
+                aria-selected="false"
                 aria-controls="tab-map"
                 data-tab="map"
               >
@@ -186,17 +217,6 @@
                 data-tab="aircraft"
               >
                 Deck
-              </button>
-              <button
-                id="tab-daily-button"
-                class="dashboard-tab-button"
-                type="button"
-                role="tab"
-                aria-selected="false"
-                aria-controls="navdle"
-                data-tab="daily"
-              >
-                DAILY
               </button>
             </nav>
             <div class="data-tools">
@@ -433,7 +453,7 @@
           id="navdle"
           class="dashboard-tab-panel daily-tab-panel"
           role="tabpanel"
-          aria-labelledby="tab-daily-button"
+          aria-labelledby="tab-navdle-button"
           hidden
         >
           <div class="daily-layout">
@@ -494,6 +514,81 @@
               <section class="daily-board-section" aria-label="Guess board">
                 <p id="daily-board-meta" class="daily-board-meta"></p>
                 <div id="daily-board" class="daily-board"></div>
+              </section>
+            </article>
+          </div>
+        </section>
+
+        <section
+          id="cardle"
+          class="dashboard-tab-panel cardle-tab-panel"
+          role="tabpanel"
+          aria-labelledby="tab-cardle-button"
+          hidden
+        >
+          <div class="cardle-layout">
+            <article class="cardle-unified-panel">
+              <div class="cardle-hero-grid">
+                <section class="daily-search-section" aria-label="Cardle command deck">
+                  <div class="daily-command-deck cardle-command-deck">
+                    <div class="daily-command-top">
+                      <div class="daily-command-title-row">
+                        <div class="daily-command-title-copy">
+                          <p class="eyebrow">Skyviz Daily</p>
+                          <h3 id="cardle-title">Cardle</h3>
+                          <p id="cardle-hero-summary" class="daily-hero-summary">
+                            Guess the aircraft of the day. Each guess updates a live comparison card across eight stats while the hidden reveals unlock.
+                          </p>
+                        </div>
+                      </div>
+                      <div class="daily-meta-stack">
+                        <div id="cardle-meta-grid" class="daily-meta-grid" aria-live="polite"></div>
+                        <p class="daily-meta-disclosure">
+                          Privacy-first: streak and win rate stay in this browser only on this device.
+                        </p>
+                      </div>
+                    </div>
+                    <div class="daily-command-surface">
+                      <form id="cardle-guess-form" class="daily-guess-form" autocomplete="off">
+                        <label class="control-field daily-guess-field" for="cardle-guess-input">
+                          <span class="daily-guess-input-wrap">
+                            <span class="daily-guess-field-icon" aria-hidden="true">
+                              <svg viewBox="0 0 24 24" focusable="false">
+                                <circle cx="10.5" cy="10.5" r="5.75"></circle>
+                                <path d="M15 15l4.75 4.75"></path>
+                              </svg>
+                            </span>
+                            <input
+                              id="cardle-guess-input"
+                              type="search"
+                              placeholder="Type ICAO, manufacturer, or model"
+                              aria-label="Guess an aircraft model"
+                              spellcheck="false"
+                              enterkeyhint="search"
+                              aria-autocomplete="list"
+                              aria-controls="cardle-suggestion-list"
+                              aria-expanded="false"
+                            >
+                          </span>
+                        </label>
+                      </form>
+                      <div id="cardle-suggestion-list" class="daily-suggestion-list" role="listbox"></div>
+                      <p id="cardle-feedback" class="daily-feedback" aria-live="polite"></p>
+                      <div class="daily-command-strip cardle-command-strip">
+                        <div id="cardle-briefing"></div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="cardle-intel-section" aria-label="Cardle intel">
+                  <article id="cardle-intel-panel" class="panel cardle-intel-panel"></article>
+                </section>
+              </div>
+
+              <section class="cardle-board-section" aria-label="Cardle guess board">
+                <p id="cardle-board-meta" class="daily-board-meta"></p>
+                <div id="cardle-board" class="cardle-board"></div>
               </section>
             </article>
           </div>
@@ -728,9 +823,10 @@
               <li><a href="#page-top">Back to top</a></li>
               <li><a href="#dashboard">Jump to dashboard</a></li>
               <li><a href="#navdle">Navdle daily airport game</a></li>
+              <li><a href="#cardle">Cardle daily aircraft game</a></li>
               <li>
                 <a href="https://github.com/mfkp/skycards-export" target="_blank" rel="noopener noreferrer">
-                  Skycards export guide
+                  Collection export guide
                 </a>
               </li>
               <li>

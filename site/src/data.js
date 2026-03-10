@@ -136,6 +136,7 @@ const regionFormatter = typeof Intl.DisplayNames === 'function'
 const referenceState = {
   manifestPromise: null,
   dataPromise: null,
+  cardleDataPromise: null,
 };
 const airportGameState = {
   manifestPromise: null,
@@ -201,6 +202,31 @@ export async function loadReferenceData() {
     });
   }
   return referenceState.dataPromise;
+}
+
+export async function loadCardleReferenceData() {
+  if (!referenceState.cardleDataPromise) {
+    referenceState.cardleDataPromise = loadReferenceManifest().then(async (manifest) => {
+      const [
+        modelsPayload,
+        modelRegistrationCountsPayload,
+      ] = await Promise.all([
+        fetchJson(getManifestDatasetPath(manifest, 'models', './data/reference/models.json')),
+        fetchJsonOptional(getManifestDatasetPath(manifest, 'modelRegistrationCounts')),
+      ]);
+      const modelRows = asArray(modelsPayload.rows);
+      const modelRegistrationCountsByModelId = buildModelRegistrationCountMap(modelRegistrationCountsPayload);
+      return {
+        manifest,
+        modelsPayload,
+        modelRegistrationCountsPayload,
+        referenceModels: modelRows,
+        modelsById: new Map(modelRows.map((row) => [normalizeCode(row.id), row])),
+        modelRegistrationCountsByModelId,
+      };
+    });
+  }
+  return referenceState.cardleDataPromise;
 }
 
 export async function loadAirportGameManifest() {
