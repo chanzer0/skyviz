@@ -39,7 +39,7 @@
 8. Aircraft cards are enriched by `card.modelId -> models.rows[].id`.
 9. Airport unlocks are enriched by `unlockedAirportIds[] -> airports.rows[].id`.
 10. The app computes tab-specific view models in memory:
-  - one airport-daily game state machine for `Navdle`, with hero-search state, guesses-left tracking, guess history, a pinned best-so-far comparison tracker, per-category comparison tiles, a progressive multi-hint queue, streak statistics, emoji share-grid generation with a direct `#navdle` link, and legacy `#tab-daily` hash compatibility
+  - one airport-daily game state machine for `Navdle`, with hero-search state, guesses-left tracking, guess history, a pinned best-so-far comparison tracker, per-category comparison tiles, viewport-aware clue explainers, a progressive multi-hint queue, a UTC weekly `wildcard` / `hub` / `regional` cadence, streak statistics, emoji share-grid generation with a direct `#navdle` link for both solved and revealed boards, and legacy `#tab-daily` hash compatibility
 - one aircraft-daily game state machine for `Cardle`, with hero-search state, a tighter shared Navdle-style guesses-left strip, eight-guess tracking, a pinned best-so-far comparison intel card with redacted manufacturer/name clues, catchable-registration tracking in place of height, image-forward history rows with denser stat tiles, a wider registration-origin visual stage, on-surface overlay status chips instead of separate stage headers/notes, eight-stat higher-lower comparison feedback, staged hotspot/model reveals, Navdle-style solved-state celebration and share-action treatment, live share-grid generation with a direct `#cardle` link, and a runtime fetch for registration-origin hotspots after the map hint unlocks
   - airport capture progress across all committed reference airports
   - aircraft analytics, progress widgets, and a virtualized aircraft card deck
@@ -77,10 +77,10 @@ The reference snapshots keep the site self-contained for GitHub Pages and make a
 The `Navdle` airport game uses generated artifacts under `site/data/airports/`:
 
 - `scripts/refresh_airport_game_data.py` downloads the OurAirports CSV snapshots (`airports`, `runways`, `navaids`, `airport-frequencies`, `airport-comments`, `countries`, `regions`)
-- the same script builds `daily-game.json`, a curated browser payload of guessable airports plus derived runway, navaid, frequency, and recent community-note metadata
+- the same script builds `daily-game.json`, a curated browser payload of guessable airports plus derived runway, navaid, frequency, and recent community-note metadata; small airports only stay in that guessable payload when they have an `iataCode` and at least `3` published frequency entries
 - the same script builds `manifest.json`, which gives the browser a stable way to discover the daily-game payload and expose source attribution
 
-The browser does not parse the raw CSVs directly during normal gameplay. It loads the generated JSON so the static site stays responsive on GitHub Pages.
+The browser does not parse the raw CSVs directly during normal gameplay. It loads the generated JSON so the static site stays responsive on GitHub Pages. The weekly Navdle theme rotation uses only `wildcard`, `hub`, and `regional` challenge days; `frontier` is no longer a scheduled day-of-week theme.
 
 ## Cardle aircraft daily runtime contract
 

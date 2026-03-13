@@ -2,7 +2,7 @@ import { sanitizeText } from './format.js';
 
 const numberFormatter = new Intl.NumberFormat('en-US');
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-const DAILY_TIER_SCHEDULE = ['wildcard', 'hub', 'hub', 'regional', 'regional', 'regional', 'frontier'];
+const DAILY_TIER_SCHEDULE = ['wildcard', 'hub', 'hub', 'regional', 'regional', 'regional', 'wildcard'];
 const DAILY_TIER_LABELS = {
   wildcard: 'Wildcard',
   hub: 'Hub',

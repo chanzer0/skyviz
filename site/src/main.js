@@ -233,6 +233,8 @@ const DAILY_TONE_ORDER = Object.freeze({
   near: 1,
   hit: 2,
 });
+const DAILY_HELP_PANEL_VIEWPORT_MARGIN = 12;
+const DAILY_HELP_PANEL_GAP = 6;
 const CARDLE_TONE_ORDER = Object.freeze({
   miss: 0,
   near: 1,
@@ -454,6 +456,7 @@ const state = {
     aircraftDetailModelId: null,
     aircraftDetailFocusModelId: null,
     aircraftDetailMediaKey: '',
+    dailyHelpPositionFrame: 0,
     pendingDailyInputFocus: false,
     pendingCardleInputFocus: false,
   },
@@ -737,7 +740,7 @@ function renderDailyLandingCta() {
     return;
   }
   if (todaySession.status === 'lost') {
-    elements.dailyLandingTeaser.textContent = 'Today\'s board is complete. Review the answer and reset timer from the Navdle tab.';
+    elements.dailyLandingTeaser.textContent = 'Today\'s board is complete. Review the answer, share grid, and reset timer from the Navdle tab.';
     elements.dailyLaunchButton.textContent = `Review ${DAILY_GAME_NAME}`;
     return;
   }
@@ -1174,9 +1177,7 @@ function renderDailyIntel(challenge, session, options = {}) {
   const hintState = buildDailyHintState(challenge, session, { revealAnswer });
   if (session.status === 'won' || session.status === 'lost') {
     const guessesRemaining = Math.max((challenge.maxGuesses || 8) - session.guesses.length, 0);
-    const copyButtonConfig = session.status === 'won'
-      ? getDailyCopyButtonConfig(challenge, session, { celebrateSolve })
-      : null;
+    const copyButtonConfig = getDailyCopyButtonConfig(challenge, session, { celebrateSolve });
     elements.dailyIntel.hidden = false;
     elements.dailyIntel.innerHTML = `
       <div class="daily-answer-card${session.status === 'won' ? ' is-victory' : ''}${celebrateSolve ? ' is-celebrating' : ''}">
@@ -1714,7 +1715,7 @@ function renderDailyTab() {
     ? 'Type an airport, city, or code. Each guess updates continent, country, region, runway, navaids, layout, elevation, and distance clues.'
     : session.status === 'won'
       ? 'Board cleared. Review the clue trail, the revealed airport, and your share-ready grid.'
-      : 'Board complete. Review the clue trail and today\'s revealed airport.';
+      : 'Board complete. Review the clue trail, today\'s revealed airport, and your share-ready grid.';
   elements.dailyMetaGrid.innerHTML = buildDailyMetaGridHtml(challenge, session, stats, countdown, statCelebrateKeys);
   elements.dailyGuessInput.disabled = !canGuess;
   elements.dailyGuessInput.value = state.daily.query;
@@ -1758,7 +1759,7 @@ function renderDailyTab() {
     setDailyFeedback(
       session.status === 'won'
         ? `Cleared in ${formatDailyGuessCount(session.guesses.length)}. The share grid is ready.`
-        : 'No solve today. The answer and clue trail are revealed below.',
+        : 'No solve today. The answer, clue trail, and share grid are revealed below.',
       session.status === 'won' ? 'success' : 'warning',
     );
     elements.dailyFeedback.className = `daily-feedback is-${escapeHtml(state.daily.feedbackTone)}`;
@@ -2545,6 +2546,76 @@ function buildCardleCardStatsHtml(comparison) {
       `).join('')}
     </dl>
   `;
+}
+
+function positionDailyHelpPanel(details) {
+  if (!(details instanceof HTMLElement)) {
+    return;
+  }
+  const panel = details.querySelector('.daily-tile-help-panel');
+  const toggle = details.querySelector('.daily-tile-help-toggle');
+  if (!(panel instanceof HTMLElement) || !(toggle instanceof HTMLElement)) {
+    return;
+  }
+  const detailsRect = details.getBoundingClientRect();
+  const toggleRect = toggle.getBoundingClientRect();
+  const maxPanelWidth = Math.max(160, window.innerWidth - (DAILY_HELP_PANEL_VIEWPORT_MARGIN * 2));
+  panel.style.maxWidth = `${Math.round(maxPanelWidth)}px`;
+  panel.style.left = '';
+  panel.style.right = '';
+  panel.style.top = '';
+  const panelRect = panel.getBoundingClientRect();
+  if (!panelRect.width || !panelRect.height) {
+    return;
+  }
+  const maxLeft = Math.max(
+    DAILY_HELP_PANEL_VIEWPORT_MARGIN,
+    window.innerWidth - DAILY_HELP_PANEL_VIEWPORT_MARGIN - panelRect.width,
+  );
+  const desiredLeft = toggleRect.right - panelRect.width;
+  const clampedLeft = Math.min(Math.max(desiredLeft, DAILY_HELP_PANEL_VIEWPORT_MARGIN), maxLeft);
+  const downTop = toggleRect.bottom + DAILY_HELP_PANEL_GAP;
+  const upTop = toggleRect.top - DAILY_HELP_PANEL_GAP - panelRect.height;
+  const spaceAbove = toggleRect.top - DAILY_HELP_PANEL_VIEWPORT_MARGIN;
+  const spaceBelow = window.innerHeight - toggleRect.bottom - DAILY_HELP_PANEL_VIEWPORT_MARGIN;
+  let verticalPlacement = 'down';
+  let clampedTop = Math.max(
+    DAILY_HELP_PANEL_VIEWPORT_MARGIN,
+    Math.min(downTop, window.innerHeight - DAILY_HELP_PANEL_VIEWPORT_MARGIN - panelRect.height),
+  );
+  if (panelRect.height > spaceBelow && spaceAbove > spaceBelow) {
+    verticalPlacement = 'up';
+    clampedTop = Math.max(DAILY_HELP_PANEL_VIEWPORT_MARGIN, upTop);
+  } else if (clampedTop + panelRect.height > window.innerHeight - DAILY_HELP_PANEL_VIEWPORT_MARGIN && spaceAbove > 0) {
+    verticalPlacement = 'up';
+    clampedTop = Math.max(
+      DAILY_HELP_PANEL_VIEWPORT_MARGIN,
+      Math.min(upTop, window.innerHeight - DAILY_HELP_PANEL_VIEWPORT_MARGIN - panelRect.height),
+    );
+  }
+  panel.style.left = `${Math.round(clampedLeft - detailsRect.left)}px`;
+  panel.style.right = 'auto';
+  panel.style.top = `${Math.round(clampedTop - detailsRect.top)}px`;
+  details.dataset.verticalPlacement = verticalPlacement;
+}
+
+function syncOpenDailyHelpPanelPositions() {
+  if (!elements.dailyBoard || state.activeTab !== 'navdle' || elements.dailyTabPanel?.hidden) {
+    return;
+  }
+  elements.dailyBoard.querySelectorAll('.daily-tile-help[open]').forEach((details) => {
+    positionDailyHelpPanel(details);
+  });
+}
+
+function queueDailyHelpPanelPositionSync() {
+  if (state.ui.dailyHelpPositionFrame) {
+    return;
+  }
+  state.ui.dailyHelpPositionFrame = window.requestAnimationFrame(() => {
+    state.ui.dailyHelpPositionFrame = 0;
+    syncOpenDailyHelpPanelPositions();
+  });
 }
 
 function buildCardleSupportPillHtml(item, options = {}) {
@@ -7679,6 +7750,7 @@ function wireDailyGame() {
     elements.dailyBoard.querySelectorAll('.daily-board-step').forEach((step) => {
       step.classList.toggle('is-help-open', Boolean(step.querySelector('.daily-tile-help[open]')));
     });
+    queueDailyHelpPanelPositionSync();
   };
 
   elements.dailyLaunchButton?.addEventListener('click', (event) => {
@@ -7789,6 +7861,9 @@ function wireDailyGame() {
         }
       });
       details.open = nextOpen;
+      if (nextOpen) {
+        positionDailyHelpPanel(details);
+      }
       syncDailyHelpOpenState();
       return;
     }
@@ -7799,6 +7874,28 @@ function wireDailyGame() {
       panel.open = false;
     });
     syncDailyHelpOpenState();
+  });
+
+  elements.dailyBoard.addEventListener('pointerover', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const details = target.closest('.daily-tile-help');
+    if (details instanceof HTMLElement) {
+      positionDailyHelpPanel(details);
+    }
+  });
+
+  elements.dailyBoard.addEventListener('focusin', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const details = target.closest('.daily-tile-help');
+    if (details instanceof HTMLElement) {
+      positionDailyHelpPanel(details);
+    }
   });
 
   elements.dailyIntel.addEventListener('click', (event) => {
@@ -8437,6 +8534,7 @@ function wireAircraftControls() {
   }, true);
 
   window.addEventListener('resize', () => {
+    queueDailyHelpPanelPositionSync();
     if (!state.model) {
       if (state.activeTab === 'cardle' && state.cardle.map.instance) {
         invalidateLeafletMap(state.cardle.map.instance);

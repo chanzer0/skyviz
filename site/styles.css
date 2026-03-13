@@ -2686,6 +2686,11 @@ code {
   top: 0.5rem;
   right: 0.5rem;
   z-index: 4;
+  --daily-help-panel-shift: -4px;
+}
+
+.daily-tile-help[data-vertical-placement='up'] {
+  --daily-help-panel-shift: 4px;
 }
 
 .daily-tile-help[open] {
@@ -2731,7 +2736,7 @@ code {
     linear-gradient(155deg, rgba(255, 255, 255, 0.98), rgba(242, 248, 252, 0.96));
   box-shadow: 0 16px 36px rgba(15, 43, 64, 0.14);
   opacity: 0;
-  transform: translateY(-4px);
+  transform: translateY(var(--daily-help-panel-shift));
   pointer-events: none;
   z-index: 24;
   transition: opacity 160ms ease, transform 160ms ease;

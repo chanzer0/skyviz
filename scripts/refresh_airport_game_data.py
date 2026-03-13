@@ -420,8 +420,6 @@ def build_airport_records(csv_dir: Path) -> tuple[list[dict[str, object]], dict[
         municipality = sanitize_text(row.get('municipality'))
         scheduled_service = normalize_key(row.get('scheduled_service')) == 'yes'
         has_iata = bool(iata_code)
-        if airport_type == 'small_airport' and not (has_iata or scheduled_service):
-            continue
 
         iso_country = normalize_code(row.get('iso_country'))
         iso_region = normalize_code(row.get('iso_region'))
@@ -448,6 +446,9 @@ def build_airport_records(csv_dir: Path) -> tuple[list[dict[str, object]], dict[
                 'frequency_types': [],
             },
         )
+        frequency_count = int(frequency_details['frequency_count'])
+        if airport_type == 'small_airport' and not (has_iata and frequency_count >= 3):
+            continue
         comment_details = comment_index.get(
             airport_id,
             {
@@ -524,7 +525,7 @@ def build_airport_records(csv_dir: Path) -> tuple[list[dict[str, object]], dict[
             'surfaceLabel': runway_details['surface_label'],
             'navaidCount': int(navaid_details['navaid_count']),
             'navaidTypes': list(navaid_details['navaid_types']),
-            'frequencyCount': int(frequency_details['frequency_count']),
+            'frequencyCount': frequency_count,
             'frequencyTypes': list(frequency_details['frequency_types']),
             'commentCount': int(comment_details['comment_count']),
             'commentSubject': comment_details['comment_subject'],
