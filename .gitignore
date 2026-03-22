@@ -7,11 +7,13 @@ Thumbs.db
 
 output/
 .playwright-cli/
+test-results/
 AGENTS.local.md
 
 site/data/reference/*
 site/data/airports/*.csv
 site/data/airports/daily-game.json
 site/data/airports/manifest.json
+site/data/live/*.json
 skycards_user.json
 cdn_index.json

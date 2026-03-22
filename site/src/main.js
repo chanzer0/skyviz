@@ -1,13 +1,14 @@
 import { renderBarList } from './charts.js';
 import {
   buildDashboardModel,
+  fetchCompletionistSnapshotData,
   loadAirportGameData,
   loadAirportGameManifest,
   loadCardleReferenceData,
   loadReferenceData,
   loadReferenceManifest,
   parseUserCollection,
-} from './data.js';
+} from './data.js?v=20260321-completionist-2';
 import {
   DAILY_GAME_NAME,
   buildAirportGuessComparison,
@@ -25,7 +26,7 @@ import {
   resolveAirportGuess,
   selectDailyAirport,
   serializeDailyHistory,
-} from './daily.js';
+} from './daily.js?v=20260321-completionist-2';
 import {
   CARDLE_GAME_NAME,
   CARDLE_HASH,
@@ -43,8 +44,8 @@ import {
   normalizeCardleHotspotPayload,
   resolveCardleGuess,
   selectDailyCardModel,
-} from './cardle.js';
-import { escapeHtml, formatCompact, formatDateFromMillis, formatLabel, formatNumber, formatPercent, sanitizeText } from './format.js';
+} from './cardle.js?v=20260321-completionist-2';
+import { escapeHtml, formatCompact, formatDateFromMillis, formatLabel, formatNumber, formatPercent, sanitizeText } from './format.js?v=20260321-completionist-2';
 
 const elements = {
   bootLoader: document.querySelector('#boot-loader'),
@@ -82,10 +83,12 @@ const elements = {
   aircraftTabPanel: document.querySelector('#tab-aircraft'),
   dailyTabPanel: document.querySelector('#navdle'),
   cardleTabPanel: document.querySelector('#cardle'),
+  mapLayout: document.querySelector('#map-layout'),
   mapSide: document.querySelector('#map-side'),
   mapCanvas: document.querySelector('#map-canvas'),
   mapLegend: document.querySelector('#map-legend'),
   mapAirportKpi: document.querySelector('#map-airport-kpi'),
+  mapCompletionistToggle: document.querySelector('#map-completionist-toggle'),
   mapDrillPanel: document.querySelector('#map-drill-panel'),
   mapDrillEyebrow: document.querySelector('#map-drill-eyebrow'),
   mapDrillTitle: document.querySelector('#map-drill-title'),
@@ -97,6 +100,15 @@ const elements = {
   mapDrillSortDirection: document.querySelector('#map-drill-sort-direction'),
   mapDrillProgressMeta: document.querySelector('#map-drill-progress-meta'),
   mapDrillProgress: document.querySelector('#map-drill-progress'),
+  mapCompletionistPanel: document.querySelector('#map-completionist-panel'),
+  mapCompletionistStatus: document.querySelector('#map-completionist-status'),
+  mapCompletionistRefresh: document.querySelector('#map-completionist-refresh'),
+  mapCompletionistUpdated: document.querySelector('#map-completionist-updated'),
+  mapCompletionistSearch: document.querySelector('#map-completionist-search'),
+  mapCompletionistFilterBar: document.querySelector('#map-completionist-filter-bar'),
+  mapCompletionistRefreshButton: document.querySelector('#map-completionist-refresh-button'),
+  mapCompletionistMeta: document.querySelector('#map-completionist-meta'),
+  mapCompletionistList: document.querySelector('#map-completionist-list'),
   aircraftOverviewPanel: document.querySelector('#aircraft-overview-panel'),
   aircraftTierXpPanel: document.querySelector('#aircraft-tier-xp-panel'),
   aircraftTierGlowPanel: document.querySelector('#aircraft-tier-glow-panel'),
@@ -214,6 +226,12 @@ const MAP_HIGHLIGHT_EXTRA_RADIUS = 1.8;
 const MAP_CODE_LABEL_MIN_ZOOM = 6;
 const MAP_CODE_LABEL_MAX_COUNT = 140;
 const MAP_DRILL_LEVELS = Object.freeze(['continent', 'country', 'us-state']);
+const COMPLETIONIST_MARKER_URL_TEMPLATE = 'https://www.skydex.info/img/markers/{icao}.png';
+const COMPLETIONIST_DEFAULT_BROWSER_REFRESH_SECONDS = 60;
+const COMPLETIONIST_DEFAULT_SNAPSHOT_SECONDS = 300;
+const COMPLETIONIST_DEFAULT_STALE_SECONDS = 900;
+const COMPLETIONIST_SEARCH_DEBOUNCE_MS = 140;
+const COMPLETIONIST_FILTER_VALUES = new Set(['all', 'airport', 'card', 'both']);
 const REGION_CODE_PREVIEW_LIMIT = 56;
 const REGISTRATION_MODAL_PAGE_SIZE = 120;
 const MODEL_REGISTRATION_MODAL_PAGE_SIZE = 120;
@@ -366,6 +384,25 @@ const state = {
     countrySort: 'total_desc',
     usStateQuery: '',
     usStateSort: 'total_desc',
+    completionist: {
+      enabled: false,
+      loading: false,
+      error: '',
+      manifest: null,
+      snapshot: null,
+      matches: [],
+      filter: 'airport',
+      query: '',
+      selectedFlightId: '',
+      refreshTimer: null,
+      searchTimer: null,
+      secondsUntilRefresh: COMPLETIONIST_DEFAULT_BROWSER_REFRESH_SECONDS,
+      requestToken: 0,
+      layer: null,
+      markersByFlightId: new Map(),
+      markerAssetStatusByTypeCode: new Map(),
+      markerRefreshQueued: false,
+    },
   },
   aircraft: {
     query: '',
@@ -4958,6 +4995,17 @@ function setAircraftDetailModalOpen(isOpen, options = {}) {
 function clearDashboardPanels() {
   elements.mapLegend.innerHTML = '';
   elements.mapAirportKpi.textContent = '';
+  elements.mapCompletionistStatus.textContent = '';
+  elements.mapCompletionistRefresh.textContent = '--';
+  elements.mapCompletionistUpdated.textContent = '--';
+  if (elements.mapCompletionistSearch) {
+    elements.mapCompletionistSearch.value = '';
+  }
+  if (elements.mapCompletionistFilterBar) {
+    elements.mapCompletionistFilterBar.innerHTML = '';
+  }
+  elements.mapCompletionistMeta.textContent = '';
+  elements.mapCompletionistList.innerHTML = '';
   elements.mapDrillEyebrow.textContent = 'Drill-down explorer';
   elements.mapDrillTitle.textContent = 'Airport completion explorer';
   elements.mapDrillHelper.textContent = 'Click a continent to drill into countries. Click United States to drill into US states.';
@@ -4996,6 +5044,34 @@ function clearDashboardPanels() {
   elements.aircraftDetailMediaOptions.innerHTML = '';
   elements.aircraftDetailKpis.innerHTML = '';
   elements.aircraftDetailMetaSections.innerHTML = '';
+  syncMapModePanels();
+}
+
+function stopCompletionistPolling() {
+  if (state.map.completionist.refreshTimer) {
+    window.clearInterval(state.map.completionist.refreshTimer);
+  }
+  state.map.completionist.refreshTimer = null;
+  if (state.map.completionist.searchTimer) {
+    window.clearTimeout(state.map.completionist.searchTimer);
+  }
+  state.map.completionist.searchTimer = null;
+}
+
+function resetCompletionistState({ preserveSnapshot = false } = {}) {
+  stopCompletionistPolling();
+  state.map.completionist.requestToken += 1;
+  state.map.completionist.loading = false;
+  state.map.completionist.error = '';
+  state.map.completionist.matches = [];
+  state.map.completionist.selectedFlightId = '';
+  state.map.completionist.secondsUntilRefresh = COMPLETIONIST_DEFAULT_BROWSER_REFRESH_SECONDS;
+  state.map.completionist.markersByFlightId = new Map();
+  state.map.completionist.markerRefreshQueued = false;
+  if (!preserveSnapshot) {
+    state.map.completionist.manifest = null;
+    state.map.completionist.snapshot = null;
+  }
 }
 
 function parseCompletionSortKey(sortKey) {
@@ -5223,6 +5299,10 @@ function resetToLanding({
   state.map.countrySort = 'total_desc';
   state.map.usStateQuery = '';
   state.map.usStateSort = 'total_desc';
+  state.map.completionist.enabled = false;
+  state.map.completionist.filter = 'airport';
+  state.map.completionist.query = '';
+  resetCompletionistState();
   resetMapDrillState();
   state.aircraft.query = '';
   state.aircraft.sortBy = 'xp';
@@ -5357,6 +5437,7 @@ function setActiveTab(tabId, options = {}) {
   elements.cardleTabPanel.hidden = !isCardle;
   elements.mapTabPanel.hidden = !isMap;
   elements.aircraftTabPanel.hidden = !isAircraft;
+  syncCompletionistPolling({ refreshIfNeeded: isMap });
   if (options.skipAutoEnsure) {
     return;
   }
@@ -5489,7 +5570,860 @@ function setCompletionMeta(target, shownCount, totalCount, label) {
   target.textContent = `${formatNumber(shownCount)} shown of ${formatNumber(totalCount)} ${label}.`;
 }
 
+function normalizeCompletionistCode(value) {
+  return sanitizeText(value).toUpperCase();
+}
+
+function escapeSelectorValue(value) {
+  if (window.CSS?.escape) {
+    return window.CSS.escape(value);
+  }
+  return String(value || '').replace(/["\\]/g, '\\$&');
+}
+
+function isCompletionistModeEnabled() {
+  return Boolean(state.map.completionist.enabled);
+}
+
+function syncMapModePanels() {
+  const enabled = isCompletionistModeEnabled();
+  elements.mapLayout?.classList.toggle('is-completionist', enabled);
+  if (elements.mapCompletionistToggle) {
+    elements.mapCompletionistToggle.checked = enabled;
+  }
+  if (elements.mapDrillPanel) {
+    elements.mapDrillPanel.hidden = enabled;
+  }
+  if (elements.mapCompletionistPanel) {
+    elements.mapCompletionistPanel.hidden = !enabled;
+  }
+}
+
+function getCompletionistSnapshotGeneratedAtMillis() {
+  const rawValue = state.map.completionist.manifest?.generatedAt || state.map.completionist.snapshot?.generatedAt || '';
+  const millis = Date.parse(rawValue);
+  return Number.isFinite(millis) ? millis : null;
+}
+
+function getCompletionistBrowserRefreshSeconds() {
+  return Math.max(
+    15,
+    Number(state.map.completionist.manifest?.uiRefreshIntervalSeconds) || COMPLETIONIST_DEFAULT_BROWSER_REFRESH_SECONDS,
+  );
+}
+
+function getCompletionistSnapshotSeconds() {
+  return Math.max(
+    60,
+    Number(state.map.completionist.manifest?.publishIntervalSeconds) || COMPLETIONIST_DEFAULT_SNAPSHOT_SECONDS,
+  );
+}
+
+function getCompletionistStaleSeconds() {
+  return Math.max(
+    getCompletionistSnapshotSeconds(),
+    Number(state.map.completionist.manifest?.staleAfterSeconds) || COMPLETIONIST_DEFAULT_STALE_SECONDS,
+  );
+}
+
+function formatShortDuration(totalSeconds) {
+  const seconds = Math.max(0, Math.round(Number(totalSeconds) || 0));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${remainingSeconds}s`;
+  }
+  return `${remainingSeconds}s`;
+}
+
+function formatRelativeAgeFromMillis(ageMillis) {
+  const safeMillis = Math.max(0, Number(ageMillis) || 0);
+  const seconds = Math.round(safeMillis / 1000);
+  if (seconds < 60) {
+    return `${seconds}s ago`;
+  }
+  if (seconds < 3600) {
+    return `${Math.round(seconds / 60)}m ago`;
+  }
+  if (seconds < 86400) {
+    return `${Math.round(seconds / 3600)}h ago`;
+  }
+  return `${Math.round(seconds / 86400)}d ago`;
+}
+
+function formatCompletionistTimestamp(value) {
+  const millis = Date.parse(value || '');
+  if (!Number.isFinite(millis)) {
+    return '--';
+  }
+  return new Date(millis).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function buildCompletionistAirportDisplay(airport, fallbackCode = '') {
+  if (airport) {
+    const code = buildAirportCodeDisplay(airport);
+    return airport.name ? `${code} · ${airport.name}` : code;
+  }
+  return fallbackCode || 'Unknown airport';
+}
+
+function buildCompletionistModelLabel(referenceModel, typeCode) {
+  if (!referenceModel) {
+    return typeCode || 'Unknown aircraft';
+  }
+  return [sanitizeText(referenceModel.manufacturer), sanitizeText(referenceModel.name)]
+    .filter(Boolean)
+    .join(' ');
+}
+
+function normalizeCompletionistSearchText(value) {
+  return sanitizeText(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+function buildCompletionistSearchText(parts) {
+  return normalizeCompletionistSearchText(parts.filter(Boolean).join(' '));
+}
+
+function getCompletionistSearchTokens(query = state.map.completionist.query) {
+  return normalizeCompletionistSearchText(query)
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function buildCompletionistMatches(model, references, liveRows) {
+  if (!model || !references) {
+    return [];
+  }
+  const ownedModelIds = new Set(
+    (model.aircraft?.rows || [])
+      .map((row) => normalizeCompletionistCode(row.modelId || row.icao))
+      .filter(Boolean),
+  );
+  const capturedAirportIds = new Set(
+    (model.map?.airportPoints || [])
+      .filter((point) => point.captured)
+      .map((point) => String(point.id)),
+  );
+  const airportsByCode = references.airportsByCode instanceof Map ? references.airportsByCode : new Map();
+
+  return (liveRows || [])
+    .map((flight) => {
+      const destinationCode = normalizeCompletionistCode(flight.destination);
+      const originCode = normalizeCompletionistCode(flight.origin);
+      const typeCode = normalizeCompletionistCode(flight.typeCode);
+      const destinationAirports = airportsByCode.get(destinationCode) || [];
+      const destinationAirport = destinationAirports.find((airport) => !capturedAirportIds.has(String(airport.id)))
+        || destinationAirports[0]
+        || null;
+      const hasMissingDestination = Boolean(
+        destinationAirport && !capturedAirportIds.has(String(destinationAirport.id)),
+      );
+      const originAirport = (airportsByCode.get(originCode) || [])[0] || null;
+      const matchedModel = typeCode ? references.modelsById.get(typeCode) : null;
+      const hasNewCard = Boolean(typeCode && matchedModel && !ownedModelIds.has(typeCode));
+      if (!hasMissingDestination && !hasNewCard) {
+        return null;
+      }
+      const matchKind = hasMissingDestination && hasNewCard
+        ? 'both'
+        : hasMissingDestination
+          ? 'airport'
+          : 'card';
+      const matchPriority = matchKind === 'both' ? 0 : matchKind === 'airport' ? 1 : 2;
+      const routeOrigin = originCode || originAirport?.iata || originAirport?.icao || '???';
+      const routeDestination = destinationCode || destinationAirport?.iata || destinationAirport?.icao || '???';
+      const destinationDisplay = buildCompletionistAirportDisplay(destinationAirport, destinationCode);
+      const originDisplay = buildCompletionistAirportDisplay(originAirport, originCode);
+      const reasonNotes = buildCompletionistReasonNotes({
+        destinationAirport,
+        destination: destinationCode,
+        hasMissingDestination,
+        hasNewCard,
+        typeCode,
+        modelLabel: buildCompletionistModelLabel(matchedModel, typeCode),
+      });
+      return {
+        ...flight,
+        typeCode,
+        origin: originCode,
+        destination: destinationCode,
+        matchedModel,
+        modelLabel: buildCompletionistModelLabel(matchedModel, typeCode),
+        originAirport,
+        destinationAirport,
+        hasMissingDestination,
+        hasNewCard,
+        matchKind,
+        matchPriority,
+        displayFlightLabel: flight.flightNumber || flight.callsign || flight.registration || flight.aircraftHex || 'Unknown flight',
+        routeLabel: `${routeOrigin} \u2192 ${routeDestination}`,
+        destinationDisplay,
+        originDisplay,
+        searchText: buildCompletionistSearchText([
+          flight.id,
+          flight.flightNumber,
+          flight.callsign,
+          flight.registration,
+          flight.aircraftHex,
+          typeCode,
+          routeOrigin,
+          routeDestination,
+          originDisplay,
+          destinationDisplay,
+          matchedModel?.manufacturer,
+          matchedModel?.name,
+          reasonNotes.join(' '),
+          hasMissingDestination ? 'missing destination' : '',
+          hasNewCard ? 'new card' : '',
+        ]),
+      };
+    })
+    .filter(Boolean)
+    .sort(
+      (left, right) => left.matchPriority - right.matchPriority
+        || (Number(right.seenAt) || 0) - (Number(left.seenAt) || 0)
+        || left.displayFlightLabel.localeCompare(right.displayFlightLabel),
+    );
+}
+
+function getSearchFilteredCompletionistMatches() {
+  const tokens = getCompletionistSearchTokens();
+  const matches = state.map.completionist.matches || [];
+  if (!tokens.length) {
+    return matches.slice();
+  }
+  return matches.filter((match) => tokens.every((token) => match.searchText.includes(token)));
+}
+
+function filterCompletionistMatchesByKind(matches, filterValue) {
+  if (filterValue === 'airport') {
+    return matches.filter((match) => match.hasMissingDestination);
+  }
+  if (filterValue === 'card') {
+    return matches.filter((match) => match.hasNewCard);
+  }
+  if (filterValue === 'both') {
+    return matches.filter((match) => match.hasMissingDestination && match.hasNewCard);
+  }
+  return matches.slice();
+}
+
+function getCompletionistFilterCounts(matches = getSearchFilteredCompletionistMatches()) {
+  return {
+    all: matches.length,
+    airport: matches.filter((match) => match.hasMissingDestination).length,
+    card: matches.filter((match) => match.hasNewCard).length,
+    both: matches.filter((match) => match.hasMissingDestination && match.hasNewCard).length,
+  };
+}
+
+function getCompletionistViewState() {
+  const searchMatches = getSearchFilteredCompletionistMatches();
+  const visibleMatches = filterCompletionistMatchesByKind(searchMatches, state.map.completionist.filter);
+  return {
+    allMatches: state.map.completionist.matches || [],
+    searchMatches,
+    visibleMatches,
+    filterCounts: getCompletionistFilterCounts(searchMatches),
+    selectedMatch: visibleMatches.find((match) => match.id === state.map.completionist.selectedFlightId) || null,
+  };
+}
+
+function getVisibleCompletionistMatches() {
+  return getCompletionistViewState().visibleMatches;
+}
+
+function getSelectedCompletionistMatch() {
+  return getCompletionistViewState().selectedMatch;
+}
+
+function buildCompletionistMarkerUrl(typeCode) {
+  const cleanedTypeCode = normalizeCompletionistCode(typeCode);
+  if (!cleanedTypeCode) {
+    return '';
+  }
+  return COMPLETIONIST_MARKER_URL_TEMPLATE.replace('{icao}', encodeURIComponent(cleanedTypeCode));
+}
+
+function buildCompletionistFlightFr24Url(match) {
+  if (!match || typeof match !== 'object') {
+    return 'https://www.flightradar24.com/';
+  }
+  const registration = sanitizeText(match.registration).toUpperCase().replace(/\s+/g, '');
+  if (registration) {
+    return `https://www.flightradar24.com/${encodeURIComponent(registration)}`;
+  }
+  const callsign = sanitizeText(match.callsign).toLowerCase().replace(/\s+/g, '');
+  if (callsign) {
+    return `https://www.flightradar24.com/data/flights/${encodeURIComponent(callsign)}`;
+  }
+  const flightNumber = sanitizeText(match.flightNumber).toLowerCase().replace(/\s+/g, '');
+  if (flightNumber) {
+    return `https://www.flightradar24.com/data/flights/${encodeURIComponent(flightNumber)}`;
+  }
+  const aircraftHex = sanitizeText(match.aircraftHex).toLowerCase().replace(/\s+/g, '');
+  if (aircraftHex) {
+    return `https://www.flightradar24.com/?icao=${encodeURIComponent(aircraftHex)}`;
+  }
+  return 'https://www.flightradar24.com/';
+}
+
+function buildCompletionistReasonChips(match) {
+  return [
+    match.hasMissingDestination ? '<span class="completionist-flight-chip is-airport">Missing destination</span>' : '',
+    match.hasNewCard ? '<span class="completionist-flight-chip is-card">New card</span>' : '',
+  ].filter(Boolean).join('');
+}
+
+function buildCompletionistReasonNotes(match) {
+  const noteParts = [];
+  if (match.hasMissingDestination) {
+    noteParts.push(`Missing destination: ${buildCompletionistAirportDisplay(match.destinationAirport, match.destination)}`);
+  }
+  if (match.hasNewCard) {
+    noteParts.push(`New card: ${match.typeCode || 'Unknown ICAO'} - ${match.modelLabel}`);
+  }
+  return noteParts;
+}
+
+function buildCompletionistTelemetryBits(match, options = {}) {
+  const telemetry = [];
+  const formatter = options.compact ? formatCompact : formatNumber;
+  if (Number.isFinite(match.altitude) && match.altitude > 0) {
+    telemetry.push(`${formatter(match.altitude)} ft`);
+  }
+  if (Number.isFinite(match.speed) && match.speed > 0) {
+    telemetry.push(`${formatter(match.speed)} kts`);
+  }
+  if (options.includeHeading && Number.isFinite(match.track)) {
+    telemetry.push(`${Math.round(match.track)} deg`);
+  }
+  if (match.registration) {
+    telemetry.push(match.registration);
+  }
+  if (options.includeHex && match.aircraftHex) {
+    telemetry.push(match.aircraftHex);
+  }
+  return telemetry;
+}
+
+function buildCompletionistMetaText(visibleCount, searchCount, totalCount) {
+  if (getCompletionistSearchTokens().length) {
+    return `${formatNumber(visibleCount)} shown of ${formatNumber(searchCount)} search results (${formatNumber(totalCount)} total matches).`;
+  }
+  return `${formatNumber(visibleCount)} shown of ${formatNumber(totalCount)} matching flights.`;
+}
+
+function buildCompletionistFilterChips(counts, disabled = false) {
+  const chipDefinitions = [
+    { value: 'all', label: 'All' },
+    { value: 'airport', label: 'Missing destination' },
+    { value: 'card', label: 'New card' },
+    { value: 'both', label: 'Both' },
+  ];
+  return chipDefinitions.map(({ value, label }) => {
+    const count = counts[value] || 0;
+    const isActive = state.map.completionist.filter === value;
+    return `
+      <button
+        type="button"
+        class="completionist-filter-chip${isActive ? ' is-active' : ''}"
+        data-action="set-completionist-filter"
+        data-filter="${value}"
+        aria-pressed="${String(isActive)}"
+        ${disabled ? 'disabled' : ''}
+      >
+        <span class="completionist-filter-chip-label">${label}</span>
+        <span class="completionist-filter-chip-count">${formatNumber(count)}</span>
+      </button>
+    `;
+  }).join('');
+}
+
+function getCompletionistMarkerMetrics(isSelected = false) {
+  const zoom = Number(state.map.instance?.getZoom?.() || MAP_BASE_VIEW.zoom);
+  const safeZoom = Math.max(2, Math.min(8, zoom));
+  const baseSize = Math.round(16 + ((safeZoom - 2) * 3));
+  const markerSize = baseSize + (isSelected ? 4 : 0);
+  return {
+    markerSize,
+    markerRingInset: Math.max(4, Math.round(markerSize * 0.18)),
+    markerPulseInset: Math.max(2, Math.round(markerSize * 0.12)),
+    markerFallbackInset: Math.max(4, Math.round(markerSize * 0.2)),
+    popupOffset: Math.max(12, Math.round(markerSize * 0.45)),
+  };
+}
+
+function queueCompletionistMarkerRefresh() {
+  if (state.map.completionist.markerRefreshQueued) {
+    return;
+  }
+  state.map.completionist.markerRefreshQueued = true;
+  requestAnimationFrame(() => {
+    state.map.completionist.markerRefreshQueued = false;
+    if (state.activeTab === 'map' && isCompletionistModeEnabled() && state.model) {
+      updateCompletionistMarkerIcons();
+    }
+  });
+}
+
+function markCompletionistMarkerAssetMissing(typeCode) {
+  const cleanedTypeCode = normalizeCompletionistCode(typeCode);
+  if (!cleanedTypeCode) {
+    return;
+  }
+  if (state.map.completionist.markerAssetStatusByTypeCode.get(cleanedTypeCode) === 'missing') {
+    return;
+  }
+  state.map.completionist.markerAssetStatusByTypeCode.set(cleanedTypeCode, 'missing');
+  queueCompletionistMarkerRefresh();
+}
+
+function resolveCompletionistMarkerUrl(typeCode) {
+  const cleanedTypeCode = normalizeCompletionistCode(typeCode);
+  if (!cleanedTypeCode) {
+    return '';
+  }
+  const existingStatus = state.map.completionist.markerAssetStatusByTypeCode.get(cleanedTypeCode);
+  if (existingStatus === 'missing') {
+    return '';
+  }
+  const markerUrl = buildCompletionistMarkerUrl(cleanedTypeCode);
+  if (!existingStatus && typeof window.Image === 'function') {
+    state.map.completionist.markerAssetStatusByTypeCode.set(cleanedTypeCode, 'loading');
+    const image = new window.Image();
+    image.onload = () => {
+      state.map.completionist.markerAssetStatusByTypeCode.set(cleanedTypeCode, 'ready');
+    };
+    image.onerror = () => {
+      markCompletionistMarkerAssetMissing(cleanedTypeCode);
+    };
+    image.src = markerUrl;
+  }
+  return markerUrl;
+}
+
+if (typeof window !== 'undefined') {
+  window.__skyvizCompletionistMarkerError = markCompletionistMarkerAssetMissing;
+}
+
+function buildCompletionistMarkerHtml(match, isSelected = false) {
+  const fallbackLabel = escapeHtml((match.typeCode || match.registration || match.displayFlightLabel || 'FLT').slice(0, 3));
+  const cleanedTypeCode = normalizeCompletionistCode(match.typeCode);
+  const markerUrl = resolveCompletionistMarkerUrl(cleanedTypeCode);
+  const rotation = Number.isFinite(match.track) ? Number(match.track) : 0;
+  const metrics = getCompletionistMarkerMetrics(isSelected);
+  return `
+    <div
+      class="completionist-flight-marker${isSelected ? ' is-selected' : ''}${markerUrl ? '' : ' is-fallback'}"
+      style="--completionist-marker-size:${metrics.markerSize}px;--completionist-marker-ring-inset:${metrics.markerRingInset}px;--completionist-marker-pulse-inset:${metrics.markerPulseInset}px;--completionist-marker-fallback-inset:${metrics.markerFallbackInset}px;"
+    >
+      ${markerUrl
+    ? `<img src="${markerUrl}" alt="" loading="lazy" data-type-code="${escapeHtml(cleanedTypeCode)}" style="transform: rotate(${rotation}deg);" onerror="window.__skyvizCompletionistMarkerError?.(this.dataset.typeCode); this.closest('.completionist-flight-marker')?.classList.add('is-fallback'); this.remove()">`
+    : ''}
+      <span class="completionist-flight-marker-fallback">${fallbackLabel}</span>
+    </div>
+  `;
+}
+
+function buildCompletionistMarkerIcon(match, isSelected = false) {
+  const metrics = getCompletionistMarkerMetrics(isSelected);
+  return window.L.divIcon({
+    className: 'completionist-flight-marker-shell',
+    html: buildCompletionistMarkerHtml(match, isSelected),
+    iconSize: [metrics.markerSize, metrics.markerSize],
+    iconAnchor: [Math.round(metrics.markerSize / 2), Math.round(metrics.markerSize / 2)],
+    popupAnchor: [0, -metrics.popupOffset],
+  });
+}
+
+function updateCompletionistMarkerIcons() {
+  const visibleMatchesById = new Map(getVisibleCompletionistMatches().map((match) => [match.id, match]));
+  state.map.completionist.markersByFlightId.forEach((marker, flightId) => {
+    const match = visibleMatchesById.get(flightId);
+    if (!match || !window.L) {
+      return;
+    }
+    const isSelected = flightId === state.map.completionist.selectedFlightId;
+    marker.setIcon(buildCompletionistMarkerIcon(match, isSelected));
+    marker.setZIndexOffset(isSelected ? 1200 : 0);
+  });
+}
+
+function buildCompletionistPopupLegacy(match) {
+  const reasonLines = [];
+  if (match.hasMissingDestination) {
+    reasonLines.push(`Missing destination: ${buildCompletionistAirportDisplay(match.destinationAirport, match.destination)}`);
+  }
+  if (match.hasNewCard) {
+    reasonLines.push(`New card: ${match.typeCode || 'Unknown ICAO'} · ${match.modelLabel}`);
+  }
+  const statBits = [];
+  if (Number.isFinite(match.altitude) && match.altitude > 0) {
+    statBits.push(`${formatNumber(match.altitude)} ft`);
+  }
+  if (Number.isFinite(match.speed) && match.speed > 0) {
+    statBits.push(`${formatNumber(match.speed)} kts`);
+  }
+  if (match.registration) {
+    statBits.push(match.registration);
+  }
+  return `
+    <strong>${escapeHtml(match.displayFlightLabel)}</strong><br>
+    ${escapeHtml(match.routeLabel)}<br>
+    ${escapeHtml(match.modelLabel)}<br>
+    ${escapeHtml(reasonLines.join(' | '))}<br>
+    ${escapeHtml(statBits.join(' · '))}
+  `;
+}
+
+function fitCompletionistMatchesOnMap(matches) {
+  const map = state.map.instance;
+  if (!map || !window.L || !matches.length) {
+    return;
+  }
+  const bounds = window.L.latLngBounds(matches.map((match) => [match.lat, match.lon]));
+  if (!bounds.isValid()) {
+    return;
+  }
+  map.fitBounds(bounds.pad(0.2), {
+    animate: true,
+    maxZoom: 6,
+  });
+}
+
+function closeCompletionistPopups() {
+  state.map.instance?.closePopup();
+  state.map.completionist.markersByFlightId.forEach((marker) => {
+    marker.closePopup();
+  });
+}
+
+function scrollCompletionistRowIntoView(flightId) {
+  const targetRow = elements.mapCompletionistList
+    ?.querySelector(`[data-flight-row-id="${escapeSelectorValue(flightId)}"] .completionist-flight-button`);
+  if (!(targetRow instanceof HTMLElement)) {
+    return;
+  }
+  targetRow?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  targetRow.focus({ preventScroll: true });
+}
+
+function clearCompletionistFlightSelection(options = {}) {
+  state.map.completionist.selectedFlightId = '';
+  if (options.closePopup !== false) {
+    closeCompletionistPopups();
+  }
+  updateCompletionistMarkerIcons();
+  if (options.fitToResults) {
+    fitCompletionistMatchesOnMap(getVisibleCompletionistMatches());
+  }
+}
+
+function focusCompletionistFlight(model, flightId, options = {}) {
+  const match = getVisibleCompletionistMatches().find((entry) => entry.id === flightId);
+  if (!match) {
+    return;
+  }
+  state.map.completionist.selectedFlightId = flightId;
+  updateCompletionistMarkerIcons();
+  renderMapKpis(model);
+  renderMapCompletionistPanel(model);
+  const marker = state.map.completionist.markersByFlightId.get(flightId);
+  if (marker && state.map.instance) {
+    if (options.pan !== false) {
+      state.map.instance.flyTo(marker.getLatLng(), Math.max(state.map.instance.getZoom(), 4), {
+        animate: true,
+        duration: 0.45,
+      });
+    }
+    if (options.openPopup !== false) {
+      marker.openPopup();
+    }
+  }
+  if (options.scrollRow) {
+    requestAnimationFrame(() => {
+      scrollCompletionistRowIntoView(flightId);
+    });
+  }
+}
+
+function buildCompletionistStatusMessage(visibleMatches) {
+  if (state.map.completionist.loading && !state.map.completionist.snapshot) {
+    return 'Loading the latest completionist snapshot...';
+  }
+  if (state.map.completionist.error && !state.map.completionist.snapshot) {
+    return `Live snapshot unavailable. ${state.map.completionist.error}`;
+  }
+  if (state.map.completionist.error) {
+    return `Using the last loaded snapshot. Latest refresh failed: ${state.map.completionist.error}`;
+  }
+  if (!state.map.completionist.snapshot) {
+    return 'Waiting for the first completionist snapshot.';
+  }
+  if (!visibleMatches.length) {
+    if (getCompletionistSearchTokens().length) {
+      return 'No live flights match the current completionist search and filter.';
+    }
+    return 'No live flights in the latest shared snapshot match your current missing airports or cards.';
+  }
+  return `Showing ${formatNumber(visibleMatches.length)} flights from a shared ${formatNumber(Math.round(getCompletionistSnapshotSeconds() / 60))}-minute snapshot.`;
+}
+
+function renderCompletionistFlightListLegacy(matches) {
+  if (!matches.length) {
+    return '<div class="empty-copy">No matching flights are visible for the current completionist filter.</div>';
+  }
+  return matches.map((match) => {
+    const isSelected = match.id === state.map.completionist.selectedFlightId;
+    const chips = [
+      match.hasMissingDestination ? '<span class="completionist-flight-chip is-airport">Missing destination</span>' : '',
+      match.hasNewCard ? '<span class="completionist-flight-chip is-card">New card</span>' : '',
+    ].filter(Boolean).join('');
+    const noteParts = [];
+    if (match.hasMissingDestination) {
+      noteParts.push(buildCompletionistAirportDisplay(match.destinationAirport, match.destination));
+    }
+    if (match.hasNewCard) {
+      noteParts.push(`${match.typeCode || 'Unknown ICAO'} · ${match.modelLabel}`);
+    }
+    const telemetry = [];
+    if (Number.isFinite(match.altitude) && match.altitude > 0) {
+      telemetry.push(`${formatCompact(match.altitude)} ft`);
+    }
+    if (Number.isFinite(match.speed) && match.speed > 0) {
+      telemetry.push(`${formatCompact(match.speed)} kts`);
+    }
+    if (match.registration) {
+      telemetry.push(match.registration);
+    }
+    const seenLabel = Number.isFinite(match.seenAt)
+      ? formatRelativeAgeFromMillis(Date.now() - (match.seenAt * 1000))
+      : 'Unknown age';
+    return `
+      <article class="completionist-flight-row${isSelected ? ' is-selected' : ''}" data-flight-row-id="${escapeHtml(match.id)}">
+        <button
+          type="button"
+          class="completionist-flight-button${isSelected ? ' is-selected' : ''}"
+          data-action="focus-completionist-flight"
+          data-flight-id="${escapeHtml(match.id)}"
+          aria-pressed="${String(isSelected)}"
+        >
+          <div class="completionist-flight-head">
+            <div class="completionist-flight-title-stack">
+              <strong>${escapeHtml(match.displayFlightLabel)}</strong>
+              <span>${escapeHtml(match.routeLabel)}</span>
+            </div>
+            <span class="completionist-flight-age">${escapeHtml(seenLabel)}</span>
+          </div>
+          <div class="completionist-flight-chip-row">${chips}</div>
+          <p class="completionist-flight-note">${escapeHtml(noteParts.join(' | '))}</p>
+          <p class="completionist-flight-meta">${escapeHtml(telemetry.join(' · ') || 'Route telemetry unavailable.')}</p>
+        </button>
+      </article>
+    `;
+  }).join('');
+}
+
+function renderMapCompletionistPanel(model) {
+  const { allMatches, searchMatches, visibleMatches, filterCounts } = getCompletionistViewState();
+  const generatedAtMillis = getCompletionistSnapshotGeneratedAtMillis();
+  const snapshotAgeMillis = generatedAtMillis ? Math.max(Date.now() - generatedAtMillis, 0) : null;
+  const isStale = Number.isFinite(snapshotAgeMillis) && snapshotAgeMillis > (getCompletionistStaleSeconds() * 1000);
+  elements.mapCompletionistStatus.textContent = buildCompletionistStatusMessage(visibleMatches);
+  elements.mapCompletionistRefresh.textContent = state.map.completionist.loading
+    ? 'Updating...'
+    : formatShortDuration(state.map.completionist.secondsUntilRefresh);
+  elements.mapCompletionistUpdated.textContent = generatedAtMillis
+    ? `${formatRelativeAgeFromMillis(snapshotAgeMillis)}${isStale ? ' · stale' : ''}`
+    : '--';
+  elements.mapCompletionistUpdated.title = state.map.completionist.manifest?.generatedAt
+    ? formatCompletionistTimestamp(state.map.completionist.manifest.generatedAt)
+    : '';
+  if (elements.mapCompletionistSearch) {
+    elements.mapCompletionistSearch.value = state.map.completionist.query;
+    elements.mapCompletionistSearch.disabled = !model;
+  }
+  if (elements.mapCompletionistFilterBar) {
+    elements.mapCompletionistFilterBar.innerHTML = buildCompletionistFilterChips(filterCounts, !model);
+  }
+  elements.mapCompletionistRefreshButton.disabled = state.map.completionist.loading || !model;
+  elements.mapCompletionistMeta.textContent = buildCompletionistMetaText(
+    visibleMatches.length,
+    searchMatches.length,
+    allMatches.length,
+  );
+  elements.mapCompletionistList.innerHTML = renderCompletionistFlightList(visibleMatches);
+  if (!model) {
+    elements.mapCompletionistList.innerHTML = '<div class="empty-copy">Upload a collection export to use completionist mode.</div>';
+  }
+}
+
+function buildCompletionistPopup(match) {
+  const reasonLines = buildCompletionistReasonNotes(match);
+  const statBits = buildCompletionistTelemetryBits(match, { includeHeading: true, includeHex: true });
+  const fr24Url = buildCompletionistFlightFr24Url(match);
+  return `
+    <div class="completionist-popup">
+      <strong class="completionist-popup-title">${escapeHtml(match.displayFlightLabel)}</strong>
+      <div class="completionist-popup-route">${escapeHtml(match.routeLabel)}</div>
+      <div class="completionist-flight-chip-row completionist-popup-chip-row">${buildCompletionistReasonChips(match)}</div>
+      <p class="completionist-popup-note">${escapeHtml(reasonLines.join(' | ') || match.modelLabel)}</p>
+      <p class="completionist-popup-meta">${escapeHtml(statBits.join(' | ') || 'Telemetry unavailable.')}</p>
+      <a class="completionist-popup-link" href="${fr24Url}" target="_blank" rel="noopener noreferrer">Open in FR24</a>
+    </div>
+  `;
+}
+
+function renderCompletionistFlightList(matches) {
+  if (!matches.length) {
+    return getCompletionistSearchTokens().length
+      ? '<div class="empty-copy">No live flights match the current search and filter.</div>'
+      : '<div class="empty-copy">No matching flights are visible for the current completionist filter.</div>';
+  }
+  return matches.map((match) => {
+    const isSelected = match.id === state.map.completionist.selectedFlightId;
+    const chips = buildCompletionistReasonChips(match);
+    const reasonParts = buildCompletionistReasonNotes(match);
+    const telemetry = buildCompletionistTelemetryBits(match, { compact: true });
+    const summaryBits = [
+      match.typeCode ? `${match.typeCode} - ${match.modelLabel}` : match.modelLabel,
+      ...telemetry,
+    ].filter(Boolean);
+    const fr24Url = buildCompletionistFlightFr24Url(match);
+    const seenLabel = Number.isFinite(match.seenAt)
+      ? formatRelativeAgeFromMillis(Date.now() - (match.seenAt * 1000))
+      : 'Unknown age';
+    return `
+      <article class="completionist-flight-row${isSelected ? ' is-selected' : ''}" data-flight-row-id="${escapeHtml(match.id)}">
+        <button
+          type="button"
+          class="completionist-flight-button${isSelected ? ' is-selected' : ''}"
+          data-action="focus-completionist-flight"
+          data-flight-id="${escapeHtml(match.id)}"
+          aria-pressed="${String(isSelected)}"
+        >
+          <div class="completionist-flight-eyebrow-row">
+            ${isSelected ? '<span class="completionist-flight-selection-tag">Focused</span>' : '<span class="completionist-flight-selection-tag is-muted">Live match</span>'}
+            <span class="completionist-flight-age">${escapeHtml(seenLabel)}</span>
+          </div>
+          <div class="completionist-flight-head">
+            <div class="completionist-flight-title-stack">
+              <strong>${escapeHtml(match.displayFlightLabel)}</strong>
+              <span>${escapeHtml(match.routeLabel)}</span>
+            </div>
+          </div>
+          <div class="completionist-flight-chip-row">${chips}</div>
+          <p class="completionist-flight-note">${escapeHtml(reasonParts.join(' | ') || 'Live completionist match.')}</p>
+          <p class="completionist-flight-meta">${escapeHtml(summaryBits.join(' | ') || 'Route telemetry unavailable.')}</p>
+        </button>
+        <div class="completionist-flight-actions">
+          <a class="completionist-flight-link" href="${fr24Url}" target="_blank" rel="noopener noreferrer">Open in FR24</a>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+async function refreshCompletionistSnapshot() {
+  if (!state.model || !state.references) {
+    return;
+  }
+  const requestToken = state.map.completionist.requestToken + 1;
+  state.map.completionist.requestToken = requestToken;
+  state.map.completionist.loading = true;
+  state.map.completionist.error = '';
+  if (state.activeTab === 'map' && isCompletionistModeEnabled()) {
+    renderMapKpis(state.model);
+    renderMapCompletionistPanel(state.model);
+  }
+  try {
+    const liveData = await fetchCompletionistSnapshotData();
+    if (state.map.completionist.requestToken !== requestToken) {
+      return;
+    }
+    state.map.completionist.manifest = liveData.manifest;
+    state.map.completionist.snapshot = liveData.payload;
+    state.map.completionist.matches = buildCompletionistMatches(state.model, state.references, liveData.rows);
+    if (!state.map.completionist.matches.some((match) => match.id === state.map.completionist.selectedFlightId)) {
+      state.map.completionist.selectedFlightId = '';
+    }
+  } catch (error) {
+    if (state.map.completionist.requestToken !== requestToken) {
+      return;
+    }
+    state.map.completionist.error = error instanceof Error ? error.message : 'Unable to load the live completionist snapshot.';
+  } finally {
+    if (state.map.completionist.requestToken === requestToken) {
+      state.map.completionist.loading = false;
+      state.map.completionist.secondsUntilRefresh = getCompletionistBrowserRefreshSeconds();
+      if (state.activeTab === 'map' && isCompletionistModeEnabled() && state.model) {
+        renderMapTab(state.model);
+      }
+    }
+  }
+}
+
+function shouldRunCompletionistPolling() {
+  return Boolean(state.model && isCompletionistModeEnabled() && state.activeTab === 'map');
+}
+
+function syncCompletionistPolling(options = {}) {
+  const refreshIfNeeded = options.refreshIfNeeded !== false;
+  if (!shouldRunCompletionistPolling()) {
+    stopCompletionistPolling();
+    return;
+  }
+  if (!state.map.completionist.refreshTimer) {
+    state.map.completionist.refreshTimer = window.setInterval(() => {
+      if (!shouldRunCompletionistPolling()) {
+        stopCompletionistPolling();
+        return;
+      }
+      if (!state.map.completionist.loading) {
+        state.map.completionist.secondsUntilRefresh = Math.max(state.map.completionist.secondsUntilRefresh - 1, 0);
+      }
+      if (!state.map.completionist.loading && state.map.completionist.secondsUntilRefresh <= 0) {
+        void refreshCompletionistSnapshot();
+        return;
+      }
+      if (state.activeTab === 'map' && state.model) {
+        renderMapKpis(state.model);
+        renderMapCompletionistPanel(state.model);
+      }
+    }, 1000);
+  }
+  if (refreshIfNeeded && !state.map.completionist.snapshot && !state.map.completionist.loading) {
+    void refreshCompletionistSnapshot();
+  }
+}
+
 function renderMapKpis(model) {
+  if (isCompletionistModeEnabled()) {
+    const { allMatches, searchMatches, visibleMatches } = getCompletionistViewState();
+    const generatedAtMillis = getCompletionistSnapshotGeneratedAtMillis();
+    const snapshotAgeMillis = generatedAtMillis ? Math.max(Date.now() - generatedAtMillis, 0) : null;
+    const staleSuffix = Number.isFinite(snapshotAgeMillis) && snapshotAgeMillis > (getCompletionistStaleSeconds() * 1000)
+      ? ' Snapshot is stale.'
+      : '';
+    elements.mapAirportKpi.textContent = state.map.completionist.snapshot
+      ? `${buildCompletionistMetaText(visibleMatches.length, searchMatches.length, allMatches.length)}${staleSuffix}`
+      : 'Completionist mode compares the shared live snapshot against your local collection only in this browser.';
+    return;
+  }
   const airportPercent = formatPercent(model.summary.airportCaptureRate, 1);
   elements.mapAirportKpi.textContent = `Unlocked ${formatNumber(model.map.capturedAirports)} / ${formatNumber(model.map.totalAirports)} airports (${airportPercent} complete).`;
 }
@@ -6027,7 +6961,7 @@ function clearCodeLabelLayer() {
 }
 
 function syncMapCodeLabels() {
-  if (!state.map.instance || !window.L || !state.model) {
+  if (!state.map.instance || !window.L || !state.model || state.map.completionist.enabled) {
     return;
   }
   clearCodeLabelLayer();
@@ -6189,6 +7123,9 @@ function ensureMapInstance() {
     syncMapMarkerRadii();
   });
   map.on('zoomend', () => {
+    if (isCompletionistModeEnabled()) {
+      updateCompletionistMarkerIcons();
+    }
     syncMapCodeLabels();
   });
   map.on('moveend', () => {
@@ -6211,6 +7148,11 @@ function clearMapLayers() {
   }
   state.map.capturedLayer = null;
   state.map.missingLayer = null;
+  if (state.map.instance && state.map.completionist.layer) {
+    state.map.instance.removeLayer(state.map.completionist.layer);
+  }
+  state.map.completionist.layer = null;
+  state.map.completionist.markersByFlightId = new Map();
 }
 
 function buildAirportPopup(point) {
@@ -6229,6 +7171,89 @@ function buildAirportPopup(point) {
     ${escapeHtml(point.name)}<br>
     ${links}
   `;
+}
+
+function renderCompletionistLeafletMap(model) {
+  const map = ensureMapInstance();
+  if (!map || !window.L) {
+    return;
+  }
+  clearMapLayers();
+  const visibleMatches = getVisibleCompletionistMatches();
+  if (!visibleMatches.length) {
+    map.setView(MAP_BASE_VIEW.center, MAP_BASE_VIEW.zoom);
+    elements.mapLegend.innerHTML = `
+      <span class="map-legend-chip">
+        <span class="map-legend-dot" style="background:#0f3f70;"></span>
+        Waiting for matching flights
+      </span>
+      <span class="map-legend-chip">
+        <span class="map-legend-dot" style="background:#168392;"></span>
+        Browser-only matching
+      </span>
+    `;
+    requestAnimationFrame(() => {
+      map.invalidateSize();
+    });
+    return;
+  }
+
+  const markers = [];
+  const markersByFlightId = new Map();
+  visibleMatches.forEach((match) => {
+    const marker = window.L.marker([match.lat, match.lon], {
+      icon: buildCompletionistMarkerIcon(match, match.id === state.map.completionist.selectedFlightId),
+      keyboard: true,
+      title: match.displayFlightLabel,
+      zIndexOffset: match.id === state.map.completionist.selectedFlightId ? 1200 : 0,
+    });
+    marker.bindPopup(buildCompletionistPopup(match), {
+      maxWidth: 320,
+      className: 'completionist-popup-shell',
+    });
+    marker.on('click', () => {
+      if (state.map.completionist.selectedFlightId === match.id) {
+        focusCompletionistFlight(model, match.id, { pan: false, openPopup: false, scrollRow: true });
+        return;
+      }
+      focusCompletionistFlight(model, match.id, { pan: false, openPopup: false, scrollRow: true });
+    });
+    markers.push(marker);
+    markersByFlightId.set(match.id, marker);
+  });
+
+  state.map.completionist.layer = window.L.layerGroup(markers);
+  state.map.completionist.layer.addTo(map);
+  state.map.completionist.markersByFlightId = markersByFlightId;
+
+  const selectedMatch = getSelectedCompletionistMatch();
+  if (selectedMatch) {
+    const selectedMarker = markersByFlightId.get(selectedMatch.id);
+    if (selectedMarker) {
+      map.setView(selectedMarker.getLatLng(), Math.max(map.getZoom(), 4));
+      selectedMarker.openPopup();
+    }
+  } else {
+    fitCompletionistMatchesOnMap(visibleMatches);
+  }
+
+  elements.mapLegend.innerHTML = `
+    <span class="map-legend-chip">
+      <span class="map-legend-dot" style="background:#0f3f70;"></span>
+      Matching flights ${formatNumber(visibleMatches.length)}
+    </span>
+    <span class="map-legend-chip">
+      <span class="map-legend-dot" style="background:#ec7f35;"></span>
+      Missing destination
+    </span>
+    <span class="map-legend-chip">
+      <span class="map-legend-dot" style="background:#168392;"></span>
+      New card
+    </span>
+  `;
+  requestAnimationFrame(() => {
+    map.invalidateSize();
+  });
 }
 
 function renderLeafletMap(model) {
@@ -6304,7 +7329,16 @@ function renderMapProgressPanels(model) {
 }
 
 function renderMapTab(model) {
+  syncMapModePanels();
   renderMapKpis(model);
+  if (isCompletionistModeEnabled()) {
+    if (!getSelectedCompletionistMatch()) {
+      state.map.completionist.selectedFlightId = '';
+    }
+    renderMapCompletionistPanel(model);
+    renderCompletionistLeafletMap(model);
+    return;
+  }
   renderMapProgressPanels(model);
   renderLeafletMap(model);
 }
@@ -7418,6 +8452,10 @@ function renderDashboard(model, references = null) {
   state.map.countrySort = 'total_desc';
   state.map.usStateQuery = '';
   state.map.usStateSort = 'total_desc';
+  state.map.completionist.enabled = false;
+  state.map.completionist.filter = 'airport';
+  state.map.completionist.query = '';
+  resetCompletionistState();
   resetMapDrillState();
   state.aircraft.query = '';
   state.aircraft.sortBy = 'xp';
@@ -7620,6 +8658,57 @@ function wireUpload() {
 }
 
 function wireMapCompletionControls() {
+  elements.mapCompletionistToggle?.addEventListener('change', () => {
+    state.map.completionist.enabled = Boolean(elements.mapCompletionistToggle.checked);
+    state.map.completionist.selectedFlightId = '';
+    syncMapModePanels();
+    if (!state.model) {
+      return;
+    }
+    renderMapTab(state.model);
+    syncCompletionistPolling({ refreshIfNeeded: true });
+  });
+
+  elements.mapCompletionistSearch?.addEventListener('input', () => {
+    state.map.completionist.query = String(elements.mapCompletionistSearch.value || '');
+    if (state.map.completionist.searchTimer) {
+      window.clearTimeout(state.map.completionist.searchTimer);
+    }
+    state.map.completionist.searchTimer = window.setTimeout(() => {
+      state.map.completionist.searchTimer = null;
+      if (!getSelectedCompletionistMatch()) {
+        state.map.completionist.selectedFlightId = '';
+      }
+      if (state.model) {
+        renderMapTab(state.model);
+      }
+    }, COMPLETIONIST_SEARCH_DEBOUNCE_MS);
+  });
+
+  elements.mapCompletionistRefreshButton?.addEventListener('click', () => {
+    void refreshCompletionistSnapshot();
+  });
+
+  elements.mapCompletionistFilterBar?.addEventListener('click', (event) => {
+    if (!state.model) {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const button = target.closest('button[data-action="set-completionist-filter"][data-filter]');
+    if (!button || button.hasAttribute('disabled')) {
+      return;
+    }
+    const nextFilter = String(button.dataset.filter || '').trim().toLowerCase();
+    state.map.completionist.filter = COMPLETIONIST_FILTER_VALUES.has(nextFilter) ? nextFilter : 'all';
+    if (!getSelectedCompletionistMatch()) {
+      state.map.completionist.selectedFlightId = '';
+    }
+    renderMapTab(state.model);
+  });
+
   elements.mapDrillSearch.addEventListener('input', () => {
     const level = normalizeMapDrillLevel(state.map.drillLevel);
     setMapCompletionQuery(level, elements.mapDrillSearch.value);
@@ -7740,6 +8829,31 @@ function wireMapCompletionControls() {
   };
 
   elements.mapDrillProgress.addEventListener('click', onCompletionRowClick);
+
+  elements.mapCompletionistList?.addEventListener('click', (event) => {
+    if (!state.model) {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const button = target.closest('button[data-action="focus-completionist-flight"][data-flight-id]');
+    if (!button) {
+      return;
+    }
+    const flightId = String(button.dataset.flightId || '').trim();
+    if (!flightId) {
+      return;
+    }
+    if (state.map.completionist.selectedFlightId === flightId) {
+      clearCompletionistFlightSelection({ fitToResults: true });
+      renderMapKpis(state.model);
+      renderMapCompletionistPanel(state.model);
+      return;
+    }
+    focusCompletionistFlight(state.model, flightId, { scrollRow: false });
+  });
 }
 
 function wireDailyGame() {

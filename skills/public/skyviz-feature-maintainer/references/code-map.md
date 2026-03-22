@@ -15,8 +15,10 @@ Read `docs/index.md` first when you need the current system-of-record doc map.
 - `site/src/data.js`: payload validation, enrichment, aggregation, and dashboard model creation.
 - `site/data/reference/`: committed Skycards reference snapshots and manifest.
 - `site/data/airports/`: generated OurAirports CSV snapshots plus the Navdle daily manifest and dataset.
+- `site/data/live/`: completionist-mode live snapshot artifacts published by the Pages workflow.
 - `scripts/refresh_reference_data.py`: official reference refresh path.
 - `scripts/refresh_airport_game_data.py`: official OurAirports refresh/build path for the Navdle airport game.
+- `scripts/refresh_completionist_snapshot.py`: official delayed live-flight snapshot refresh path for completionist mode.
 
 ## Presentation
 

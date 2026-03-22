@@ -16,12 +16,14 @@ This directory is the system of record for durable repository knowledge.
 - `docs/agentic-workflows.md`: repository operating model for agents.
 - `docs/golden-principles.md`: cross-cutting rules that should survive individual tasks.
 - `docs/repo-hygiene.md`: cleanup triggers and workflow drift controls.
+- `site/data/live/`: completionist-mode delayed live-flight snapshot artifacts published with the site.
 - `docs/decisions/`: cross-cutting design history.
 - `docs/plans/`: active and completed work plans worth keeping.
 
 ## Update map
 
 - App structure changes: update `docs/architecture.md`.
+- Completionist snapshot pipeline or deployment-cadence changes: update `docs/architecture.md` and `README.md`.
 - Daily game changes (Navdle, Cardle, or the OurAirports pipeline): update `docs/architecture.md` and `README.md`.
 - Process changes: update `docs/agentic-workflows.md`, `docs/golden-principles.md`, and `AGENTS.md`.
 - New durable reasoning: add or update a decision record in `docs/decisions/`.

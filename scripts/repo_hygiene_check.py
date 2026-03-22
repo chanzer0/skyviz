@@ -27,6 +27,7 @@ REQUIRED_PATHS = [
     'site/data/reference/models.json',
     'site/data/reference/airports.json',
     'site/data/reference/manifest.json',
+    'scripts/refresh_completionist_snapshot.py',
     '.github/workflows/ci.yml',
     '.github/workflows/deploy-pages.yml',
 ]

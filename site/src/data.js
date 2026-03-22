@@ -194,6 +194,7 @@ export async function loadReferenceData() {
         allAirports,
         modelsById: new Map(modelRows.map((row) => [normalizeCode(row.id), row])),
         airportsById: new Map(allAirports.map((row) => [row.id, row])),
+        airportsByCode: buildAirportCodeIndex(allAirports),
         modelRegistrationCountsByModelId,
         aircraftLookupByHex,
         aircraftLookupByReg,
@@ -257,6 +258,22 @@ export async function loadAirportGameData() {
   return airportGameState.dataPromise;
 }
 
+export async function fetchCompletionistSnapshotData() {
+  const manifest = await fetchJson('./data/live/completionist-manifest.json');
+  const snapshotPath = resolveLiveDatasetPath(manifest?.snapshotPath || './data/live/completionist-snapshot.json');
+  const payload = await fetchJson(snapshotPath);
+  const fields = asArray(payload?.fields).map((field) => sanitizeText(field));
+  const rows = asArray(payload?.rows)
+    .map((row) => normalizeCompletionistFlightRow(row, fields))
+    .filter(Boolean);
+  return {
+    manifest,
+    payload,
+    fields,
+    rows,
+  };
+}
+
 function getManifestDatasetPath(manifest, datasetKey, fallbackPath = null) {
   const datasetPath = sanitizeText(manifest?.datasets?.[datasetKey]?.path);
   if (datasetPath) {
@@ -313,6 +330,30 @@ function resolveAirportGameDatasetPath(path) {
   return `./data/airports/${normalizedPath}`;
 }
 
+function resolveLiveDatasetPath(path) {
+  const normalizedPath = sanitizeText(path);
+  if (!normalizedPath) {
+    return '';
+  }
+  if (
+    normalizedPath.startsWith('http://')
+    || normalizedPath.startsWith('https://')
+    || normalizedPath.startsWith('/')
+  ) {
+    return normalizedPath;
+  }
+  if (normalizedPath.startsWith('./data/live/')) {
+    return normalizedPath;
+  }
+  if (normalizedPath.startsWith('data/live/')) {
+    return `./${normalizedPath}`;
+  }
+  if (normalizedPath.startsWith('./')) {
+    return `./data/live/${normalizedPath.slice(2)}`;
+  }
+  return `./data/live/${normalizedPath}`;
+}
+
 async function fetchJson(path) {
   const response = await fetch(path, { cache: 'no-store' });
   if (!response.ok) {
@@ -334,6 +375,41 @@ async function fetchJsonOptional(path) {
 
 function normalizeCode(value) {
   return sanitizeText(value).toUpperCase();
+}
+
+function normalizeCompletionistFlightRow(row, fields) {
+  if (!row || typeof row !== 'object') {
+    return null;
+  }
+  const fieldIndex = new Map(fields.map((field, index) => [field, index]));
+  const readValue = (key) => {
+    if (Array.isArray(row)) {
+      return row[fieldIndex.get(key) ?? -1];
+    }
+    return row[key];
+  };
+  const id = sanitizeText(readValue('flightId') || readValue('id'));
+  const lat = asNumber(readValue('lat'));
+  const lon = asNumber(readValue('lon'));
+  if (!id || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+  return {
+    id,
+    aircraftHex: normalizeCode(readValue('aircraftHex') || readValue('hex')),
+    lat,
+    lon,
+    track: asNumber(readValue('track')),
+    altitude: asNumber(readValue('altitude')),
+    speed: asNumber(readValue('speed')),
+    typeCode: normalizeCode(readValue('typeCode')),
+    registration: normalizeCode(readValue('registration')),
+    seenAt: asNumber(readValue('seenAt')),
+    origin: normalizeCode(readValue('origin')),
+    destination: normalizeCode(readValue('destination')),
+    flightNumber: normalizeCode(readValue('flightNumber')),
+    callsign: normalizeCode(readValue('callsign')),
+  };
 }
 
 function normalizeKey(value) {
@@ -770,6 +846,22 @@ function buildAirportRef(row) {
     lon: asNumber(row.lon),
     alt: asNumber(row.alt),
   };
+}
+
+function buildAirportCodeIndex(allAirports) {
+  const byCode = new Map();
+  for (const airport of allAirports) {
+    [airport.iata, airport.icao]
+      .map((code) => normalizeCode(code))
+      .filter(Boolean)
+      .forEach((code) => {
+        if (!byCode.has(code)) {
+          byCode.set(code, []);
+        }
+        byCode.get(code).push(airport);
+      });
+  }
+  return byCode;
 }
 
 function getCaughtRegistrationRows(payload) {

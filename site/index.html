@@ -42,7 +42,7 @@
       crossorigin=""
     >
     <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
-    <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./styles.css?v=20260322-completionist-ui-3">
   </head>
   <body>
     <a class="skip-link" href="#dashboard">Skip to dashboard</a>
@@ -311,13 +311,23 @@
           role="tabpanel"
           aria-labelledby="tab-map-button"
         >
-          <div class="map-layout">
+          <div id="map-layout" class="map-layout">
             <article class="panel map-panel">
-              <div class="section-head compact">
+              <div class="section-head compact map-panel-head">
                 <div>
                   <p class="eyebrow">Map</p>
                   <h3>Airport capture map</h3>
                 </div>
+                <label class="data-tools-toggle map-mode-toggle">
+                  <span class="data-tools-toggle-copy">
+                    <span class="data-tools-toggle-title">Completionist mode</span>
+                    <span class="data-tools-toggle-note">Use the shared live snapshot to hunt missing destinations and new cards.</span>
+                  </span>
+                  <input id="map-completionist-toggle" class="data-tools-toggle-input" type="checkbox">
+                  <span class="data-tools-toggle-switch" aria-hidden="true">
+                    <span class="data-tools-toggle-knob"></span>
+                  </span>
+                </label>
               </div>
               <p class="panel-kpi-line" id="map-airport-kpi"></p>
               <div id="map-canvas" class="leaflet-map" aria-label="Airport capture map"></div>
@@ -372,6 +382,50 @@
                 </div>
                 <p class="completion-meta" id="map-drill-progress-meta"></p>
                 <div id="map-drill-progress" class="completion-progress-list"></div>
+              </article>
+
+              <article id="map-completionist-panel" class="panel map-completionist-panel" hidden>
+                <div class="section-head compact map-drill-head">
+                  <div>
+                    <p class="eyebrow">Completionist mode</p>
+                    <h3>Live flight hunter</h3>
+                  </div>
+                  <button id="map-completionist-refresh-button" class="region-action-button" type="button">
+                    Refresh now
+                  </button>
+                </div>
+                <p class="map-drill-helper">
+                  Shared live-flight snapshots refresh about every five minutes. Matching stays local to this browser and never uploads your collection.
+                </p>
+                <p class="panel-kpi-line" id="map-completionist-status"></p>
+                <div class="map-completionist-status-grid">
+                  <div class="map-completionist-status-card">
+                    <span class="map-completionist-status-label">Browser refresh</span>
+                    <strong id="map-completionist-refresh">--</strong>
+                  </div>
+                  <div class="map-completionist-status-card">
+                    <span class="map-completionist-status-label">Snapshot age</span>
+                    <strong id="map-completionist-updated">--</strong>
+                  </div>
+                </div>
+                <div class="map-completionist-toolbar">
+                  <label class="control-field completion-control completionist-search-control">
+                    <span>Search live matches</span>
+                    <input
+                      id="map-completionist-search"
+                      type="search"
+                      placeholder="ICAO, airport, callsign, registration"
+                    >
+                  </label>
+                  <div
+                    id="map-completionist-filter-bar"
+                    class="completionist-filter-bar"
+                    role="toolbar"
+                    aria-label="Completionist match filters"
+                  ></div>
+                </div>
+                <p class="completion-meta" id="map-completionist-meta"></p>
+                <div id="map-completionist-list" class="completionist-flight-list"></div>
               </article>
             </div>
           </div>
@@ -860,7 +914,7 @@
       type="module"
       src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.1.0/model-viewer.min.js"
     ></script>
-    <script type="module" src="./src/main.js"></script>
+    <script type="module" src="./src/main.js?v=20260322-completionist-ui-3"></script>
   </body>
 </html>
 

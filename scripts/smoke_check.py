@@ -161,11 +161,47 @@ def check_airport_daily_game_data() -> None:
     )
 
 
+def check_completionist_live_data() -> None:
+    manifest_path = REPO_ROOT / 'site' / 'data' / 'live' / 'completionist-manifest.json'
+    snapshot_path = REPO_ROOT / 'site' / 'data' / 'live' / 'completionist-snapshot.json'
+    if not manifest_path.exists() or not snapshot_path.exists():
+        print('completionist snapshot: skipped (live snapshot artifacts not present)')
+        return
+    manifest = _load_json(manifest_path)
+    snapshot = _load_json(snapshot_path)
+    if manifest.get('snapshotPath') != './completionist-snapshot.json':
+        raise SystemExit('smoke_check: completionist manifest snapshotPath mismatch')
+    if 'sourceUrl' in manifest or 'sourceUrl' in snapshot:
+        raise SystemExit('smoke_check: completionist snapshot should not publish sourceUrl')
+    if 'source' in manifest or 'source' in snapshot:
+        raise SystemExit('smoke_check: completionist snapshot should not publish source labels')
+    manifest_fields = manifest.get('fields')
+    snapshot_fields = snapshot.get('fields')
+    if not isinstance(manifest_fields, list) or not manifest_fields:
+        raise SystemExit('smoke_check: completionist manifest fields missing')
+    if manifest_fields != snapshot_fields:
+        raise SystemExit('smoke_check: completionist manifest fields do not match snapshot fields')
+    for key in ('uiRefreshIntervalSeconds', 'publishIntervalSeconds', 'staleAfterSeconds'):
+        if int(manifest.get(key) or 0) <= 0:
+            raise SystemExit(f'smoke_check: completionist manifest {key} must be positive')
+    rows = snapshot.get('rows')
+    if not isinstance(rows, list):
+        raise SystemExit('smoke_check: completionist snapshot rows missing')
+    if int(manifest.get('rowCount') or 0) != len(rows):
+        raise SystemExit('smoke_check: completionist manifest rowCount does not match snapshot length')
+    print(
+        'completionist snapshot:',
+        f'rows={len(rows)}',
+        f"generated_at={manifest.get('generatedAt') or 'placeholder'}",
+    )
+
+
 def main() -> int:
     check_repo_hygiene()
     check_sample_collection()
     check_reference_data()
     check_airport_daily_game_data()
+    check_completionist_live_data()
     print('smoke_check: ok')
     return 0
 
