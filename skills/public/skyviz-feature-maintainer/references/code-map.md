@@ -20,6 +20,12 @@ Read `docs/index.md` first when you need the current system-of-record doc map.
 - `scripts/refresh_airport_game_data.py`: official OurAirports refresh/build path for the Navdle airport game.
 - `scripts/refresh_completionist_snapshot.py`: official delayed live-flight snapshot refresh path for completionist mode.
 
+## Deployment and scheduling
+
+- `.github/workflows/deploy-pages.yml`: full Pages deploy plus the legacy scheduled fallback path.
+- `.github/workflows/refresh-completionist-pages.yml`: lightweight completionist-only Pages deploy for external dispatches.
+- `workers/completionist-dispatch/`: Cloudflare cron worker that dispatches the completionist workflow every five minutes.
+
 ## Presentation
 
 - `site/src/charts.js`: reusable SVG and HTML chart generators.

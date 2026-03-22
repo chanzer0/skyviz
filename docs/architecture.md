@@ -28,6 +28,8 @@
 - Resolved-lookup merge pipeline in `scripts/build_resolved_aircraft_lookup.py`.
 - Offline repo validation in `scripts/repo_hygiene_check.py` and `scripts/smoke_check.py`.
 - GitHub Pages deployment in `.github/workflows/deploy-pages.yml`.
+- Lightweight completionist-only Pages refresh workflow in `.github/workflows/refresh-completionist-pages.yml`.
+- Cloudflare scheduler worker in `workers/completionist-dispatch/`.
 
 ## Data flow
 
@@ -65,10 +67,13 @@ Completionist mode does not fetch its upstream live-flight feed directly from th
 - rows are merged and deduped by `flightId` before publish because adjacent tiles overlap and aircraft move while the sweep is in flight
 - the script writes `site/data/live/completionist-manifest.json` and `site/data/live/completionist-snapshot.json`
 - the browser polls those static artifacts every `60` seconds while completionist mode is enabled and the `Map` tab is active
-- scheduled Pages runs refresh the completionist snapshot on the fastest GitHub Actions cadence available, approximately every `5` minutes, so the browser sees a delayed shared feed while the user's collection matching remains local
+- the repository includes a lightweight completionist-only Pages workflow at `.github/workflows/refresh-completionist-pages.yml`, designed for external `workflow_dispatch` triggers that refresh the snapshot every `5` minutes
+- the repository also keeps the legacy GitHub `schedule` path in `.github/workflows/deploy-pages.yml` as a fallback until the repo variable `USE_EXTERNAL_COMPLETIONIST_SCHEDULER` is set to `true`
+- once that repo variable is `true`, scheduled runs of `.github/workflows/deploy-pages.yml` skip their schedule path so the external scheduler becomes the only repeating completionist trigger
 - those scheduled Pages runs restore cached generated reference and airport artifacts before deploy so the static app keeps its upload and daily-game data even when the schedule path only refreshes the live snapshot
 - if that cache is cold, the schedule path falls back to rebuilding the required reference and airport artifacts before publish
-- those scheduled Pages runs use `python scripts/smoke_check.py --mode completionist-only`, which validates repo scaffolding, the committed sample payload, and the regenerated live snapshot while tolerating optional generated artifacts that are not needed for the snapshot-only path
+- the repo includes a Cloudflare Worker project in `workers/completionist-dispatch/` that dispatches the lightweight workflow on a `*/5 * * * *` cron once deployed and given a GitHub workflow-dispatch token
+- both the lightweight workflow and the legacy schedule path use `python scripts/smoke_check.py --mode completionist-only`, which validates repo scaffolding, the committed sample payload, and the regenerated live snapshot while tolerating optional generated artifacts that are not needed for the snapshot-only path
 - the snapshot payload keeps only the fields needed for matching and map rendering: flight id, aircraft hex, coordinates, heading, altitude, speed, type code, registration, seen time, origin, destination, flight number, and callsign
 - snapshot metadata keeps only the browser-facing refresh contract: generated time, row count, field order, and refresh cadence
 

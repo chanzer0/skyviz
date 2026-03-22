@@ -226,4 +226,17 @@ Push and manual Pages builds refresh the normal reference artifacts plus the com
 
 If the scheduled workflow ever starts from a cold cache, it falls back to rebuilding the required reference and airport artifacts before deploy. That schedule path still runs `python scripts/smoke_check.py --mode completionist-only`, which validates repo scaffolding, the committed sample deck, and the regenerated live snapshot while avoiding false failures on optional artifacts that are irrelevant to the live-only refresh.
 
+The repo also includes a dedicated completionist-only Pages workflow in `.github/workflows/refresh-completionist-pages.yml` plus a Cloudflare Worker project in `workers/completionist-dispatch/`. That worker is intended to dispatch the lightweight completionist workflow every `5` minutes through GitHub's `workflow_dispatch` API instead of relying on GitHub's best-effort `schedule` delivery.
+
+To enable the Cloudflare path:
+
+```bash
+cd workers/completionist-dispatch
+wrangler secret put GITHUB_TOKEN
+wrangler deploy
+gh variable set USE_EXTERNAL_COMPLETIONIST_SCHEDULER --body true
+```
+
+The worker secret should be a GitHub token that can dispatch workflows for this repository. A fine-grained token with `Actions: write` on `chanzer0/skyviz` is the intended setup. Keep the repo variable unset until the worker is deployed; once `USE_EXTERNAL_COMPLETIONIST_SCHEDULER=true`, the legacy GitHub `schedule` path in `.github/workflows/deploy-pages.yml` skips scheduled deploys so the worker becomes the only repeating completionist trigger.
+
 This repository ignores generated files under `site/data/reference/*`, `site/data/airports/*.csv` / `site/data/airports/daily-game.json` / `site/data/airports/manifest.json`, and `site/data/live/*.json` in git. CI and Pages workflows generate fresh snapshots before validation/deploy. Cardle continues to run from the committed reference snapshots; its hotspot hint depends on live browser access to the Skycards multipoint endpoint at play time, while completionist mode reads the delayed snapshot published with the static site.

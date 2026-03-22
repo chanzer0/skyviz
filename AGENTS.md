@@ -26,6 +26,9 @@ This file routes context. Durable knowledge lives in `docs/`.
 - `site/src/data.js`: validation, enrichment, and dashboard view-model creation.
 - `site/src/charts.js`: SVG and HTML visualization helpers.
 - `scripts/refresh_reference_data.py`: fetches `models` and `airports` from the Skycards API.
+- `.github/workflows/deploy-pages.yml`: full Pages deploy plus the legacy scheduled fallback path.
+- `.github/workflows/refresh-completionist-pages.yml`: lightweight completionist-only Pages deploy for external dispatches.
+- `workers/completionist-dispatch/`: Cloudflare cron worker that dispatches completionist refreshes.
 - `site/data/reference/`: committed Skycards reference snapshots used by the static app.
 
 ## Non-Negotiable Rules
