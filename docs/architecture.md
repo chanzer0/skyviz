@@ -36,7 +36,7 @@
 3. For `Navdle`, the browser loads the generated airport manifest and derived daily-game dataset from `site/data/airports/`, restores the current UTC day's guesses from browser `localStorage`, and picks the airport of the day deterministically from the generated pool.
 4. For `Cardle`, the browser loads the committed Skycards reference snapshots, derives a guessable aircraft-model pool from `models.json`, restores the current UTC day's guesses from browser `localStorage`, and picks the model of the day deterministically from that reference pool.
 5. The user can alternatively upload a Skycards export JSON file or use the landing-page `View Example Dashboard` button to load a built-in sample deck.
-6. Optional: if the user enables local persistence, the active deck is cached in browser `localStorage` on that device and can be restored on next visit.
+6. Optional: if the user enables local persistence, the active uploaded export is cached in browser storage on that device (IndexedDB first, with legacy `localStorage` migration) and can be restored on next visit.
 7. The browser validates the payload shape and loads static reference snapshots (`models.json`, `airports.json`, and any optional datasets listed in `manifest.json`).
 8. Aircraft cards are enriched by `card.modelId -> models.rows[].id`.
 9. Airport unlocks are enriched by `unlockedAirportIds[] -> airports.rows[].id`.
@@ -114,7 +114,7 @@ The browser does not parse the raw CSVs directly during normal gameplay. It load
 ## Browser-only product constraints
 
 - The app stays static and deployable to GitHub Pages.
-- User uploads are processed locally in the browser, with optional user-controlled `localStorage` persistence.
+- User uploads are processed locally in the browser, with optional user-controlled browser-storage persistence.
 - Navdle and Cardle guesses, reveal state, and streaks are browser-local (`localStorage`) only.
 - Manual registration overrides are also browser-local (`localStorage`) and can be exported/imported for backup and restore.
 - Reference snapshots are committed artifacts so the site works without a runtime API dependency.

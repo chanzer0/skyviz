@@ -107,6 +107,8 @@ const elements = {
   mapCompletionistSearch: document.querySelector('#map-completionist-search'),
   mapCompletionistFilterBar: document.querySelector('#map-completionist-filter-bar'),
   mapCompletionistRefreshButton: document.querySelector('#map-completionist-refresh-button'),
+  mapCompletionistDismissSummary: document.querySelector('#map-completionist-dismiss-summary'),
+  mapCompletionistRestoreButton: document.querySelector('#map-completionist-restore-button'),
   mapCompletionistMeta: document.querySelector('#map-completionist-meta'),
   mapCompletionistList: document.querySelector('#map-completionist-list'),
   aircraftOverviewPanel: document.querySelector('#aircraft-overview-panel'),
@@ -204,6 +206,10 @@ const AIRCRAFT_XP_TIERS = new Set([...AIRCRAFT_IMAGE_TIERS, 'unknown']);
 const AIRCRAFT_IMAGE_SIZE_ORDER = ['md'];
 const PERSISTED_UPLOAD_KEY = 'skyviz.persistedUpload.v1';
 const PERSIST_PREFERENCE_KEY = 'skyviz.persistUploadPreference.v1';
+const PERSISTED_UPLOAD_DB_NAME = 'skyviz.persistedUploadStorage.v1';
+const PERSISTED_UPLOAD_DB_VERSION = 1;
+const PERSISTED_UPLOAD_STORE_NAME = 'uploads';
+const PERSISTED_UPLOAD_RECORD_KEY = 'current';
 const MANUAL_REGISTRATION_MAPPINGS_KEY = 'skyviz.manualRegistrationMappings.v1';
 const MANUAL_REGISTRATION_MAPPINGS_EXPORT_SCHEMA = 'skyviz.manualRegistrationMappings.v1';
 const DAILY_GAME_HISTORY_KEY = 'skyviz.dailyAirportHistory.v1';
@@ -394,6 +400,8 @@ const state = {
       filter: 'airport',
       query: '',
       selectedFlightId: '',
+      dismissedAirportKeys: new Set(),
+      dismissedModelKeys: new Set(),
       refreshTimer: null,
       searchTimer: null,
       secondsUntilRefresh: COMPLETIONIST_DEFAULT_BROWSER_REFRESH_SECONDS,
@@ -402,6 +410,7 @@ const state = {
       markersByFlightId: new Map(),
       markerAssetStatusByTypeCode: new Map(),
       markerRefreshQueued: false,
+      listRenderSignature: '',
     },
   },
   aircraft: {
@@ -422,6 +431,7 @@ const state = {
   upload: {
     fileName: '',
     text: '',
+    persistedMeta: null,
   },
   daily: {
     manifest: null,
@@ -3618,7 +3628,35 @@ function writePersistPreference(enabled) {
   }
 }
 
-function clearPersistedUpload() {
+let persistedUploadDbPromise = null;
+
+function setPersistedUploadMeta(upload) {
+  if (!upload?.text) {
+    state.upload.persistedMeta = null;
+    return;
+  }
+  state.upload.persistedMeta = {
+    fileName: upload.fileName || 'saved-upload.json',
+    savedAt: Number.isFinite(upload.savedAt) ? upload.savedAt : null,
+  };
+}
+
+function normalizePersistedUploadRecord(record) {
+  if (!record || typeof record !== 'object') {
+    return null;
+  }
+  if (typeof record.text !== 'string' || !record.text.length) {
+    return null;
+  }
+  const savedAt = Number(record.savedAt);
+  return {
+    fileName: typeof record.fileName === 'string' && record.fileName ? record.fileName : 'saved-upload.json',
+    text: record.text,
+    savedAt: Number.isFinite(savedAt) ? savedAt : null,
+  };
+}
+
+function clearPersistedUploadFromLocalStorage() {
   try {
     window.localStorage.removeItem(PERSISTED_UPLOAD_KEY);
   } catch {
@@ -3626,30 +3664,15 @@ function clearPersistedUpload() {
   }
 }
 
-function readPersistedUpload() {
+function readPersistedUploadFromLocalStorage() {
   try {
-    const raw = window.localStorage.getItem(PERSISTED_UPLOAD_KEY);
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') {
-      return null;
-    }
-    if (typeof parsed.text !== 'string' || !parsed.text.length) {
-      return null;
-    }
-    return {
-      fileName: typeof parsed.fileName === 'string' && parsed.fileName ? parsed.fileName : 'saved-upload.json',
-      text: parsed.text,
-      savedAt: Number.isFinite(parsed.savedAt) ? parsed.savedAt : null,
-    };
+    return normalizePersistedUploadRecord(JSON.parse(window.localStorage.getItem(PERSISTED_UPLOAD_KEY) || 'null'));
   } catch {
     return null;
   }
 }
 
-function writePersistedUpload(upload) {
+function writePersistedUploadToLocalStorage(upload) {
   if (!upload?.text) {
     return false;
   }
@@ -3666,6 +3689,190 @@ function writePersistedUpload(upload) {
   } catch {
     return false;
   }
+}
+
+function openPersistedUploadDb() {
+  if (persistedUploadDbPromise) {
+    return persistedUploadDbPromise;
+  }
+  if (typeof window === 'undefined' || !window.indexedDB) {
+    return Promise.resolve(null);
+  }
+  persistedUploadDbPromise = new Promise((resolve) => {
+    let settled = false;
+    try {
+      const request = window.indexedDB.open(PERSISTED_UPLOAD_DB_NAME, PERSISTED_UPLOAD_DB_VERSION);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(PERSISTED_UPLOAD_STORE_NAME)) {
+          db.createObjectStore(PERSISTED_UPLOAD_STORE_NAME);
+        }
+      };
+      request.onsuccess = () => {
+        const db = request.result;
+        db.onversionchange = () => {
+          db.close();
+          persistedUploadDbPromise = null;
+        };
+        settled = true;
+        resolve(db);
+      };
+      request.onerror = () => {
+        persistedUploadDbPromise = null;
+        if (!settled) {
+          settled = true;
+          resolve(null);
+        }
+      };
+      request.onblocked = () => {
+        persistedUploadDbPromise = null;
+        if (!settled) {
+          settled = true;
+          resolve(null);
+        }
+      };
+    } catch {
+      persistedUploadDbPromise = null;
+      resolve(null);
+    }
+  });
+  return persistedUploadDbPromise;
+}
+
+async function readPersistedUploadFromIndexedDb() {
+  const db = await openPersistedUploadDb();
+  if (!db) {
+    return null;
+  }
+  return new Promise((resolve) => {
+    try {
+      const transaction = db.transaction(PERSISTED_UPLOAD_STORE_NAME, 'readonly');
+      const request = transaction.objectStore(PERSISTED_UPLOAD_STORE_NAME).get(PERSISTED_UPLOAD_RECORD_KEY);
+      request.onsuccess = () => {
+        resolve(normalizePersistedUploadRecord(request.result));
+      };
+      request.onerror = () => {
+        resolve(null);
+      };
+      transaction.onabort = () => {
+        resolve(null);
+      };
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function writePersistedUploadToIndexedDb(upload) {
+  const record = normalizePersistedUploadRecord({
+    fileName: upload.fileName || 'upload.json',
+    text: upload.text,
+    savedAt: Date.now(),
+  });
+  if (!record) {
+    return false;
+  }
+  const db = await openPersistedUploadDb();
+  if (!db) {
+    return false;
+  }
+  return new Promise((resolve) => {
+    try {
+      const transaction = db.transaction(PERSISTED_UPLOAD_STORE_NAME, 'readwrite');
+      const store = transaction.objectStore(PERSISTED_UPLOAD_STORE_NAME);
+      store.put(record, PERSISTED_UPLOAD_RECORD_KEY);
+      transaction.oncomplete = () => {
+        resolve(true);
+      };
+      transaction.onerror = () => {
+        resolve(false);
+      };
+      transaction.onabort = () => {
+        resolve(false);
+      };
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
+async function clearPersistedUploadFromIndexedDb() {
+  const db = await openPersistedUploadDb();
+  if (!db) {
+    return false;
+  }
+  return new Promise((resolve) => {
+    try {
+      const transaction = db.transaction(PERSISTED_UPLOAD_STORE_NAME, 'readwrite');
+      const store = transaction.objectStore(PERSISTED_UPLOAD_STORE_NAME);
+      store.delete(PERSISTED_UPLOAD_RECORD_KEY);
+      transaction.oncomplete = () => {
+        resolve(true);
+      };
+      transaction.onerror = () => {
+        resolve(false);
+      };
+      transaction.onabort = () => {
+        resolve(false);
+      };
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
+async function clearPersistedUpload() {
+  const indexedDbCleared = await clearPersistedUploadFromIndexedDb();
+  clearPersistedUploadFromLocalStorage();
+  setPersistedUploadMeta(null);
+  return indexedDbCleared;
+}
+
+async function readPersistedUpload() {
+  const indexedDbRecord = await readPersistedUploadFromIndexedDb();
+  if (indexedDbRecord) {
+    clearPersistedUploadFromLocalStorage();
+    setPersistedUploadMeta(indexedDbRecord);
+    return indexedDbRecord;
+  }
+  const legacyRecord = readPersistedUploadFromLocalStorage();
+  if (!legacyRecord) {
+    setPersistedUploadMeta(null);
+    return null;
+  }
+  const migrated = await writePersistedUploadToIndexedDb(legacyRecord);
+  if (migrated) {
+    clearPersistedUploadFromLocalStorage();
+  }
+  setPersistedUploadMeta(legacyRecord);
+  return legacyRecord;
+}
+
+async function writePersistedUpload(upload) {
+  if (!upload?.text) {
+    return false;
+  }
+  const indexedDbSaved = await writePersistedUploadToIndexedDb(upload);
+  if (indexedDbSaved) {
+    clearPersistedUploadFromLocalStorage();
+    setPersistedUploadMeta({
+      fileName: upload.fileName || 'upload.json',
+      text: upload.text,
+      savedAt: Date.now(),
+    });
+    return true;
+  }
+  const legacySaved = writePersistedUploadToLocalStorage(upload);
+  if (legacySaved) {
+    setPersistedUploadMeta({
+      fileName: upload.fileName || 'upload.json',
+      text: upload.text,
+      savedAt: Date.now(),
+    });
+    return true;
+  }
+  setPersistedUploadMeta(null);
+  return false;
 }
 
 function normalizeManualRegistration(value) {
@@ -3800,21 +4007,21 @@ function rebuildDashboardModelFromCurrentUpload() {
   return true;
 }
 
-function persistCurrentUploadIfEnabled() {
+async function persistCurrentUploadIfEnabled() {
   if (!elements.persistUpload.checked) {
-    clearPersistedUpload();
+    await clearPersistedUpload();
     writePersistPreference(false);
     syncDataToolsPanelState();
     return false;
   }
-  const saved = writePersistedUpload(state.upload);
+  const saved = await writePersistedUpload(state.upload);
   if (!saved) {
     setPersistPreferenceChecked(false);
-    clearPersistedUpload();
+    await clearPersistedUpload();
     writePersistPreference(false);
     syncDataToolsPanelState();
     setBanner(
-      'Could not save to local storage (browser storage unavailable or quota exceeded). Your data is still private and in-memory only for this session.',
+      'Could not save to browser storage on this device. Your data is still private and in-memory only for this session.',
       'warning',
     );
     return false;
@@ -3844,10 +4051,10 @@ function setPersistPreferenceChecked(enabled) {
 function describePersistPreferenceSummary() {
   const persistEnabled = Boolean(elements.persistUpload.checked);
   const hasCurrentUpload = Boolean(state.upload.text);
-  const hasPersistedUpload = Boolean(readPersistedUpload()?.text);
+  const hasPersistedUpload = Boolean(state.upload.persistedMeta?.fileName);
   if (persistEnabled) {
     if (hasCurrentUpload && hasPersistedUpload) {
-      return 'Current dashboard is saved in browser local storage on this device.';
+      return 'Current dashboard is saved in browser storage on this device.';
     }
     if (hasCurrentUpload) {
       return 'Local save is on. Current dashboard will stay available on this device after refresh.';
@@ -3888,11 +4095,11 @@ function syncDataToolsPanelState() {
   }
 }
 
-function handlePersistPreferenceChange(enabled) {
+async function handlePersistPreferenceChange(enabled) {
   setPersistPreferenceChecked(enabled);
   writePersistPreference(enabled);
   if (!enabled) {
-    clearPersistedUpload();
+    await clearPersistedUpload();
     syncDataToolsPanelState();
     if (state.model) {
       setUploadStatus('Current upload is private in-memory only for this session.');
@@ -3905,20 +4112,20 @@ function handlePersistPreferenceChange(enabled) {
     setBanner('Local save enabled. Your next successful upload will be saved only on this device.', 'info');
     return;
   }
-  const saved = writePersistedUpload(state.upload);
+  const saved = await writePersistedUpload(state.upload);
   if (!saved) {
     setPersistPreferenceChecked(false);
-    clearPersistedUpload();
+    await clearPersistedUpload();
     writePersistPreference(false);
     syncDataToolsPanelState();
     setBanner(
-      'Could not save to local storage (browser storage unavailable or quota exceeded). Data remains private in-memory only.',
+      'Could not save to browser storage on this device. Data remains private in-memory only.',
       'warning',
     );
     return;
   }
   syncDataToolsPanelState();
-  setUploadStatus('Current upload saved only on this device (local storage).');
+  setUploadStatus('Current upload saved only on this device (browser storage).');
   setBanner('Upload saved locally on this device. Skyviz does not send your collection to a server.', 'info');
 }
 
@@ -5004,8 +5211,16 @@ function clearDashboardPanels() {
   if (elements.mapCompletionistFilterBar) {
     elements.mapCompletionistFilterBar.innerHTML = '';
   }
+  if (elements.mapCompletionistDismissSummary) {
+    elements.mapCompletionistDismissSummary.textContent = 'Use Hide airport or Hide aircraft on a live card to clear things you already handled. Hidden targets stay out of view for this browser session only.';
+  }
+  if (elements.mapCompletionistRestoreButton) {
+    elements.mapCompletionistRestoreButton.hidden = true;
+    elements.mapCompletionistRestoreButton.disabled = true;
+  }
   elements.mapCompletionistMeta.textContent = '';
   elements.mapCompletionistList.innerHTML = '';
+  state.map.completionist.listRenderSignature = '';
   elements.mapDrillEyebrow.textContent = 'Drill-down explorer';
   elements.mapDrillTitle.textContent = 'Airport completion explorer';
   elements.mapDrillHelper.textContent = 'Click a continent to drill into countries. Click United States to drill into US states.';
@@ -5065,9 +5280,12 @@ function resetCompletionistState({ preserveSnapshot = false } = {}) {
   state.map.completionist.error = '';
   state.map.completionist.matches = [];
   state.map.completionist.selectedFlightId = '';
+  state.map.completionist.dismissedAirportKeys = new Set();
+  state.map.completionist.dismissedModelKeys = new Set();
   state.map.completionist.secondsUntilRefresh = COMPLETIONIST_DEFAULT_BROWSER_REFRESH_SECONDS;
   state.map.completionist.markersByFlightId = new Map();
   state.map.completionist.markerRefreshQueued = false;
+  state.map.completionist.listRenderSignature = '';
   if (!preserveSnapshot) {
     state.map.completionist.manifest = null;
     state.map.completionist.snapshot = null;
@@ -5281,7 +5499,7 @@ function playMapDrillTransition() {
   }, 260);
 }
 
-function resetToLanding({
+async function resetToLanding({
   clearPersisted = false,
   clearPersistPreference = false,
   clearManualMappings = false,
@@ -5346,7 +5564,7 @@ function resetToLanding({
   renderLandingDailyCtas();
 
   if (clearPersisted) {
-    clearPersistedUpload();
+    await clearPersistedUpload();
   }
   if (clearPersistPreference) {
     writePersistPreference(false);
@@ -5372,11 +5590,11 @@ function wireDataTools() {
   });
 
   elements.dataToolsPersistUpload.addEventListener('change', () => {
-    handlePersistPreferenceChange(elements.dataToolsPersistUpload.checked);
+    void handlePersistPreferenceChange(elements.dataToolsPersistUpload.checked);
   });
 
   elements.dataToolsClear.addEventListener('click', () => {
-    resetToLanding({
+    void resetToLanding({
       clearPersisted: true,
       clearPersistPreference: true,
       clearManualMappings: true,
@@ -5703,6 +5921,90 @@ function getCompletionistSearchTokens(query = state.map.completionist.query) {
     .filter(Boolean);
 }
 
+function getCompletionistMatchKind({ hasMissingDestination = false, hasNewCard = false } = {}) {
+  if (hasMissingDestination && hasNewCard) {
+    return 'both';
+  }
+  if (hasMissingDestination) {
+    return 'airport';
+  }
+  if (hasNewCard) {
+    return 'card';
+  }
+  return '';
+}
+
+function getCompletionistMatchPriority(matchKind) {
+  if (matchKind === 'both') {
+    return 0;
+  }
+  if (matchKind === 'airport') {
+    return 1;
+  }
+  if (matchKind === 'card') {
+    return 2;
+  }
+  return 3;
+}
+
+function sortCompletionistMatches(matches) {
+  return matches
+    .slice()
+    .sort(
+      (left, right) => left.matchPriority - right.matchPriority
+        || (Number(right.seenAt) || 0) - (Number(left.seenAt) || 0)
+        || left.displayFlightLabel.localeCompare(right.displayFlightLabel),
+    );
+}
+
+function getCompletionistAirportDismissKey(airport, fallbackCode = '') {
+  const airportId = sanitizeText(airport?.id);
+  if (airportId) {
+    return `airport:${airportId}`;
+  }
+  const code = normalizeCompletionistCode(
+    fallbackCode
+      || airport?.icao
+      || airport?.iata,
+  );
+  return code ? `airport-code:${code}` : '';
+}
+
+function getCompletionistModelDismissKey(typeCode) {
+  const cleanedTypeCode = normalizeCompletionistCode(typeCode);
+  return cleanedTypeCode ? `model:${cleanedTypeCode}` : '';
+}
+
+function buildCompletionistSearchTextForMatch(match, options = {}) {
+  const hasMissingDestination = options.hasMissingDestination ?? match?.hasMissingDestination;
+  const hasNewCard = options.hasNewCard ?? match?.hasNewCard;
+  const destinationDisplay = buildCompletionistAirportDisplay(match?.destinationAirport, match?.destination);
+  const originDisplay = buildCompletionistAirportDisplay(match?.originAirport, match?.origin);
+  const reasonNotes = buildCompletionistReasonNotes({
+    ...match,
+    hasMissingDestination,
+    hasNewCard,
+  });
+  return buildCompletionistSearchText([
+    match?.id,
+    match?.flightNumber,
+    match?.callsign,
+    match?.registration,
+    match?.aircraftHex,
+    match?.typeCode,
+    match?.origin,
+    match?.destination,
+    match?.routeLabel,
+    originDisplay,
+    destinationDisplay,
+    match?.matchedModel?.manufacturer,
+    match?.matchedModel?.name,
+    reasonNotes.join(' '),
+    hasMissingDestination ? 'missing destination' : '',
+    hasNewCard ? 'new card' : '',
+  ]);
+}
+
 function buildCompletionistMatches(model, references, liveRows) {
   if (!model || !references) {
     return [];
@@ -5737,25 +6039,13 @@ function buildCompletionistMatches(model, references, liveRows) {
       if (!hasMissingDestination && !hasNewCard) {
         return null;
       }
-      const matchKind = hasMissingDestination && hasNewCard
-        ? 'both'
-        : hasMissingDestination
-          ? 'airport'
-          : 'card';
-      const matchPriority = matchKind === 'both' ? 0 : matchKind === 'airport' ? 1 : 2;
+      const matchKind = getCompletionistMatchKind({ hasMissingDestination, hasNewCard });
+      const matchPriority = getCompletionistMatchPriority(matchKind);
       const routeOrigin = originCode || originAirport?.iata || originAirport?.icao || '???';
       const routeDestination = destinationCode || destinationAirport?.iata || destinationAirport?.icao || '???';
       const destinationDisplay = buildCompletionistAirportDisplay(destinationAirport, destinationCode);
       const originDisplay = buildCompletionistAirportDisplay(originAirport, originCode);
-      const reasonNotes = buildCompletionistReasonNotes({
-        destinationAirport,
-        destination: destinationCode,
-        hasMissingDestination,
-        hasNewCard,
-        typeCode,
-        modelLabel: buildCompletionistModelLabel(matchedModel, typeCode),
-      });
-      return {
+      const baseMatch = {
         ...flight,
         typeCode,
         origin: originCode,
@@ -5772,36 +6062,96 @@ function buildCompletionistMatches(model, references, liveRows) {
         routeLabel: `${routeOrigin} \u2192 ${routeDestination}`,
         destinationDisplay,
         originDisplay,
-        searchText: buildCompletionistSearchText([
-          flight.id,
-          flight.flightNumber,
-          flight.callsign,
-          flight.registration,
-          flight.aircraftHex,
-          typeCode,
-          routeOrigin,
-          routeDestination,
-          originDisplay,
-          destinationDisplay,
-          matchedModel?.manufacturer,
-          matchedModel?.name,
-          reasonNotes.join(' '),
-          hasMissingDestination ? 'missing destination' : '',
-          hasNewCard ? 'new card' : '',
-        ]),
+      };
+      return {
+        ...baseMatch,
+        searchText: buildCompletionistSearchTextForMatch(baseMatch),
       };
     })
-    .filter(Boolean)
-    .sort(
-      (left, right) => left.matchPriority - right.matchPriority
-        || (Number(right.seenAt) || 0) - (Number(left.seenAt) || 0)
-        || left.displayFlightLabel.localeCompare(right.displayFlightLabel),
-    );
+    .filter(Boolean);
+}
+
+function applyCompletionistDismissals(matches) {
+  const dismissedAirportKeys = state.map.completionist.dismissedAirportKeys instanceof Set
+    ? state.map.completionist.dismissedAirportKeys
+    : new Set();
+  const dismissedModelKeys = state.map.completionist.dismissedModelKeys instanceof Set
+    ? state.map.completionist.dismissedModelKeys
+    : new Set();
+  return sortCompletionistMatches(
+    (matches || [])
+      .map((match) => {
+        const hasMissingDestination = Boolean(
+          match.hasMissingDestination
+            && !dismissedAirportKeys.has(getCompletionistAirportDismissKey(match.destinationAirport, match.destination)),
+        );
+        const hasNewCard = Boolean(
+          match.hasNewCard
+            && !dismissedModelKeys.has(getCompletionistModelDismissKey(match.typeCode)),
+        );
+        const matchKind = getCompletionistMatchKind({ hasMissingDestination, hasNewCard });
+        if (!matchKind) {
+          return null;
+        }
+        return {
+          ...match,
+          hasMissingDestination,
+          hasNewCard,
+          matchKind,
+          matchPriority: getCompletionistMatchPriority(matchKind),
+          searchText: buildCompletionistSearchTextForMatch(match, { hasMissingDestination, hasNewCard }),
+        };
+      })
+      .filter(Boolean),
+  );
+}
+
+function getActiveCompletionistMatches() {
+  return applyCompletionistDismissals(state.map.completionist.matches || []);
+}
+
+function getCompletionistDismissedCounts() {
+  const airport = state.map.completionist.dismissedAirportKeys instanceof Set
+    ? state.map.completionist.dismissedAirportKeys.size
+    : 0;
+  const card = state.map.completionist.dismissedModelKeys instanceof Set
+    ? state.map.completionist.dismissedModelKeys.size
+    : 0;
+  return {
+    airport,
+    card,
+    total: airport + card,
+  };
+}
+
+function formatCompletionistHiddenLabel(count, singular, plural) {
+  return `${formatNumber(count)} ${count === 1 ? singular : plural}`;
+}
+
+function buildCompletionistDismissSummaryText(model) {
+  if (!model) {
+    return 'Use Hide airport or Hide aircraft on a live card to clear things you already handled. Hidden targets stay out of view for this browser session only.';
+  }
+  const counts = getCompletionistDismissedCounts();
+  if (!counts.total) {
+    return 'Use Hide airport or Hide aircraft on a live card to clear things you already handled. Hidden targets stay out of view for this browser session only.';
+  }
+  const parts = [];
+  if (counts.airport) {
+    parts.push(formatCompletionistHiddenLabel(counts.airport, 'airport', 'airports'));
+  }
+  if (counts.card) {
+    parts.push(formatCompletionistHiddenLabel(counts.card, 'aircraft card', 'aircraft cards'));
+  }
+  const hiddenLabel = parts.length > 1
+    ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
+    : parts[0];
+  return `Hidden this session: ${hiddenLabel}. Restore hidden matches to bring them back.`;
 }
 
 function getSearchFilteredCompletionistMatches() {
   const tokens = getCompletionistSearchTokens();
-  const matches = state.map.completionist.matches || [];
+  const matches = getActiveCompletionistMatches();
   if (!tokens.length) {
     return matches.slice();
   }
@@ -5831,10 +6181,11 @@ function getCompletionistFilterCounts(matches = getSearchFilteredCompletionistMa
 }
 
 function getCompletionistViewState() {
+  const allMatches = getActiveCompletionistMatches();
   const searchMatches = getSearchFilteredCompletionistMatches();
   const visibleMatches = filterCompletionistMatchesByKind(searchMatches, state.map.completionist.filter);
   return {
-    allMatches: state.map.completionist.matches || [],
+    allMatches,
     searchMatches,
     visibleMatches,
     filterCounts: getCompletionistFilterCounts(searchMatches),
@@ -5888,6 +6239,27 @@ function buildCompletionistReasonChips(match) {
   ].filter(Boolean).join('');
 }
 
+function getCompletionistMatchTone(match) {
+  return getCompletionistMatchKind(match) || 'neutral';
+}
+
+function getCompletionistMatchLabel(match, isSelected = false) {
+  if (isSelected) {
+    return 'Focused';
+  }
+  const tone = getCompletionistMatchTone(match);
+  if (tone === 'both') {
+    return 'Dual match';
+  }
+  if (tone === 'airport') {
+    return 'Airport gap';
+  }
+  if (tone === 'card') {
+    return 'New card';
+  }
+  return 'Live match';
+}
+
 function buildCompletionistReasonNotes(match) {
   const noteParts = [];
   if (match.hasMissingDestination) {
@@ -5921,10 +6293,14 @@ function buildCompletionistTelemetryBits(match, options = {}) {
 }
 
 function buildCompletionistMetaText(visibleCount, searchCount, totalCount) {
+  const hiddenCount = getCompletionistDismissedCounts().total;
+  const hiddenSuffix = hiddenCount
+    ? ` ${formatNumber(hiddenCount)} ${hiddenCount === 1 ? 'target is' : 'targets are'} hidden this session.`
+    : '';
   if (getCompletionistSearchTokens().length) {
-    return `${formatNumber(visibleCount)} shown of ${formatNumber(searchCount)} search results (${formatNumber(totalCount)} total matches).`;
+    return `${formatNumber(visibleCount)} shown of ${formatNumber(searchCount)} search results (${formatNumber(totalCount)} total matches).${hiddenSuffix}`;
   }
-  return `${formatNumber(visibleCount)} shown of ${formatNumber(totalCount)} matching flights.`;
+  return `${formatNumber(visibleCount)} shown of ${formatNumber(totalCount)} matching flights.${hiddenSuffix}`;
 }
 
 function buildCompletionistFilterChips(counts, disabled = false) {
@@ -5961,7 +6337,6 @@ function getCompletionistMarkerMetrics(isSelected = false) {
   return {
     markerSize,
     markerRingInset: Math.max(4, Math.round(markerSize * 0.18)),
-    markerPulseInset: Math.max(2, Math.round(markerSize * 0.12)),
     markerFallbackInset: Math.max(4, Math.round(markerSize * 0.2)),
     popupOffset: Math.max(12, Math.round(markerSize * 0.45)),
   };
@@ -6029,7 +6404,7 @@ function buildCompletionistMarkerHtml(match, isSelected = false) {
   return `
     <div
       class="completionist-flight-marker${isSelected ? ' is-selected' : ''}${markerUrl ? '' : ' is-fallback'}"
-      style="--completionist-marker-size:${metrics.markerSize}px;--completionist-marker-ring-inset:${metrics.markerRingInset}px;--completionist-marker-pulse-inset:${metrics.markerPulseInset}px;--completionist-marker-fallback-inset:${metrics.markerFallbackInset}px;"
+      style="--completionist-marker-size:${metrics.markerSize}px;--completionist-marker-ring-inset:${metrics.markerRingInset}px;--completionist-marker-fallback-inset:${metrics.markerFallbackInset}px;"
     >
       ${markerUrl
     ? `<img src="${markerUrl}" alt="" loading="lazy" data-type-code="${escapeHtml(cleanedTypeCode)}" style="transform: rotate(${rotation}deg);" onerror="window.__skyvizCompletionistMarkerError?.(this.dataset.typeCode); this.closest('.completionist-flight-marker')?.classList.add('is-fallback'); this.remove()">`
@@ -6113,12 +6488,31 @@ function closeCompletionistPopups() {
 }
 
 function scrollCompletionistRowIntoView(flightId) {
+  const list = elements.mapCompletionistList;
   const targetRow = elements.mapCompletionistList
     ?.querySelector(`[data-flight-row-id="${escapeSelectorValue(flightId)}"] .completionist-flight-button`);
   if (!(targetRow instanceof HTMLElement)) {
     return;
   }
-  targetRow?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  if (list instanceof HTMLElement && list.scrollHeight > (list.clientHeight + 1)) {
+    const listRect = list.getBoundingClientRect();
+    const rowRect = targetRow.getBoundingClientRect();
+    const inset = 14;
+    let nextScrollTop = list.scrollTop;
+    if (rowRect.top < (listRect.top + inset)) {
+      nextScrollTop -= (listRect.top + inset) - rowRect.top;
+    } else if (rowRect.bottom > (listRect.bottom - inset)) {
+      nextScrollTop += rowRect.bottom - (listRect.bottom - inset);
+    }
+    if (Math.abs(nextScrollTop - list.scrollTop) > 1) {
+      list.scrollTo({
+        top: Math.max(0, nextScrollTop),
+        behavior: 'auto',
+      });
+    }
+  } else {
+    targetRow.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+  }
   targetRow.focus({ preventScroll: true });
 }
 
@@ -6175,12 +6569,44 @@ function buildCompletionistStatusMessage(visibleMatches) {
     return 'Waiting for the first completionist snapshot.';
   }
   if (!visibleMatches.length) {
+    if (!getActiveCompletionistMatches().length && getCompletionistDismissedCounts().total) {
+      return 'All current completionist matches are hidden for this browser session.';
+    }
     if (getCompletionistSearchTokens().length) {
       return 'No live flights match the current completionist search and filter.';
     }
     return 'No live flights in the latest shared snapshot match your current missing airports or cards.';
   }
   return `Showing ${formatNumber(visibleMatches.length)} flights from a shared ${formatNumber(Math.round(getCompletionistSnapshotSeconds() / 60))}-minute snapshot.`;
+}
+
+function buildCompletionistListRenderSignature(matches) {
+  return [
+    state.map.completionist.manifest?.generatedAt || '',
+    state.map.completionist.filter,
+    state.map.completionist.query.trim().toLowerCase(),
+    state.map.completionist.selectedFlightId,
+    Array.from(state.map.completionist.dismissedAirportKeys || []).sort().join('|'),
+    Array.from(state.map.completionist.dismissedModelKeys || []).sort().join('|'),
+    matches.length,
+    matches.map((match) => `${match.id}:${match.matchKind}`).join('|'),
+  ].join('::');
+}
+
+function syncCompletionistFlightAgeLabels(matches) {
+  if (!elements.mapCompletionistList) {
+    return;
+  }
+  matches.forEach((match) => {
+    const ageTarget = elements.mapCompletionistList
+      .querySelector(`[data-flight-row-id="${escapeSelectorValue(match.id)}"] .completionist-flight-age`);
+    if (!(ageTarget instanceof HTMLElement)) {
+      return;
+    }
+    ageTarget.textContent = Number.isFinite(match.seenAt)
+      ? formatRelativeAgeFromMillis(Date.now() - (match.seenAt * 1000))
+      : 'Unknown age';
+  });
 }
 
 function renderCompletionistFlightListLegacy(matches) {
@@ -6260,16 +6686,32 @@ function renderMapCompletionistPanel(model) {
   if (elements.mapCompletionistFilterBar) {
     elements.mapCompletionistFilterBar.innerHTML = buildCompletionistFilterChips(filterCounts, !model);
   }
+  if (elements.mapCompletionistDismissSummary) {
+    elements.mapCompletionistDismissSummary.textContent = buildCompletionistDismissSummaryText(model);
+  }
+  if (elements.mapCompletionistRestoreButton) {
+    const hasDismissedTargets = getCompletionistDismissedCounts().total > 0;
+    elements.mapCompletionistRestoreButton.hidden = !model || !hasDismissedTargets;
+    elements.mapCompletionistRestoreButton.disabled = !model || !hasDismissedTargets;
+  }
   elements.mapCompletionistRefreshButton.disabled = state.map.completionist.loading || !model;
   elements.mapCompletionistMeta.textContent = buildCompletionistMetaText(
     visibleMatches.length,
     searchMatches.length,
     allMatches.length,
   );
-  elements.mapCompletionistList.innerHTML = renderCompletionistFlightList(visibleMatches);
   if (!model) {
     elements.mapCompletionistList.innerHTML = '<div class="empty-copy">Upload a collection export to use completionist mode.</div>';
+    state.map.completionist.listRenderSignature = 'no-model';
+    return;
   }
+  const nextListSignature = buildCompletionistListRenderSignature(visibleMatches);
+  if (state.map.completionist.listRenderSignature !== nextListSignature) {
+    elements.mapCompletionistList.innerHTML = renderCompletionistFlightList(visibleMatches);
+    state.map.completionist.listRenderSignature = nextListSignature;
+    return;
+  }
+  syncCompletionistFlightAgeLabels(visibleMatches);
 }
 
 function buildCompletionistPopup(match) {
@@ -6290,34 +6732,82 @@ function buildCompletionistPopup(match) {
 
 function renderCompletionistFlightList(matches) {
   if (!matches.length) {
+    if (!getCompletionistSearchTokens().length && !getActiveCompletionistMatches().length && getCompletionistDismissedCounts().total) {
+      return '<div class="empty-copy">All current live matches are hidden for this browser session. Use Restore hidden matches to bring them back.</div>';
+    }
     return getCompletionistSearchTokens().length
       ? '<div class="empty-copy">No live flights match the current search and filter.</div>'
       : '<div class="empty-copy">No matching flights are visible for the current completionist filter.</div>';
   }
   return matches.map((match) => {
     const isSelected = match.id === state.map.completionist.selectedFlightId;
+    const matchTone = getCompletionistMatchTone(match);
     const chips = buildCompletionistReasonChips(match);
     const reasonParts = buildCompletionistReasonNotes(match);
     const telemetry = buildCompletionistTelemetryBits(match, { compact: true });
-    const summaryBits = [
-      match.typeCode ? `${match.typeCode} - ${match.modelLabel}` : match.modelLabel,
-      ...telemetry,
-    ].filter(Boolean);
+    const aircraftSummary = [
+      match.typeCode || '',
+      match.modelLabel || '',
+    ].filter(Boolean).join(' | ') || 'Unknown aircraft';
+    const targetSummary = match.hasMissingDestination
+      ? buildCompletionistAirportDisplay(match.destinationAirport, match.destination)
+      : match.hasNewCard
+        ? aircraftSummary
+        : 'Live completionist match.';
+    const summaryBits = telemetry.length
+      ? telemetry.join(' | ')
+      : 'Route telemetry unavailable.';
     const fr24Url = buildCompletionistFlightFr24Url(match);
+    const airportDismissKey = match.hasMissingDestination
+      ? getCompletionistAirportDismissKey(match.destinationAirport, match.destination)
+      : '';
+    const modelDismissKey = match.hasNewCard
+      ? getCompletionistModelDismissKey(match.typeCode)
+      : '';
+    const dismissButtons = [
+      airportDismissKey
+        ? `
+          <button
+            type="button"
+            class="completionist-flight-dismiss completionist-flight-dismiss--airport"
+            data-action="dismiss-completionist-target"
+            data-dismiss-kind="airport"
+            data-dismiss-key="${escapeHtml(airportDismissKey)}"
+            data-dismiss-label="${escapeHtml(buildCompletionistAirportDisplay(match.destinationAirport, match.destination))}"
+          >
+            Hide airport
+          </button>
+        `
+        : '',
+      modelDismissKey
+        ? `
+          <button
+            type="button"
+            class="completionist-flight-dismiss completionist-flight-dismiss--card"
+            data-action="dismiss-completionist-target"
+            data-dismiss-kind="card"
+            data-dismiss-key="${escapeHtml(modelDismissKey)}"
+            data-dismiss-label="${escapeHtml(aircraftSummary)}"
+          >
+            Hide aircraft
+          </button>
+        `
+        : '',
+    ].filter(Boolean).join('');
     const seenLabel = Number.isFinite(match.seenAt)
       ? formatRelativeAgeFromMillis(Date.now() - (match.seenAt * 1000))
       : 'Unknown age';
     return `
-      <article class="completionist-flight-row${isSelected ? ' is-selected' : ''}" data-flight-row-id="${escapeHtml(match.id)}">
+      <article class="completionist-flight-row completionist-flight-row--${matchTone}${isSelected ? ' is-selected' : ''}" data-flight-row-id="${escapeHtml(match.id)}">
         <button
           type="button"
-          class="completionist-flight-button${isSelected ? ' is-selected' : ''}"
+          class="completionist-flight-button completionist-flight-button--${matchTone}${isSelected ? ' is-selected' : ''}"
           data-action="focus-completionist-flight"
           data-flight-id="${escapeHtml(match.id)}"
           aria-pressed="${String(isSelected)}"
         >
           <div class="completionist-flight-eyebrow-row">
-            ${isSelected ? '<span class="completionist-flight-selection-tag">Focused</span>' : '<span class="completionist-flight-selection-tag is-muted">Live match</span>'}
+            <span class="completionist-flight-selection-tag${isSelected ? '' : ` is-${matchTone}`}${!isSelected && matchTone === 'neutral' ? ' is-muted' : ''}">${escapeHtml(getCompletionistMatchLabel(match, isSelected))}</span>
             <span class="completionist-flight-age">${escapeHtml(seenLabel)}</span>
           </div>
           <div class="completionist-flight-head">
@@ -6327,10 +6817,23 @@ function renderCompletionistFlightList(matches) {
             </div>
           </div>
           <div class="completionist-flight-chip-row">${chips}</div>
-          <p class="completionist-flight-note">${escapeHtml(reasonParts.join(' | ') || 'Live completionist match.')}</p>
-          <p class="completionist-flight-meta">${escapeHtml(summaryBits.join(' | ') || 'Route telemetry unavailable.')}</p>
+          <div class="completionist-flight-glance-grid">
+            <div class="completionist-flight-glance-card">
+              <span class="completionist-flight-glance-label">Target</span>
+              <strong class="completionist-flight-glance-value">${escapeHtml(targetSummary)}</strong>
+            </div>
+            <div class="completionist-flight-glance-card">
+              <span class="completionist-flight-glance-label">Aircraft</span>
+              <strong class="completionist-flight-glance-value">${escapeHtml(aircraftSummary)}</strong>
+            </div>
+          </div>
+          <div class="completionist-flight-support">
+            <p class="completionist-flight-note">${escapeHtml(reasonParts.join(' | ') || 'Live completionist match.')}</p>
+            <p class="completionist-flight-meta">${escapeHtml(summaryBits)}</p>
+          </div>
         </button>
         <div class="completionist-flight-actions">
+          ${dismissButtons}
           <a class="completionist-flight-link" href="${fr24Url}" target="_blank" rel="noopener noreferrer">Open in FR24</a>
         </div>
       </article>
@@ -6358,7 +6861,7 @@ async function refreshCompletionistSnapshot() {
     state.map.completionist.manifest = liveData.manifest;
     state.map.completionist.snapshot = liveData.payload;
     state.map.completionist.matches = buildCompletionistMatches(state.model, state.references, liveData.rows);
-    if (!state.map.completionist.matches.some((match) => match.id === state.map.completionist.selectedFlightId)) {
+    if (!getActiveCompletionistMatches().some((match) => match.id === state.map.completionist.selectedFlightId)) {
       state.map.completionist.selectedFlightId = '';
     }
   } catch (error) {
@@ -8493,7 +8996,7 @@ async function tryLoadPersistedUpload(persistedUpload = null) {
   if (!elements.persistUpload.checked) {
     return;
   }
-  const persisted = persistedUpload || readPersistedUpload();
+  const persisted = persistedUpload || await readPersistedUpload();
   if (!persisted) {
     return;
   }
@@ -8507,11 +9010,11 @@ async function tryLoadPersistedUpload(persistedUpload = null) {
     state.upload.text = persisted.text;
     renderDashboard(model, references);
     setUploadStatus(`Loaded saved upload ${persisted.fileName} for ${model.user.name}. Stored only on this device.`);
-    setBanner('Loaded from your browser local storage. Skyviz never sent your collection to a server.', 'info', {
+    setBanner('Loaded from browser storage on this device. Skyviz never sent your collection to a server.', 'info', {
       autoDismissMs: 10000,
     });
   } catch (error) {
-    clearPersistedUpload();
+    await clearPersistedUpload();
     setPersistPreferenceChecked(false);
     writePersistPreference(false);
     syncDataToolsPanelState();
@@ -8568,13 +9071,16 @@ async function handleFile(file) {
     state.upload.text = text;
     renderDashboard(model, references);
     loaded = true;
-    const persisted = persistCurrentUploadIfEnabled();
+    const shouldPersist = Boolean(elements.persistUpload.checked);
+    const persisted = await persistCurrentUploadIfEnabled();
     setUploadStatus(
       persisted
-        ? `Loaded ${file.name} for ${model.user.name}. Saved only on this device (local storage).`
+        ? `Loaded ${file.name} for ${model.user.name}. Saved only on this device (browser storage).`
         : `Loaded ${file.name} for ${model.user.name}. Not saved on this device.`,
     );
-    setBanner('');
+    if (!shouldPersist || persisted) {
+      setBanner('');
+    }
   } catch (error) {
     setUploadStatus('Waiting for a valid collection export.');
     setBanner(error instanceof Error ? error.message : 'Failed to load the collection export.', 'warning');
@@ -8606,15 +9112,18 @@ async function handleExampleView() {
     state.upload.text = text;
     renderDashboard(model, references);
     loaded = true;
-    const persisted = persistCurrentUploadIfEnabled();
+    const shouldPersist = Boolean(elements.persistUpload.checked);
+    const persisted = await persistCurrentUploadIfEnabled();
     setUploadStatus(
       persisted
-        ? 'Loaded example dashboard. Saved only on this device (local storage).'
+        ? 'Loaded example dashboard. Saved only on this device (browser storage).'
         : 'Loaded example dashboard. Not saved on this device.',
     );
-    setBanner('Loaded sample deck: 20 airports + 20 popular aircraft models.', 'info', {
-      autoDismissMs: 10000,
-    });
+    if (!shouldPersist || persisted) {
+      setBanner('Loaded sample deck: 20 airports + 20 popular aircraft models.', 'info', {
+        autoDismissMs: 10000,
+      });
+    }
   } catch (error) {
     setUploadStatus('Waiting for a collection export.');
     setBanner(error instanceof Error ? error.message : 'Failed to load built-in example dashboard.', 'warning');
@@ -8653,7 +9162,7 @@ function wireUpload() {
   });
 
   elements.persistUpload.addEventListener('change', () => {
-    handlePersistPreferenceChange(elements.persistUpload.checked);
+    void handlePersistPreferenceChange(elements.persistUpload.checked);
   });
 }
 
@@ -8687,6 +9196,17 @@ function wireMapCompletionControls() {
 
   elements.mapCompletionistRefreshButton?.addEventListener('click', () => {
     void refreshCompletionistSnapshot();
+  });
+
+  elements.mapCompletionistRestoreButton?.addEventListener('click', () => {
+    state.map.completionist.dismissedAirportKeys = new Set();
+    state.map.completionist.dismissedModelKeys = new Set();
+    if (state.model) {
+      renderMapTab(state.model);
+    }
+    setBanner('Restored all hidden completionist targets for this browser session.', 'info', {
+      autoDismissMs: 5000,
+    });
   });
 
   elements.mapCompletionistFilterBar?.addEventListener('click', (event) => {
@@ -8836,6 +9356,25 @@ function wireMapCompletionControls() {
     }
     const target = event.target;
     if (!(target instanceof Element)) {
+      return;
+    }
+    const dismissButton = target.closest('button[data-action="dismiss-completionist-target"][data-dismiss-kind][data-dismiss-key]');
+    if (dismissButton) {
+      const dismissKind = String(dismissButton.dataset.dismissKind || '').trim().toLowerCase();
+      const dismissKey = String(dismissButton.dataset.dismissKey || '').trim();
+      const dismissLabel = String(dismissButton.dataset.dismissLabel || '').trim() || 'target';
+      if (!dismissKey || (dismissKind !== 'airport' && dismissKind !== 'card')) {
+        return;
+      }
+      if (dismissKind === 'airport') {
+        state.map.completionist.dismissedAirportKeys.add(dismissKey);
+      } else {
+        state.map.completionist.dismissedModelKeys.add(dismissKey);
+      }
+      renderMapTab(state.model);
+      setBanner(`Hidden ${dismissLabel} from live completionist for this browser session.`, 'info', {
+        autoDismissMs: 5000,
+      });
       return;
     }
     const button = target.closest('button[data-action="focus-completionist-flight"][data-flight-id]');
@@ -9692,9 +10231,9 @@ async function bootstrap() {
   renderLandingDailyCtas();
   updateManualMappingStorageMeta(null);
   setPersistPreferenceChecked(readPersistPreference());
+  const persistedUpload = await readPersistedUpload();
   syncDashboardTabAvailability();
   syncDataToolsPanelState();
-  const persistedUpload = readPersistedUpload();
   const shouldRestorePersistedUpload = elements.persistUpload.checked && Boolean(persistedUpload);
   setDataToolsOpen(false);
   setBootState(

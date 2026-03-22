@@ -23,6 +23,7 @@ This repository is meant to be maintained by agents and humans using the same re
 
 - Reproduce the bug in Playwright before changing code.
 - Re-run the same Playwright flow after edits to confirm the fix.
+- When a real collection is needed for UI validation, prefer the repo-root `skycards_user.json` over the built-in example deck.
 - Capture Playwright evidence (snapshot and/or screenshot) when possible.
 - If Playwright cannot run, state that limitation explicitly and do not claim browser confirmation.
 

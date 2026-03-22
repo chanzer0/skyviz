@@ -17,7 +17,7 @@ Use this skill for normal product and maintenance work in this repository. It ke
 4. Use [references/change-checklists.md](references/change-checklists.md) for follow-through after you know the change type.
 5. Make the smallest coherent change that keeps browser-local processing and GitHub Pages deployment intact unless the task explicitly changes those constraints.
 6. Update docs, scripts, and workflow artifacts in the same pass when behavior changes.
-7. Run the offline checks. For visual bug work, reproduce in Playwright before edits and confirm in Playwright after edits; report when browser validation was not possible.
+7. Run the offline checks. For visual bug work, reproduce in Playwright before edits and confirm in Playwright after edits; when a real collection is needed, prefer the repo-root `skycards_user.json`; report when browser validation was not possible.
 
 ## Default rules
 
@@ -32,6 +32,7 @@ Use this skill for normal product and maintenance work in this repository. It ke
 - Default offline check: `python scripts/smoke_check.py`
 - Repo workflow check: `python scripts/repo_hygiene_check.py`
 - Visual bug check: reproduce with Playwright before edits and confirm with Playwright after edits.
+- For real-data browser validation, prefer the repo-root `skycards_user.json` instead of the built-in example deck unless the task explicitly targets the sample flow.
 - Use a browser pass when UI changes are meaningful and the environment supports it.
 
 ## References

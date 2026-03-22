@@ -141,7 +141,7 @@
               <label class="persist-choice">
                 <input id="persist-upload" type="checkbox">
                 <span>
-                  Save this upload in <strong>browser local storage on this device</strong>. Skyviz does not upload, share, or store your collection on any remote server. You can also change this later from the dashboard settings cog.
+                  Save this upload in <strong>browser storage on this device</strong>. Skyviz does not upload, share, or store your collection on any remote server. You can also change this later from the dashboard settings cog.
                 </span>
               </label>
             </section>
@@ -244,7 +244,7 @@
                   <p class="data-tools-menu-kicker">Dashboard settings</p>
                   <h2 id="data-tools-title" class="data-tools-menu-title">Collection controls</h2>
                   <p class="data-tools-menu-copy">
-                    Manage your current upload, browser-local storage, and reset actions without leaving the dashboard.
+                    Manage your current upload, on-device browser storage, and reset actions without leaving the dashboard.
                   </p>
                 </div>
 
@@ -262,7 +262,7 @@
                   <label class="data-tools-toggle" for="data-tools-persist-upload">
                     <span class="data-tools-toggle-copy">
                       <span class="data-tools-toggle-title">Persist current upload on this device</span>
-                      <span class="data-tools-toggle-note">Browser local storage only. Skyviz still never uploads your collection to a server.</span>
+                      <span class="data-tools-toggle-note">Browser storage only. Skyviz still never uploads your collection to a server.</span>
                     </span>
                     <input id="data-tools-persist-upload" class="data-tools-toggle-input" type="checkbox">
                     <span class="data-tools-toggle-switch" aria-hidden="true">
@@ -407,6 +407,19 @@
                     <span class="map-completionist-status-label">Snapshot age</span>
                     <strong id="map-completionist-updated">--</strong>
                   </div>
+                </div>
+                <div class="completionist-dismiss-shell">
+                  <p id="map-completionist-dismiss-summary" class="completionist-dismiss-summary">
+                    Use Hide airport or Hide aircraft on a live card to clear things you already handled. Hidden targets stay out of view for this browser session only.
+                  </p>
+                  <button
+                    id="map-completionist-restore-button"
+                    class="region-action-button completionist-dismiss-restore"
+                    type="button"
+                    hidden
+                  >
+                    Restore hidden matches
+                  </button>
                 </div>
                 <div class="map-completionist-toolbar">
                   <label class="control-field completion-control completionist-search-control">

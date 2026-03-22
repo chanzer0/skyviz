@@ -5,6 +5,7 @@
 - Update the relevant files in `site/`.
 - Update `README.md` if usage or local preview expectations changed.
 - Run `python scripts/smoke_check.py`.
+- When real browser data matters, validate with the repo-root `skycards_user.json`.
 - For visual bug fixes, reproduce the bug with Playwright before edits and confirm the fix with Playwright after edits.
 - Use a browser pass when the environment supports it.
 
