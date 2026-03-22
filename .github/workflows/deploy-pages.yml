@@ -22,6 +22,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Restore generated site data cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            site/data/reference
+            site/data/airports
+          key: pages-static-data-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            pages-static-data-${{ runner.os }}-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -45,6 +54,22 @@ jobs:
       - name: Refresh airport daily game data
         if: github.event_name != 'schedule'
         run: python scripts/refresh_airport_game_data.py
+      - name: Backfill required static site data for scheduled deploys
+        if: github.event_name == 'schedule'
+        run: |
+          if [ ! -f site/data/reference/manifest.json ]; then
+            python scripts/refresh_reference_data.py
+            python scripts/refresh_model_registration_counts.py
+            if [ -f aircraft_data.db ]; then
+              python scripts/build_aircraft_lookup_from_db.py --db-path aircraft_data.db
+            else
+              echo "aircraft_data.db not present; skipping aircraft lookup build."
+            fi
+            python scripts/refresh_reference_data.py --manifest-only
+          fi
+          if [ ! -f site/data/airports/manifest.json ] || [ ! -f site/data/airports/daily-game.json ]; then
+            python scripts/refresh_airport_game_data.py
+          fi
       - name: Refresh completionist snapshot
         run: python scripts/refresh_completionist_snapshot.py
       - name: Run smoke check

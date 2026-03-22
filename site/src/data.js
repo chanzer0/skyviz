@@ -142,10 +142,18 @@ const airportGameState = {
   manifestPromise: null,
   dataPromise: null,
 };
+const SITE_BASE_URL = new URL('../', import.meta.url);
+
+function resolveSiteAssetUrl(path) {
+  return new URL(path, SITE_BASE_URL).toString();
+}
 
 export async function loadReferenceManifest() {
   if (!referenceState.manifestPromise) {
-    referenceState.manifestPromise = fetchJson('./data/reference/manifest.json');
+    referenceState.manifestPromise = fetchJson(resolveSiteAssetUrl('data/reference/manifest.json')).catch((error) => {
+      referenceState.manifestPromise = null;
+      throw error;
+    });
   }
   return referenceState.manifestPromise;
 }
@@ -200,6 +208,9 @@ export async function loadReferenceData() {
         aircraftLookupByReg,
         inferredMappingsIndex,
       };
+    }).catch((error) => {
+      referenceState.dataPromise = null;
+      throw error;
     });
   }
   return referenceState.dataPromise;
@@ -225,6 +236,9 @@ export async function loadCardleReferenceData() {
         modelsById: new Map(modelRows.map((row) => [normalizeCode(row.id), row])),
         modelRegistrationCountsByModelId,
       };
+    }).catch((error) => {
+      referenceState.cardleDataPromise = null;
+      throw error;
     });
   }
   return referenceState.cardleDataPromise;
@@ -232,7 +246,10 @@ export async function loadCardleReferenceData() {
 
 export async function loadAirportGameManifest() {
   if (!airportGameState.manifestPromise) {
-    airportGameState.manifestPromise = fetchJson('./data/airports/manifest.json');
+    airportGameState.manifestPromise = fetchJson(resolveSiteAssetUrl('data/airports/manifest.json')).catch((error) => {
+      airportGameState.manifestPromise = null;
+      throw error;
+    });
   }
   return airportGameState.manifestPromise;
 }
@@ -253,13 +270,16 @@ export async function loadAirportGameData() {
             .filter(([id]) => Boolean(id)),
         ),
       };
+    }).catch((error) => {
+      airportGameState.dataPromise = null;
+      throw error;
     });
   }
   return airportGameState.dataPromise;
 }
 
 export async function fetchCompletionistSnapshotData() {
-  const manifest = await fetchJson('./data/live/completionist-manifest.json');
+  const manifest = await fetchJson(resolveSiteAssetUrl('data/live/completionist-manifest.json'));
   const snapshotPath = resolveLiveDatasetPath(manifest?.snapshotPath || './data/live/completionist-snapshot.json');
   const payload = await fetchJson(snapshotPath);
   const fields = asArray(payload?.fields).map((field) => sanitizeText(field));
@@ -279,7 +299,7 @@ function getManifestDatasetPath(manifest, datasetKey, fallbackPath = null) {
   if (datasetPath) {
     return resolveReferenceDatasetPath(datasetPath);
   }
-  return fallbackPath;
+  return fallbackPath ? resolveReferenceDatasetPath(fallbackPath) : fallbackPath;
 }
 
 function resolveReferenceDatasetPath(path) {
@@ -295,15 +315,15 @@ function resolveReferenceDatasetPath(path) {
     return normalizedPath;
   }
   if (normalizedPath.startsWith('./data/reference/')) {
-    return normalizedPath;
+    return resolveSiteAssetUrl(normalizedPath.slice(2));
   }
   if (normalizedPath.startsWith('data/reference/')) {
-    return `./${normalizedPath}`;
+    return resolveSiteAssetUrl(normalizedPath);
   }
   if (normalizedPath.startsWith('./')) {
-    return `./data/reference/${normalizedPath.slice(2)}`;
+    return resolveSiteAssetUrl(`data/reference/${normalizedPath.slice(2)}`);
   }
-  return `./data/reference/${normalizedPath}`;
+  return resolveSiteAssetUrl(`data/reference/${normalizedPath}`);
 }
 
 function resolveAirportGameDatasetPath(path) {
@@ -319,15 +339,15 @@ function resolveAirportGameDatasetPath(path) {
     return normalizedPath;
   }
   if (normalizedPath.startsWith('./data/airports/')) {
-    return normalizedPath;
+    return resolveSiteAssetUrl(normalizedPath.slice(2));
   }
   if (normalizedPath.startsWith('data/airports/')) {
-    return `./${normalizedPath}`;
+    return resolveSiteAssetUrl(normalizedPath);
   }
   if (normalizedPath.startsWith('./')) {
-    return `./data/airports/${normalizedPath.slice(2)}`;
+    return resolveSiteAssetUrl(`data/airports/${normalizedPath.slice(2)}`);
   }
-  return `./data/airports/${normalizedPath}`;
+  return resolveSiteAssetUrl(`data/airports/${normalizedPath}`);
 }
 
 function resolveLiveDatasetPath(path) {
@@ -343,15 +363,15 @@ function resolveLiveDatasetPath(path) {
     return normalizedPath;
   }
   if (normalizedPath.startsWith('./data/live/')) {
-    return normalizedPath;
+    return resolveSiteAssetUrl(normalizedPath.slice(2));
   }
   if (normalizedPath.startsWith('data/live/')) {
-    return `./${normalizedPath}`;
+    return resolveSiteAssetUrl(normalizedPath);
   }
   if (normalizedPath.startsWith('./')) {
-    return `./data/live/${normalizedPath.slice(2)}`;
+    return resolveSiteAssetUrl(`data/live/${normalizedPath.slice(2)}`);
   }
-  return `./data/live/${normalizedPath}`;
+  return resolveSiteAssetUrl(`data/live/${normalizedPath}`);
 }
 
 async function fetchJson(path) {

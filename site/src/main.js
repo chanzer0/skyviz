@@ -408,6 +408,7 @@ const state = {
       requestToken: 0,
       layer: null,
       markersByFlightId: new Map(),
+      hasRenderedView: false,
       markerAssetStatusByTypeCode: new Map(),
       markerRefreshQueued: false,
       listRenderSignature: '',
@@ -5284,6 +5285,7 @@ function resetCompletionistState({ preserveSnapshot = false } = {}) {
   state.map.completionist.dismissedModelKeys = new Set();
   state.map.completionist.secondsUntilRefresh = COMPLETIONIST_DEFAULT_BROWSER_REFRESH_SECONDS;
   state.map.completionist.markersByFlightId = new Map();
+  state.map.completionist.hasRenderedView = false;
   state.map.completionist.markerRefreshQueued = false;
   state.map.completionist.listRenderSignature = '';
   if (!preserveSnapshot) {
@@ -6045,6 +6047,12 @@ function buildCompletionistMatches(model, references, liveRows) {
       const routeDestination = destinationCode || destinationAirport?.iata || destinationAirport?.icao || '???';
       const destinationDisplay = buildCompletionistAirportDisplay(destinationAirport, destinationCode);
       const originDisplay = buildCompletionistAirportDisplay(originAirport, originCode);
+      const airportTargetKey = hasMissingDestination
+        ? getCompletionistAirportDismissKey(destinationAirport, destinationCode)
+        : '';
+      const cardTargetKey = hasNewCard
+        ? getCompletionistModelDismissKey(typeCode)
+        : '';
       const baseMatch = {
         ...flight,
         typeCode,
@@ -6062,6 +6070,9 @@ function buildCompletionistMatches(model, references, liveRows) {
         routeLabel: `${routeOrigin} \u2192 ${routeDestination}`,
         destinationDisplay,
         originDisplay,
+        airportTargetKey,
+        cardTargetKey,
+        bothTargetKey: airportTargetKey && cardTargetKey ? `${airportTargetKey}::${cardTargetKey}` : '',
       };
       return {
         ...baseMatch,
@@ -6083,11 +6094,11 @@ function applyCompletionistDismissals(matches) {
       .map((match) => {
         const hasMissingDestination = Boolean(
           match.hasMissingDestination
-            && !dismissedAirportKeys.has(getCompletionistAirportDismissKey(match.destinationAirport, match.destination)),
+            && !dismissedAirportKeys.has(match.airportTargetKey || getCompletionistAirportDismissKey(match.destinationAirport, match.destination)),
         );
         const hasNewCard = Boolean(
           match.hasNewCard
-            && !dismissedModelKeys.has(getCompletionistModelDismissKey(match.typeCode)),
+            && !dismissedModelKeys.has(match.cardTargetKey || getCompletionistModelDismissKey(match.typeCode)),
         );
         const matchKind = getCompletionistMatchKind({ hasMissingDestination, hasNewCard });
         if (!matchKind) {
@@ -6171,24 +6182,76 @@ function filterCompletionistMatchesByKind(matches, filterValue) {
   return matches.slice();
 }
 
-function getCompletionistFilterCounts(matches = getSearchFilteredCompletionistMatches()) {
-  return {
-    all: matches.length,
-    airport: matches.filter((match) => match.hasMissingDestination).length,
-    card: matches.filter((match) => match.hasNewCard).length,
-    both: matches.filter((match) => match.hasMissingDestination && match.hasNewCard).length,
+function getCompletionistUniqueTargetCounts(matches = []) {
+  const counts = {
+    all: new Set(),
+    airport: new Set(),
+    card: new Set(),
+    both: new Set(),
+    flights: Array.isArray(matches) ? matches.length : 0,
   };
+  (matches || []).forEach((match) => {
+    if (match.hasMissingDestination && match.airportTargetKey) {
+      counts.airport.add(match.airportTargetKey);
+      counts.all.add(`airport:${match.airportTargetKey}`);
+    }
+    if (match.hasNewCard && match.cardTargetKey) {
+      counts.card.add(match.cardTargetKey);
+      counts.all.add(`card:${match.cardTargetKey}`);
+    }
+    if (match.hasMissingDestination && match.hasNewCard && match.bothTargetKey) {
+      counts.both.add(match.bothTargetKey);
+    }
+  });
+  return {
+    all: counts.all.size,
+    airport: counts.airport.size,
+    card: counts.card.size,
+    both: counts.both.size,
+    flights: counts.flights,
+  };
+}
+
+function getCompletionistFilterCounts(matches = getSearchFilteredCompletionistMatches()) {
+  return getCompletionistUniqueTargetCounts(matches);
+}
+
+function getCompletionistCountForFilter(counts, filterValue = state.map.completionist.filter) {
+  if (!counts || typeof counts !== 'object') {
+    return 0;
+  }
+  const rawCount = counts[filterValue];
+  return Number.isFinite(rawCount) ? rawCount : Number(rawCount || 0) || 0;
+}
+
+function formatCompletionistTargetLabel(filterValue, count) {
+  if (filterValue === 'airport') {
+    return `${formatNumber(count)} ${count === 1 ? 'missing airport' : 'missing airports'}`;
+  }
+  if (filterValue === 'card') {
+    return `${formatNumber(count)} ${count === 1 ? 'new card' : 'new cards'}`;
+  }
+  if (filterValue === 'both') {
+    return `${formatNumber(count)} ${count === 1 ? 'dual-match opportunity' : 'dual-match opportunities'}`;
+  }
+  return `${formatNumber(count)} ${count === 1 ? 'unique target' : 'unique targets'}`;
 }
 
 function getCompletionistViewState() {
   const allMatches = getActiveCompletionistMatches();
   const searchMatches = getSearchFilteredCompletionistMatches();
   const visibleMatches = filterCompletionistMatchesByKind(searchMatches, state.map.completionist.filter);
+  const allCounts = getCompletionistUniqueTargetCounts(allMatches);
+  const searchCounts = getCompletionistUniqueTargetCounts(searchMatches);
+  const visibleCounts = getCompletionistUniqueTargetCounts(visibleMatches);
   return {
     allMatches,
     searchMatches,
     visibleMatches,
-    filterCounts: getCompletionistFilterCounts(searchMatches),
+    allCounts,
+    searchCounts,
+    visibleCounts,
+    filterCounts: searchCounts,
     selectedMatch: visibleMatches.find((match) => match.id === state.map.completionist.selectedFlightId) || null,
   };
 }
@@ -6292,21 +6355,25 @@ function buildCompletionistTelemetryBits(match, options = {}) {
   return telemetry;
 }
 
-function buildCompletionistMetaText(visibleCount, searchCount, totalCount) {
+function buildCompletionistMetaText(visibleCounts, searchCounts, totalCounts) {
   const hiddenCount = getCompletionistDismissedCounts().total;
   const hiddenSuffix = hiddenCount
     ? ` ${formatNumber(hiddenCount)} ${hiddenCount === 1 ? 'target is' : 'targets are'} hidden this session.`
     : '';
+  const filterValue = state.map.completionist.filter;
+  const visibleTargetLabel = formatCompletionistTargetLabel(filterValue, getCompletionistCountForFilter(visibleCounts, filterValue));
+  const searchTargetLabel = formatCompletionistTargetLabel(filterValue, getCompletionistCountForFilter(searchCounts, filterValue));
+  const totalTargetLabel = formatCompletionistTargetLabel(filterValue, getCompletionistCountForFilter(totalCounts, filterValue));
   if (getCompletionistSearchTokens().length) {
-    return `${formatNumber(visibleCount)} shown of ${formatNumber(searchCount)} search results (${formatNumber(totalCount)} total matches).${hiddenSuffix}`;
+    return `${formatNumber(visibleCounts.flights)} flights shown for ${visibleTargetLabel} from ${searchTargetLabel} (${totalTargetLabel} total).${hiddenSuffix}`;
   }
-  return `${formatNumber(visibleCount)} shown of ${formatNumber(totalCount)} matching flights.${hiddenSuffix}`;
+  return `${formatNumber(visibleCounts.flights)} flights shown for ${visibleTargetLabel} (${totalTargetLabel} in snapshot).${hiddenSuffix}`;
 }
 
 function buildCompletionistFilterChips(counts, disabled = false) {
   const chipDefinitions = [
-    { value: 'all', label: 'All' },
-    { value: 'airport', label: 'Missing destination' },
+    { value: 'all', label: 'All targets' },
+    { value: 'airport', label: 'Missing airport' },
     { value: 'card', label: 'New card' },
     { value: 'both', label: 'Both' },
   ];
@@ -6555,7 +6622,7 @@ function focusCompletionistFlight(model, flightId, options = {}) {
   }
 }
 
-function buildCompletionistStatusMessage(visibleMatches) {
+function buildCompletionistStatusMessage(visibleMatches, visibleCounts) {
   if (state.map.completionist.loading && !state.map.completionist.snapshot) {
     return 'Loading the latest completionist snapshot...';
   }
@@ -6577,7 +6644,9 @@ function buildCompletionistStatusMessage(visibleMatches) {
     }
     return 'No live flights in the latest shared snapshot match your current missing airports or cards.';
   }
-  return `Showing ${formatNumber(visibleMatches.length)} flights from a shared ${formatNumber(Math.round(getCompletionistSnapshotSeconds() / 60))}-minute snapshot.`;
+  const targetCount = getCompletionistCountForFilter(visibleCounts);
+  const targetLabel = formatCompletionistTargetLabel(state.map.completionist.filter, targetCount);
+  return `Showing ${formatNumber(visibleMatches.length)} flights covering ${targetLabel} from a shared ${formatNumber(Math.round(getCompletionistSnapshotSeconds() / 60))}-minute snapshot.`;
 }
 
 function buildCompletionistListRenderSignature(matches) {
@@ -6665,11 +6734,17 @@ function renderCompletionistFlightListLegacy(matches) {
 }
 
 function renderMapCompletionistPanel(model) {
-  const { allMatches, searchMatches, visibleMatches, filterCounts } = getCompletionistViewState();
+  const {
+    visibleMatches,
+    filterCounts,
+    allCounts,
+    searchCounts,
+    visibleCounts,
+  } = getCompletionistViewState();
   const generatedAtMillis = getCompletionistSnapshotGeneratedAtMillis();
   const snapshotAgeMillis = generatedAtMillis ? Math.max(Date.now() - generatedAtMillis, 0) : null;
   const isStale = Number.isFinite(snapshotAgeMillis) && snapshotAgeMillis > (getCompletionistStaleSeconds() * 1000);
-  elements.mapCompletionistStatus.textContent = buildCompletionistStatusMessage(visibleMatches);
+  elements.mapCompletionistStatus.textContent = buildCompletionistStatusMessage(visibleMatches, visibleCounts);
   elements.mapCompletionistRefresh.textContent = state.map.completionist.loading
     ? 'Updating...'
     : formatShortDuration(state.map.completionist.secondsUntilRefresh);
@@ -6696,9 +6771,9 @@ function renderMapCompletionistPanel(model) {
   }
   elements.mapCompletionistRefreshButton.disabled = state.map.completionist.loading || !model;
   elements.mapCompletionistMeta.textContent = buildCompletionistMetaText(
-    visibleMatches.length,
-    searchMatches.length,
-    allMatches.length,
+    visibleCounts,
+    searchCounts,
+    allCounts,
   );
   if (!model) {
     elements.mapCompletionistList.innerHTML = '<div class="empty-copy">Upload a collection export to use completionist mode.</div>';
@@ -6759,10 +6834,10 @@ function renderCompletionistFlightList(matches) {
       : 'Route telemetry unavailable.';
     const fr24Url = buildCompletionistFlightFr24Url(match);
     const airportDismissKey = match.hasMissingDestination
-      ? getCompletionistAirportDismissKey(match.destinationAirport, match.destination)
+      ? (match.airportTargetKey || getCompletionistAirportDismissKey(match.destinationAirport, match.destination))
       : '';
     const modelDismissKey = match.hasNewCard
-      ? getCompletionistModelDismissKey(match.typeCode)
+      ? (match.cardTargetKey || getCompletionistModelDismissKey(match.typeCode))
       : '';
     const dismissButtons = [
       airportDismissKey
@@ -6916,14 +6991,17 @@ function syncCompletionistPolling(options = {}) {
 
 function renderMapKpis(model) {
   if (isCompletionistModeEnabled()) {
-    const { allMatches, searchMatches, visibleMatches } = getCompletionistViewState();
+    const { allCounts, searchCounts, visibleMatches } = getCompletionistViewState();
     const generatedAtMillis = getCompletionistSnapshotGeneratedAtMillis();
     const snapshotAgeMillis = generatedAtMillis ? Math.max(Date.now() - generatedAtMillis, 0) : null;
     const staleSuffix = Number.isFinite(snapshotAgeMillis) && snapshotAgeMillis > (getCompletionistStaleSeconds() * 1000)
       ? ' Snapshot is stale.'
       : '';
+    const searchActive = getCompletionistSearchTokens().length > 0;
+    const scopeCounts = searchActive ? searchCounts : allCounts;
+    const scopeLabel = searchActive ? 'in search' : 'in snapshot';
     elements.mapAirportKpi.textContent = state.map.completionist.snapshot
-      ? `${buildCompletionistMetaText(visibleMatches.length, searchMatches.length, allMatches.length)}${staleSuffix}`
+      ? `${formatCompletionistTargetLabel('all', scopeCounts.all)} ${scopeLabel}: ${formatCompletionistTargetLabel('airport', scopeCounts.airport)}, ${formatCompletionistTargetLabel('card', scopeCounts.card)}, ${formatCompletionistTargetLabel('both', scopeCounts.both)}. ${formatNumber(visibleMatches.length)} flights visible in the current filter.${staleSuffix}`
       : 'Completionist mode compares the shared live snapshot against your local collection only in this browser.';
     return;
   }
@@ -7681,10 +7759,13 @@ function renderCompletionistLeafletMap(model) {
   if (!map || !window.L) {
     return;
   }
+  const hasRenderedView = state.map.completionist.hasRenderedView;
   clearMapLayers();
   const visibleMatches = getVisibleCompletionistMatches();
   if (!visibleMatches.length) {
-    map.setView(MAP_BASE_VIEW.center, MAP_BASE_VIEW.zoom);
+    if (!hasRenderedView) {
+      map.setView(MAP_BASE_VIEW.center, MAP_BASE_VIEW.zoom);
+    }
     elements.mapLegend.innerHTML = `
       <span class="map-legend-chip">
         <span class="map-legend-dot" style="background:#0f3f70;"></span>
@@ -7695,6 +7776,7 @@ function renderCompletionistLeafletMap(model) {
         Browser-only matching
       </span>
     `;
+    state.map.completionist.hasRenderedView = true;
     requestAnimationFrame(() => {
       map.invalidateSize();
     });
@@ -7736,7 +7818,7 @@ function renderCompletionistLeafletMap(model) {
       map.setView(selectedMarker.getLatLng(), Math.max(map.getZoom(), 4));
       selectedMarker.openPopup();
     }
-  } else {
+  } else if (!hasRenderedView) {
     fitCompletionistMatchesOnMap(visibleMatches);
   }
 
@@ -7754,6 +7836,7 @@ function renderCompletionistLeafletMap(model) {
       New card
     </span>
   `;
+  state.map.completionist.hasRenderedView = true;
   requestAnimationFrame(() => {
     map.invalidateSize();
   });
@@ -9170,6 +9253,9 @@ function wireMapCompletionControls() {
   elements.mapCompletionistToggle?.addEventListener('change', () => {
     state.map.completionist.enabled = Boolean(elements.mapCompletionistToggle.checked);
     state.map.completionist.selectedFlightId = '';
+    if (state.map.completionist.enabled) {
+      state.map.completionist.hasRenderedView = false;
+    }
     syncMapModePanels();
     if (!state.model) {
       return;

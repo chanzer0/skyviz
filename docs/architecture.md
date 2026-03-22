@@ -52,7 +52,7 @@
   - aircraft image candidates resolved as tier-aware CDN URLs using `*_md.png` first, then `cyber` tier + model metadata alias fallback (`imageOverride`, `images[]`)
   - aircraft detail modal metadata slices for engine profile, performance, airframe geometry, military status, and seasonal span
   - aircraft detail media candidates resolved from optimized Skycards CDN GLB assets
-  - completionist-mode flight matches built by comparing the shared delayed snapshot in `site/data/live/` against the current user's missing airport unlocks and missing aircraft models entirely in-browser
+  - completionist-mode flight matches built by comparing the shared delayed snapshot in `site/data/live/` against the current user's missing airport unlocks and missing aircraft models entirely in-browser, with completionist summary/filter counts tracking unique airport and card targets instead of duplicate flight rows
 11. The loaded UI transitions to a tabbed dashboard (`Navdle`, `Cardle`, `Map`, and `Deck`) without sending upload data to any server. The two daily tabs remain available even when no collection upload is active.
 
 ## Completionist live snapshot contract
@@ -65,8 +65,10 @@ Completionist mode does not fetch its upstream live-flight feed directly from th
 - rows are merged and deduped by `flightId` before publish because adjacent tiles overlap and aircraft move while the sweep is in flight
 - the script writes `site/data/live/completionist-manifest.json` and `site/data/live/completionist-snapshot.json`
 - the browser polls those static artifacts every `60` seconds while completionist mode is enabled and the `Map` tab is active
-- scheduled Pages runs refresh only that snapshot on an approximately `5` minute cadence, so the browser sees a delayed shared feed while the user's collection matching remains local
-- those scheduled Pages runs use `python scripts/smoke_check.py --mode completionist-only`, which validates repo scaffolding, the committed sample payload, and the regenerated live snapshot without requiring the gitignored reference or airport-daily artifacts that the schedule path intentionally skips
+- scheduled Pages runs refresh the completionist snapshot on the fastest GitHub Actions cadence available, approximately every `5` minutes, so the browser sees a delayed shared feed while the user's collection matching remains local
+- those scheduled Pages runs restore cached generated reference and airport artifacts before deploy so the static app keeps its upload and daily-game data even when the schedule path only refreshes the live snapshot
+- if that cache is cold, the schedule path falls back to rebuilding the required reference and airport artifacts before publish
+- those scheduled Pages runs use `python scripts/smoke_check.py --mode completionist-only`, which validates repo scaffolding, the committed sample payload, and the regenerated live snapshot while tolerating optional generated artifacts that are not needed for the snapshot-only path
 - the snapshot payload keeps only the fields needed for matching and map rendering: flight id, aircraft hex, coordinates, heading, altitude, speed, type code, registration, seen time, origin, destination, flight number, and callsign
 - snapshot metadata keeps only the browser-facing refresh contract: generated time, row count, field order, and refresh cadence
 
