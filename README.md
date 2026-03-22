@@ -224,4 +224,6 @@ During Pages builds, the workflow refreshes:
 
 Push and manual Pages builds refresh the normal reference artifacts plus the completionist snapshot. Scheduled Pages builds skip the heavier reference refresh and republish only the completionist snapshot on a roughly five-minute cadence so the static site can expose a delayed shared live-flight view without adding a backend.
 
+Because the scheduled workflow does not regenerate the gitignored reference or airport daily artifacts on a clean checkout, that schedule path now runs `python scripts/smoke_check.py --mode completionist-only` before deploy. That reduced validation still checks repo scaffolding, the committed sample deck, and the freshly generated completionist snapshot while avoiding false failures on artifacts that were intentionally skipped.
+
 This repository ignores generated files under `site/data/reference/*`, `site/data/airports/*.csv` / `site/data/airports/daily-game.json` / `site/data/airports/manifest.json`, and `site/data/live/*.json` in git. CI and Pages workflows generate fresh snapshots before validation/deploy. Cardle continues to run from the committed reference snapshots; its hotspot hint depends on live browser access to the Skycards multipoint endpoint at play time, while completionist mode reads the delayed snapshot published with the static site.

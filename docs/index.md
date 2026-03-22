@@ -24,6 +24,7 @@ This directory is the system of record for durable repository knowledge.
 
 - App structure changes: update `docs/architecture.md`.
 - Completionist snapshot pipeline or deployment-cadence changes: update `docs/architecture.md` and `README.md`.
+- Workflow validation mode changes: update `docs/architecture.md`, `docs/repo-hygiene.md`, and `README.md`.
 - Daily game changes (Navdle, Cardle, or the OurAirports pipeline): update `docs/architecture.md` and `README.md`.
 - Process changes: update `docs/agentic-workflows.md`, `docs/golden-principles.md`, and `AGENTS.md`.
 - New durable reasoning: add or update a decision record in `docs/decisions/`.

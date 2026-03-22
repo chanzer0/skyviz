@@ -48,9 +48,14 @@ jobs:
       - name: Refresh completionist snapshot
         run: python scripts/refresh_completionist_snapshot.py
       - name: Run smoke check
-        run: python scripts/smoke_check.py
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            python scripts/smoke_check.py --mode completionist-only
+          else
+            python scripts/smoke_check.py
+          fi
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: site
 

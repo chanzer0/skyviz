@@ -30,6 +30,7 @@ Use this skill for normal product and maintenance work in this repository. It ke
 ## Verification
 
 - Default offline check: `python scripts/smoke_check.py`
+- Scheduled Pages snapshot-only check: `python scripts/smoke_check.py --mode completionist-only`
 - Repo workflow check: `python scripts/repo_hygiene_check.py`
 - Visual bug check: reproduce with Playwright before edits and confirm with Playwright after edits.
 - For real-data browser validation, prefer the repo-root `skycards_user.json` instead of the built-in example deck unless the task explicitly targets the sample flow.

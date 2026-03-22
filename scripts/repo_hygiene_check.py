@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-REQUIRED_PATHS = [
+CORE_REQUIRED_PATHS = [
     'AGENTS.md',
     'README.md',
     'docs/index.md',
@@ -24,17 +25,36 @@ REQUIRED_PATHS = [
     'site/src/main.js',
     'site/src/data.js',
     'site/src/charts.js',
-    'site/data/reference/models.json',
-    'site/data/reference/airports.json',
-    'site/data/reference/manifest.json',
     'scripts/refresh_completionist_snapshot.py',
     '.github/workflows/ci.yml',
     '.github/workflows/deploy-pages.yml',
 ]
 
+FULL_MODE_ONLY_PATHS = [
+    'site/data/reference/models.json',
+    'site/data/reference/airports.json',
+    'site/data/reference/manifest.json',
+]
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--mode',
+        choices=('full', 'completionist-only'),
+        default='full',
+        help='Validation mode. completionist-only skips gitignored reference artifacts.',
+    )
+    return parser.parse_args()
+
 
 def main() -> int:
-    missing = [path for path in REQUIRED_PATHS if not (REPO_ROOT / path).exists()]
+    args = parse_args()
+    required_paths = list(CORE_REQUIRED_PATHS)
+    if args.mode == 'full':
+        required_paths.extend(FULL_MODE_ONLY_PATHS)
+
+    missing = [path for path in required_paths if not (REPO_ROOT / path).exists()]
     if missing:
         print('repo_hygiene_check: missing required paths', file=sys.stderr)
         for path in missing:

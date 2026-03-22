@@ -66,6 +66,7 @@ Completionist mode does not fetch its upstream live-flight feed directly from th
 - the script writes `site/data/live/completionist-manifest.json` and `site/data/live/completionist-snapshot.json`
 - the browser polls those static artifacts every `60` seconds while completionist mode is enabled and the `Map` tab is active
 - scheduled Pages runs refresh only that snapshot on an approximately `5` minute cadence, so the browser sees a delayed shared feed while the user's collection matching remains local
+- those scheduled Pages runs use `python scripts/smoke_check.py --mode completionist-only`, which validates repo scaffolding, the committed sample payload, and the regenerated live snapshot without requiring the gitignored reference or airport-daily artifacts that the schedule path intentionally skips
 - the snapshot payload keeps only the fields needed for matching and map rendering: flight id, aircraft hex, coordinates, heading, altitude, speed, type code, registration, seen time, origin, destination, flight number, and callsign
 - snapshot metadata keeps only the browser-facing refresh contract: generated time, row count, field order, and refresh cadence
 

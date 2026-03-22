@@ -24,6 +24,6 @@ When those signals appear, prefer repository fixes such as:
 
 ## Lightweight enforcement
 
-- `scripts/repo_hygiene_check.py` verifies the core workflow files exist.
-- `scripts/smoke_check.py` runs the hygiene check and validates the known data artifacts.
+- `scripts/repo_hygiene_check.py` verifies the core workflow files exist, with a reduced `--mode completionist-only` path for snapshot-only Pages runs that intentionally skip gitignored generated reference artifacts.
+- `scripts/smoke_check.py` runs the hygiene check and validates the known data artifacts. Its default `full` mode covers the reference and airport datasets, while `--mode completionist-only` is the scheduled Pages validation path for completionist snapshot republishes.
 - CI should run the smoke check so workflow drift is visible before merge.

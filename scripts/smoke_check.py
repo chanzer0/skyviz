@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 import sys
@@ -7,6 +8,17 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--mode',
+        choices=('full', 'completionist-only'),
+        default='full',
+        help='Validation mode. completionist-only skips reference and airport daily assertions.',
+    )
+    return parser.parse_args()
 
 
 def _load_json(path: Path) -> object:
@@ -27,9 +39,9 @@ def _assert_manifest_dataset(manifest: dict, dataset_key: str, path: Path) -> No
         )
 
 
-def check_repo_hygiene() -> None:
+def check_repo_hygiene(mode: str) -> None:
     result = subprocess.run(
-        [sys.executable, str(REPO_ROOT / 'scripts' / 'repo_hygiene_check.py')],
+        [sys.executable, str(REPO_ROOT / 'scripts' / 'repo_hygiene_check.py'), '--mode', mode],
         cwd=REPO_ROOT,
         check=False,
         capture_output=True,
@@ -197,10 +209,14 @@ def check_completionist_live_data() -> None:
 
 
 def main() -> int:
-    check_repo_hygiene()
+    args = parse_args()
+    check_repo_hygiene(args.mode)
     check_sample_collection()
-    check_reference_data()
-    check_airport_daily_game_data()
+    if args.mode == 'full':
+        check_reference_data()
+        check_airport_daily_game_data()
+    else:
+        print('smoke_check: completionist-only mode; skipped reference and airport daily assertions')
     check_completionist_live_data()
     print('smoke_check: ok')
     return 0
