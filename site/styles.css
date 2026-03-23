@@ -1339,7 +1339,10 @@ code {
 
 .map-completionist-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.95fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(9.75rem, 10.5rem);
+  grid-template-areas:
+    'search sort'
+    'filters filters';
   align-items: end;
   gap: 0.44rem;
   margin-bottom: 0.48rem;
@@ -1348,6 +1351,16 @@ code {
 .completionist-search-control,
 .completionist-sort-control {
   min-width: 0;
+}
+
+.completionist-search-control {
+  grid-area: search;
+}
+
+.completionist-sort-control {
+  grid-area: sort;
+  width: min(100%, 10.5rem);
+  justify-self: end;
 }
 
 .completionist-search-control input {
@@ -1372,8 +1385,9 @@ code {
 .completionist-filter-bar {
   display: flex;
   flex-wrap: wrap;
+  grid-area: filters;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 0.34rem;
 }
 
@@ -6964,6 +6978,10 @@ button.registration-summary-chip {
 
   .map-completionist-toolbar {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      'search'
+      'sort'
+      'filters';
   }
 
   .completionist-filter-bar {
