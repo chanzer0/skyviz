@@ -42,7 +42,7 @@
       crossorigin=""
     >
     <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
-    <link rel="stylesheet" href="./styles.css?v=20260323-completionist-sort-2">
+    <link rel="stylesheet" href="./styles.css?v=20260323-completionist-status-1">
   </head>
   <body>
     <a class="skip-link" href="#dashboard">Skip to dashboard</a>
@@ -406,15 +406,9 @@
                 </div>
                 <div class="map-completionist-summary-strip">
                   <p class="panel-kpi-line map-completionist-status-line" id="map-completionist-status"></p>
-                  <div class="map-completionist-inline-stats" aria-label="Completionist snapshot status">
-                    <span class="map-completionist-inline-stat">
-                      <span class="map-completionist-status-label">Refresh</span>
-                      <strong id="map-completionist-refresh">--</strong>
-                    </span>
-                    <span class="map-completionist-inline-stat">
-                      <span class="map-completionist-status-label">Snapshot</span>
-                      <strong id="map-completionist-updated">--</strong>
-                    </span>
+                  <div class="map-completionist-inline-stats" aria-hidden="true" hidden>
+                    <strong id="map-completionist-refresh">--</strong>
+                    <strong id="map-completionist-updated">--</strong>
                   </div>
                 </div>
                 <div class="map-completionist-toolbar">
@@ -931,7 +925,7 @@
       type="module"
       src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.1.0/model-viewer.min.js"
     ></script>
-  <script type="module" src="./src/main.js?v=20260323-completionist-sort-1"></script>
+    <script type="module" src="./src/main.js?v=20260323-completionist-status-1"></script>
   </body>
 </html>
 

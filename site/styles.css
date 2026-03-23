@@ -1282,12 +1282,10 @@ code {
 }
 
 .map-completionist-summary-strip {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
-  gap: 0.36rem 0.48rem;
   margin-bottom: 0.44rem;
-  padding: 0.56rem 0.66rem;
+  padding: 0.42rem 0.66rem;
   border: 1px solid rgba(20, 45, 70, 0.12);
   border-radius: 13px;
   background:
@@ -1297,44 +1295,14 @@ code {
 
 .map-completionist-status-line {
   margin: 0;
-  font-size: 0.81rem;
-  line-height: 1.32;
-}
-
-.map-completionist-inline-stats {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.3rem;
-}
-
-.map-completionist-inline-stat {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.3rem;
-  min-height: 1.6rem;
-  padding: 0.18rem 0.52rem;
-  border-radius: 999px;
-  border: 1px solid rgba(20, 45, 70, 0.12);
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.map-completionist-inline-stat strong {
-  font-size: 0.8rem;
-  color: var(--ink-900);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: rgba(18, 33, 53, 0.76);
 }
 
 .completionist-dismiss-restore {
   flex: 0 0 auto;
   white-space: nowrap;
-}
-
-.map-completionist-status-label {
-  font-size: 0.6rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(18, 33, 53, 0.58);
 }
 
 .map-completionist-toolbar {

@@ -5235,6 +5235,7 @@ function clearDashboardPanels() {
   elements.mapCompletionistStatus.textContent = '';
   elements.mapCompletionistRefresh.textContent = '--';
   elements.mapCompletionistUpdated.textContent = '--';
+  elements.mapCompletionistStatus.title = '';
   if (elements.mapCompletionistSearch) {
     elements.mapCompletionistSearch.value = '';
   }
@@ -7011,33 +7012,27 @@ function focusCompletionistFlight(model, flightId, options = {}) {
   }
 }
 
-function buildCompletionistStatusMessage(visibleMatches, visibleCounts) {
-  const activeFilters = getCompletionistActiveFilterValues();
+function buildCompletionistStatusMessage(generatedAtMillis, snapshotAgeMillis, isStale) {
   if (state.map.completionist.loading && !state.map.completionist.snapshot) {
-    return 'Loading the latest completionist snapshot...';
+    return 'Refreshing now. Waiting for the first shared snapshot.';
   }
   if (state.map.completionist.error && !state.map.completionist.snapshot) {
-    return `Live snapshot unavailable. ${state.map.completionist.error}`;
-  }
-  if (state.map.completionist.error) {
-    return `Using the last loaded snapshot. Latest refresh failed: ${state.map.completionist.error}`;
+    return `Refresh unavailable. ${state.map.completionist.error}`;
   }
   if (!state.map.completionist.snapshot) {
-    return 'Waiting for the first completionist snapshot.';
+    return 'Waiting for the first shared snapshot.';
   }
-  if (!activeFilters.length) {
-    return 'Enable Missing airport or New card to show live completionist targets.';
+  const refreshLabel = state.map.completionist.loading
+    ? 'Refreshing now'
+    : `Refresh in ${formatShortDuration(state.map.completionist.secondsUntilRefresh)}`;
+  const snapshotLabel = generatedAtMillis
+    ? `Snapshot ${formatRelativeAgeFromMillis(snapshotAgeMillis)}${isStale ? ' (stale)' : ''}`
+    : 'Snapshot pending';
+  const parts = [refreshLabel, snapshotLabel];
+  if (state.map.completionist.error) {
+    parts.push('Last refresh failed');
   }
-  if (!visibleMatches.length) {
-    if (!getActiveCompletionistMatches().length && getCompletionistDismissedCounts().total) {
-      return 'All current completionist matches are hidden for this browser session.';
-    }
-    if (getCompletionistSearchTokens().length) {
-      return 'No live flights match the current completionist search and target filters.';
-    }
-    return 'No live flights in the latest shared snapshot match your current missing airports or cards.';
-  }
-  return `${formatNumber(visibleMatches.length)} flights across ${buildCompletionistTargetSummary(visibleCounts, state.map.completionist.filters)}.`;
+  return `${parts.join('. ')}.`;
 }
 
 function buildCompletionistListRenderSignature(matches) {
@@ -7145,14 +7140,15 @@ function renderMapCompletionistPanel(model) {
   const generatedAtMillis = getCompletionistSnapshotGeneratedAtMillis();
   const snapshotAgeMillis = generatedAtMillis ? Math.max(Date.now() - generatedAtMillis, 0) : null;
   const isStale = Number.isFinite(snapshotAgeMillis) && snapshotAgeMillis > (getCompletionistStaleSeconds() * 1000);
-  elements.mapCompletionistStatus.textContent = buildCompletionistStatusMessage(visibleMatches, visibleCounts);
-  elements.mapCompletionistRefresh.textContent = state.map.completionist.loading
-    ? 'Updating...'
-    : formatShortDuration(state.map.completionist.secondsUntilRefresh);
+  elements.mapCompletionistStatus.textContent = buildCompletionistStatusMessage(
+    generatedAtMillis,
+    snapshotAgeMillis,
+    isStale,
+  );
   elements.mapCompletionistUpdated.textContent = generatedAtMillis
     ? `${formatRelativeAgeFromMillis(snapshotAgeMillis)}${isStale ? ' · stale' : ''}`
     : '--';
-  elements.mapCompletionistUpdated.title = state.map.completionist.manifest?.generatedAt
+  elements.mapCompletionistStatus.title = state.map.completionist.manifest?.generatedAt
     ? formatCompletionistTimestamp(state.map.completionist.manifest.generatedAt)
     : '';
   if (elements.mapCompletionistSearch) {
