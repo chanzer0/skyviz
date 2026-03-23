@@ -1,0 +1,8 @@
+{
+  // Use this minimal config for one-off resource provisioning commands
+  // so Wrangler targets the locked account without validating the full
+  // worker runtime bindings during bucket/queue creation.
+  "name": "skyviz-completionist-live-provision",
+  "account_id": "172da47da00e3b33810d2e9c73c9a0b9",
+  "compatibility_date": "2026-03-23"
+}

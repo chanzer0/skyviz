@@ -15,16 +15,18 @@ Read `docs/index.md` first when you need the current system-of-record doc map.
 - `site/src/data.js`: payload validation, enrichment, aggregation, and dashboard model creation.
 - `site/data/reference/`: committed Skycards reference snapshots and manifest.
 - `site/data/airports/`: generated OurAirports CSV snapshots plus the Navdle daily manifest and dataset.
-- `site/data/live/`: completionist-mode live snapshot artifacts published by the Pages workflow.
+- `site/data/runtime-config.json`: production completionist manifest endpoint used by the browser.
+- `site/data/live/`: local fixture completionist snapshot artifacts for preview and offline validation.
+- `scripts/serve_local_preview.py`: localhost preview server that serves `site/` plus the repo-root `skycards_user.json` fixture.
 - `scripts/refresh_reference_data.py`: official reference refresh path.
 - `scripts/refresh_airport_game_data.py`: official OurAirports refresh/build path for the Navdle airport game.
-- `scripts/refresh_completionist_snapshot.py`: official delayed live-flight snapshot refresh path for completionist mode.
+- `scripts/refresh_completionist_snapshot.py`: local delayed live-flight fixture generator for completionist mode.
+- `scripts/check_cloudflare_account.py`: Wrangler/account preflight for Cloudflare write operations.
 
 ## Deployment and scheduling
 
-- `.github/workflows/deploy-pages.yml`: full Pages deploy plus the legacy scheduled fallback path.
-- `.github/workflows/refresh-completionist-pages.yml`: lightweight completionist-only Pages deploy for external dispatches.
-- `workers/completionist-dispatch/`: Cloudflare cron worker that dispatches the completionist workflow every five minutes.
+- `.github/workflows/deploy-pages.yml`: GitHub Pages deploy for the static shell and slower-moving generated artifacts.
+- `workers/completionist-live/`: Cloudflare-native completionist cron, workflow, queue consumer, coordinator, and live endpoint.
 
 ## Presentation
 

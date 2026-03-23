@@ -42,7 +42,7 @@
       crossorigin=""
     >
     <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
-    <link rel="stylesheet" href="./styles.css?v=20260322-completionist-ui-3">
+  <link rel="stylesheet" href="./styles.css?v=20260323-completionist-destination-1">
   </head>
   <body>
     <a class="skip-link" href="#dashboard">Skip to dashboard</a>
@@ -385,7 +385,7 @@
               </article>
 
               <article id="map-completionist-panel" class="panel map-completionist-panel" hidden>
-                <div class="section-head compact map-drill-head">
+                <div class="section-head compact map-drill-head map-completionist-head">
                   <div>
                     <p class="eyebrow">Completionist mode</p>
                     <h3>Live flight hunter</h3>
@@ -394,23 +394,22 @@
                     Refresh now
                   </button>
                 </div>
-                <p class="map-drill-helper">
-                  Shared live-flight snapshots refresh about every five minutes. Matching stays local to this browser and never uploads your collection.
-                </p>
-                <p class="panel-kpi-line" id="map-completionist-status"></p>
-                <div class="map-completionist-status-grid">
-                  <div class="map-completionist-status-card">
-                    <span class="map-completionist-status-label">Browser refresh</span>
-                    <strong id="map-completionist-refresh">--</strong>
-                  </div>
-                  <div class="map-completionist-status-card">
-                    <span class="map-completionist-status-label">Snapshot age</span>
-                    <strong id="map-completionist-updated">--</strong>
+                <div class="map-completionist-summary-strip">
+                  <p class="panel-kpi-line map-completionist-status-line" id="map-completionist-status"></p>
+                  <div class="map-completionist-inline-stats" aria-label="Completionist snapshot status">
+                    <span class="map-completionist-inline-stat">
+                      <span class="map-completionist-status-label">Refresh</span>
+                      <strong id="map-completionist-refresh">--</strong>
+                    </span>
+                    <span class="map-completionist-inline-stat">
+                      <span class="map-completionist-status-label">Snapshot</span>
+                      <strong id="map-completionist-updated">--</strong>
+                    </span>
                   </div>
                 </div>
                 <div class="completionist-dismiss-shell">
                   <p id="map-completionist-dismiss-summary" class="completionist-dismiss-summary">
-                    Use Hide airport or Hide aircraft on a live card to clear things you already handled. Hidden targets stay out of view for this browser session only.
+                    Hide airport or Hide aircraft to clear handled targets for this browser session.
                   </p>
                   <button
                     id="map-completionist-restore-button"
@@ -423,11 +422,11 @@
                 </div>
                 <div class="map-completionist-toolbar">
                   <label class="control-field completion-control completionist-search-control">
-                    <span>Search live matches</span>
+                    <span class="sr-only">Search live matches</span>
                     <input
                       id="map-completionist-search"
                       type="search"
-                      placeholder="ICAO, airport, callsign, registration"
+                      placeholder="Registration, type, airport, callsign"
                     >
                   </label>
                   <div
@@ -927,7 +926,7 @@
       type="module"
       src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.1.0/model-viewer.min.js"
     ></script>
-    <script type="module" src="./src/main.js?v=20260323-completionist-reg-filter-1"></script>
+  <script type="module" src="./src/main.js?v=20260323-completionist-destination-1"></script>
   </body>
 </html>
 

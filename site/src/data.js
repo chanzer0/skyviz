@@ -142,6 +142,9 @@ const airportGameState = {
   manifestPromise: null,
   dataPromise: null,
 };
+const runtimeConfigState = {
+  promise: null,
+};
 const SITE_BASE_URL = new URL('../', import.meta.url);
 
 function resolveSiteAssetUrl(path) {
@@ -279,19 +282,69 @@ export async function loadAirportGameData() {
 }
 
 export async function fetchCompletionistSnapshotData() {
-  const manifest = await fetchJson(resolveSiteAssetUrl('data/live/completionist-manifest.json'));
-  const snapshotPath = resolveLiveDatasetPath(manifest?.snapshotPath || './data/live/completionist-snapshot.json');
+  const manifestUrl = await resolveCompletionistManifestUrl();
+  const manifest = await fetchJson(manifestUrl);
+  const snapshotPath = resolveLiveDatasetPath(
+    manifest?.snapshotPath || './completionist-snapshot.json',
+    manifestUrl,
+  );
   const payload = await fetchJson(snapshotPath);
   const fields = asArray(payload?.fields).map((field) => sanitizeText(field));
   const rows = asArray(payload?.rows)
     .map((row) => normalizeCompletionistFlightRow(row, fields))
     .filter(Boolean);
   return {
+    manifestUrl,
     manifest,
     payload,
     fields,
     rows,
   };
+}
+
+async function loadRuntimeConfig() {
+  if (!runtimeConfigState.promise) {
+    runtimeConfigState.promise = fetchJsonOptional(resolveSiteAssetUrl('data/runtime-config.json'))
+      .catch(() => null);
+  }
+  return runtimeConfigState.promise;
+}
+
+function getCompletionistManifestOverride() {
+  if (typeof window !== 'object' || !(window.location instanceof Location)) {
+    return '';
+  }
+  try {
+    return sanitizeText(new URL(window.location.href).searchParams.get('completionistManifestUrl'));
+  } catch (_error) {
+    return '';
+  }
+}
+
+function shouldPreferLocalCompletionistManifest() {
+  if (typeof window !== 'object' || !(window.location instanceof Location)) {
+    return false;
+  }
+  return (
+    window.location.protocol === 'file:'
+    || window.location.hostname === 'localhost'
+    || window.location.hostname === '127.0.0.1'
+  );
+}
+
+async function resolveCompletionistManifestUrl() {
+  const override = getCompletionistManifestOverride();
+  if (override) {
+    return override;
+  }
+  if (shouldPreferLocalCompletionistManifest()) {
+    return resolveSiteAssetUrl('data/live/completionist-manifest.json');
+  }
+  const runtimeConfig = await loadRuntimeConfig();
+  const configuredPath = sanitizeText(
+    runtimeConfig?.completionist?.manifestUrl || runtimeConfig?.completionistManifestUrl,
+  );
+  return configuredPath || resolveSiteAssetUrl('data/live/completionist-manifest.json');
 }
 
 function getManifestDatasetPath(manifest, datasetKey, fallbackPath = null) {
@@ -350,17 +403,24 @@ function resolveAirportGameDatasetPath(path) {
   return resolveSiteAssetUrl(`data/airports/${normalizedPath}`);
 }
 
-function resolveLiveDatasetPath(path) {
+function resolveLiveDatasetPath(path, manifestUrl = resolveSiteAssetUrl('data/live/completionist-manifest.json')) {
   const normalizedPath = sanitizeText(path);
   if (!normalizedPath) {
     return '';
   }
   if (
     normalizedPath.startsWith('http://')
-    || normalizedPath.startsWith('https://')
-    || normalizedPath.startsWith('/')
+      || normalizedPath.startsWith('https://')
+      || normalizedPath.startsWith('/')
   ) {
     return normalizedPath;
+  }
+  if (manifestUrl) {
+    try {
+      return new URL(normalizedPath, manifestUrl).toString();
+    } catch (_error) {
+      // Fall through to legacy path resolution.
+    }
   }
   if (normalizedPath.startsWith('./data/live/')) {
     return resolveSiteAssetUrl(normalizedPath.slice(2));

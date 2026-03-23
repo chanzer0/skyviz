@@ -1,0 +1,72 @@
+{
+  "name": "skyviz-completionist-live",
+  // Cloudflare operations for this repository must target the
+  // seansailer28@gmail.com account.
+  "account_id": "172da47da00e3b33810d2e9c73c9a0b9",
+  "main": "src/index.js",
+  "compatibility_date": "2026-03-23",
+  "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+  "workflows": [
+    {
+      "name": "skyviz-completionist-refresh",
+      "binding": "COMPLETIONIST_REFRESH_WORKFLOW",
+      "class_name": "CompletionistRefreshWorkflow"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RUN_COORDINATOR",
+        "class_name": "CompletionistRunCoordinator"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["CompletionistRunCoordinator"]
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "COMPLETIONIST_BUCKET",
+      "bucket_name": "skyviz-completionist-live"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "TILE_QUEUE",
+        "queue": "skyviz-completionist-tile-fetch"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "skyviz-completionist-tile-fetch",
+        "max_batch_size": 8,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "skyviz-completionist-tile-dlq"
+      }
+    ]
+  },
+  "vars": {
+    "COMPLETIONIST_FEED_URL": "https://data-cloud.flightradar24.com/zones/fcgi/feed.js",
+    "COMPLETIONIST_INITIAL_TILE_DEGREES": "60",
+    "COMPLETIONIST_MIN_TILE_DEGREES": "7.5",
+    "COMPLETIONIST_MAX_REQUESTS": "96",
+    "COMPLETIONIST_REQUEST_DELAY_SECONDS": "0.2",
+    "COMPLETIONIST_UI_REFRESH_INTERVAL_SECONDS": "60",
+    "COMPLETIONIST_PUBLISH_INTERVAL_SECONDS": "300",
+    "COMPLETIONIST_STALE_AFTER_SECONDS": "900",
+    "COMPLETIONIST_RUN_LOCK_TIMEOUT_SECONDS": "1800",
+    "COMPLETIONIST_RUN_RETENTION_HOURS": "72",
+    "COMPLETIONIST_WORKFLOW_POLL_SECONDS": "10"
+  }
+}

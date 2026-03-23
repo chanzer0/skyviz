@@ -5,7 +5,7 @@
 - Update the relevant files in `site/`.
 - Update `README.md` if usage or local preview expectations changed.
 - Run `python scripts/smoke_check.py`.
-- When real browser data matters, validate with the repo-root `skycards_user.json`.
+- When real browser data matters, start `python scripts/serve_local_preview.py` and validate with the repo-root `skycards_user.json` fixture (`?devLoad=skycards_user` or manual upload). Do not use the built-in example deck.
 - For visual bug fixes, reproduce the bug with Playwright before edits and confirm the fix with Playwright after edits.
 - Use a browser pass when the environment supports it.
 
@@ -37,4 +37,5 @@
 - Update the relevant `docs/` surfaces.
 - Update `AGENTS.md` if the routing map changed.
 - Update the repo-local skill when the standard execution path changed.
+- If Cloudflare is involved, verify `python scripts/check_cloudflare_account.py` before any write command and keep the account lock docs in sync.
 - Run `python scripts/repo_hygiene_check.py`.

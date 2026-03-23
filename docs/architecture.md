@@ -11,7 +11,8 @@
 - Continent lookup map in `site/src/continents.js`.
 - SVG and HTML chart helpers in `site/src/charts.js`.
 - Generated OurAirports snapshots and daily-game dataset in `site/data/airports/`.
-- Generated completionist-mode live snapshot artifacts in `site/data/live/`.
+- Production completionist runtime configuration in `site/data/runtime-config.json`.
+- Local/offline completionist fixture artifacts in `site/data/live/`.
 - Built-in example collection deck in `site/data/example/try_now_user.json`.
 - Local-only SQLite explorer in `site/tools/aircraft-db-explorer.html` for inspecting `aircraft_data.db` in-browser.
 - Local-only inference reviewer in `site/tools/inferred-mapping-reviewer.html` for medium/ambiguous mapping triage.
@@ -21,15 +22,16 @@
 - `model-viewer` loaded from CDN in `site/index.html` for the aircraft detail modal's default GLB preview.
 - Reference snapshot refresh tooling in `scripts/refresh_reference_data.py`.
 - OurAirports refresh/build tooling for the daily airport game in `scripts/refresh_airport_game_data.py`.
-- Completionist snapshot refresh tooling in `scripts/refresh_completionist_snapshot.py`.
+- Completionist local fixture refresh tooling in `scripts/refresh_completionist_snapshot.py`.
+- Repo-aware localhost preview server in `scripts/serve_local_preview.py`.
+- Cloudflare account preflight tooling in `scripts/check_cloudflare_account.py`.
 - Model registration-count refresh tooling in `scripts/refresh_model_registration_counts.py`.
 - Aircraft `aircraftId` lookup builder in `scripts/build_aircraft_lookup_from_db.py` (from local `aircraft_data.db`).
 - Inference/review pipeline for unresolved registration rows in `scripts/build_inferred_aircraft_mappings.py`.
 - Resolved-lookup merge pipeline in `scripts/build_resolved_aircraft_lookup.py`.
 - Offline repo validation in `scripts/repo_hygiene_check.py` and `scripts/smoke_check.py`.
 - GitHub Pages deployment in `.github/workflows/deploy-pages.yml`.
-- Lightweight completionist-only Pages refresh workflow in `.github/workflows/refresh-completionist-pages.yml`.
-- Cloudflare scheduler worker in `workers/completionist-dispatch/`.
+- Cloudflare completionist worker runtime in `workers/completionist-live/`.
 
 ## Data flow
 
@@ -38,11 +40,12 @@
 3. For `Navdle`, the browser loads the generated airport manifest and derived daily-game dataset from `site/data/airports/`, restores the current UTC day's guesses from browser `localStorage`, and picks the airport of the day deterministically from the generated pool.
 4. For `Cardle`, the browser loads the committed Skycards reference snapshots, derives a guessable aircraft-model pool from `models.json`, restores the current UTC day's guesses from browser `localStorage`, and picks the model of the day deterministically from that reference pool.
 5. The user can alternatively upload a Skycards export JSON file or use the landing-page `View Example Dashboard` button to load a built-in sample deck.
-6. Optional: if the user enables local persistence, the active uploaded export is cached in browser storage on that device (IndexedDB first, with legacy `localStorage` migration) and can be restored on next visit.
-7. The browser validates the payload shape and loads static reference snapshots (`models.json`, `airports.json`, and any optional datasets listed in `manifest.json`).
-8. Aircraft cards are enriched by `card.modelId -> models.rows[].id`.
-9. Airport unlocks are enriched by `unlockedAirportIds[] -> airports.rows[].id`.
-10. The app computes tab-specific view models in memory:
+6. During localhost preview started through `scripts/serve_local_preview.py`, the browser can also auto-load the repo-root `skycards_user.json` fixture with `?devLoad=skycards_user`; that path exists only for local real-data validation and should be used instead of the example deck when testing live/completionist behavior.
+7. Optional: if the user enables local persistence, the active uploaded export is cached in browser storage on that device (IndexedDB first, with legacy `localStorage` migration) and can be restored on next visit.
+8. The browser validates the payload shape and loads static reference snapshots (`models.json`, `airports.json`, and any optional datasets listed in `manifest.json`).
+9. Aircraft cards are enriched by `card.modelId -> models.rows[].id`.
+10. Airport unlocks are enriched by `unlockedAirportIds[] -> airports.rows[].id`.
+11. The app computes tab-specific view models in memory:
   - one airport-daily game state machine for `Navdle`, with hero-search state, guesses-left tracking, guess history, a pinned best-so-far comparison tracker, per-category comparison tiles, viewport-aware clue explainers, a progressive multi-hint queue, a UTC weekly `wildcard` / `hub` / `regional` cadence, streak statistics, emoji share-grid generation with a direct `#navdle` link for both solved and revealed boards, and legacy `#tab-daily` hash compatibility
 - one aircraft-daily game state machine for `Cardle`, with hero-search state, a tighter shared Navdle-style guesses-left strip, eight-guess tracking, a pinned best-so-far comparison intel card with redacted manufacturer/name clues, catchable-registration tracking in place of height, image-forward history rows with denser stat tiles, a wider registration-origin visual stage, on-surface overlay status chips instead of separate stage headers/notes, eight-stat higher-lower comparison feedback, staged hotspot/model reveals, Navdle-style solved-state celebration and share-action treatment, live share-grid generation with a direct `#cardle` link, and a runtime fetch for registration-origin hotspots after the map hint unlocks
   - airport capture progress across all committed reference airports
@@ -54,27 +57,25 @@
   - aircraft image candidates resolved as tier-aware CDN URLs using `*_md.png` first, then `cyber` tier + model metadata alias fallback (`imageOverride`, `images[]`)
   - aircraft detail modal metadata slices for engine profile, performance, airframe geometry, military status, and seasonal span
   - aircraft detail media candidates resolved from optimized Skycards CDN GLB assets
-  - completionist-mode flight matches built by comparing the shared delayed snapshot in `site/data/live/` against the current user's missing airport unlocks and missing aircraft models entirely in-browser after discarding live rows without usable registrations, with completionist summary/filter counts tracking unique airport and card targets instead of duplicate flight rows
+  - completionist-mode flight matches built by comparing the shared delayed snapshot from the production Cloudflare manifest endpoint (or the local `site/data/live/` fixture path on localhost) against the current user's missing airport unlocks and missing aircraft models entirely in-browser after discarding live rows without usable registrations, with completionist summary/filter counts tracking unique airport and card targets instead of duplicate flight rows
 11. The loaded UI transitions to a tabbed dashboard (`Navdle`, `Cardle`, `Map`, and `Deck`) without sending upload data to any server. The two daily tabs remain available even when no collection upload is active.
 
 ## Completionist live snapshot contract
 
 Completionist mode does not fetch its upstream live-flight feed directly from the browser.
 
-- `scripts/refresh_completionist_snapshot.py` runs an adaptive world sweep against the upstream completionist feed during GitHub Actions builds
-- the script requests bounded tiles with `limit=5000`, `air=1`, `gnd=0`, and the other feed flags needed for the live aircraft view
-- the sweep starts with coarse world tiles, treats `1500` returned rows as a cap signal, and recursively splits only capped tiles until they fall below the cap, hit the minimum tile size, or hit the per-run request budget
-- rows are merged and deduped by `flightId` before publish because adjacent tiles overlap and aircraft move while the sweep is in flight
-- the script writes `site/data/live/completionist-manifest.json` and `site/data/live/completionist-snapshot.json`
-- the browser polls those static artifacts every `60` seconds while completionist mode is enabled and the `Map` tab is active
-- the repository includes a lightweight completionist-only Pages workflow at `.github/workflows/refresh-completionist-pages.yml`, designed for external `workflow_dispatch` triggers that refresh the snapshot every `5` minutes
-- the repository also keeps the legacy GitHub `schedule` path in `.github/workflows/deploy-pages.yml` as a fallback until the repo variable `USE_EXTERNAL_COMPLETIONIST_SCHEDULER` is set to `true`
-- once that repo variable is `true`, scheduled runs of `.github/workflows/deploy-pages.yml` skip their schedule path so the external scheduler becomes the only repeating completionist trigger
-- both Pages workflows share the same per-ref concurrency lane without cancel-in-progress so a completionist refresh queues behind an active full deploy instead of canceling it mid-run
-- those scheduled Pages runs restore cached generated reference and airport artifacts before deploy so the static app keeps its upload and daily-game data even when the schedule path only refreshes the live snapshot
-- if that cache is cold, the schedule path falls back to rebuilding the required reference and airport artifacts before publish
-- the repo includes a Cloudflare Worker project in `workers/completionist-dispatch/` that dispatches the lightweight workflow on a `*/5 * * * *` cron once deployed and given a GitHub workflow-dispatch token
-- both the lightweight workflow and the legacy schedule path use `python scripts/smoke_check.py --mode completionist-only`, which validates repo scaffolding, the committed sample payload, and the regenerated live snapshot while tolerating optional generated artifacts that are not needed for the snapshot-only path
+- production refreshes run on Cloudflare through `workers/completionist-live/`
+- a Worker `Cron Trigger` fires every `5` minutes and starts one `Workflow` run for that schedule slot
+- the workflow seeds world tiles onto a `Queue`; queue consumers fetch the upstream live-flight feed by bounds, normalize rows, and write per-tile artifacts to `R2`
+- a `Durable Object` coordinator owns tile leases, retry-safe counters, split decisions, budget exhaustion, and single-writer publish readiness
+- capped tiles split recursively until they fall below the cap, hit the minimum tile size, or exhaust the per-run request budget
+- finalized rows are merged and deduped by `flightId` before publish because adjacent tiles overlap and aircraft move while the sweep is in flight
+- published artifacts are written to versioned `R2` keys, and the stable manifest key is updated last so the browser's `manifest -> snapshot` fetch stays consistent
+- per-tile `R2` artifacts are deleted after a successful publish, and versioned run artifacts are pruned on a short retention window so the bucket does not accumulate unnecessary storage bloat
+- the browser resolves the production manifest URL from `site/data/runtime-config.json`
+- when served from `localhost`, `127.0.0.1`, or `file:`, the browser ignores the production endpoint and prefers `site/data/live/completionist-manifest.json`
+- `scripts/refresh_completionist_snapshot.py` still runs the same adaptive tiled sweep locally and writes `site/data/live/completionist-manifest.json` plus `site/data/live/completionist-snapshot.json` for preview and offline validation
+- the repository requires `python scripts/check_cloudflare_account.py` before any Cloudflare write operation; that guardrail verifies Wrangler auth is on `seansailer28@gmail.com` / `172da47da00e3b33810d2e9c73c9a0b9`
 - the snapshot payload keeps only the fields needed for matching and map rendering: flight id, aircraft hex, coordinates, heading, altitude, speed, type code, registration, seen time, origin, destination, flight number, and callsign
 - snapshot metadata keeps only the browser-facing refresh contract: generated time, row count, field order, and refresh cadence
 
@@ -127,7 +128,8 @@ The browser does not parse the raw CSVs directly during normal gameplay. It load
 - Navdle and Cardle guesses, reveal state, and streaks are browser-local (`localStorage`) only.
 - Manual registration overrides are also browser-local (`localStorage`) and can be exported/imported for backup and restore.
 - Reference snapshots are committed artifacts so the site works without a runtime API dependency.
-- Completionist mode reads a delayed shared flight snapshot from GitHub Pages, but it still matches that snapshot against the user's collection locally in-browser.
+- Completionist mode reads a delayed shared flight snapshot from Cloudflare in production, or from local fixtures during preview, but it still matches that snapshot against the user's collection locally in-browser.
+- Localhost preview may expose the repo-root `skycards_user.json` fixture through `scripts/serve_local_preview.py` so browser automation can validate real collection behavior without falling back to the built-in example deck.
 - Cardle's hotspot hint is the only direct browser fetch to an external gameplay API, and it happens only after the in-game unlock threshold is reached.
 - There is no authentication, persistence layer, or custom backend.
 
@@ -141,13 +143,16 @@ The browser does not parse the raw CSVs directly during normal gameplay. It load
 - `site/src/continents.js`: country-to-continent mapping used for airport continent progress.
 - `site/src/charts.js`: stacked ribbons, bars, scatter plots, and geo-style plots.
 - `site/data/airports/`: generated OurAirports CSV snapshots plus the derived airport daily manifest and dataset.
-- `site/data/live/`: generated completionist-mode flight snapshot and manifest.
+- `site/data/runtime-config.json`: production completionist manifest endpoint configuration.
+- `site/data/live/`: local completionist fixture snapshot and manifest.
+- `scripts/serve_local_preview.py`: serves `site/` plus the repo-root `skycards_user.json` fixture for localhost validation.
 - `site/tools/aircraft-db-explorer.html`: local SQLite database explorer UI.
 - `site/tools/inferred-mapping-reviewer.html`: local review UI for inferred mapping decisions.
 - `site/data/reference/`: committed reference snapshots and manifest.
 - `scripts/refresh_reference_data.py`: official snapshot refresh path.
 - `scripts/refresh_airport_game_data.py`: refreshes OurAirports source CSVs and rebuilds the daily-game dataset.
-- `scripts/refresh_completionist_snapshot.py`: fetches and reduces the completionist-mode live flight snapshot for Pages deployment.
+- `scripts/refresh_completionist_snapshot.py`: fetches and reduces the completionist-mode live flight snapshot for local fixture generation.
+- `scripts/check_cloudflare_account.py`: verifies Wrangler auth and the locked Cloudflare account before write operations.
 - `scripts/refresh_model_registration_counts.py`: refreshes per-model total registration counts.
 - `scripts/build_aircraft_lookup_from_db.py`: builds `aircraftId` to model lookup from SQLite data.
 - `scripts/build_inferred_aircraft_mappings.py`: generates inferred type-code artifacts and manual-review queues for unresolved rows.

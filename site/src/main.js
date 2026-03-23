@@ -8,7 +8,7 @@ import {
   loadReferenceData,
   loadReferenceManifest,
   parseUserCollection,
-} from './data.js?v=20260321-completionist-2';
+} from './data.js?v=20260323-cloudflare-live-1';
 import {
   DAILY_GAME_NAME,
   buildAirportGuessComparison,
@@ -218,6 +218,10 @@ const DAILY_GAME_HASH = '#navdle';
 const CARDLE_GAME_HASH = CARDLE_HASH;
 const LEGACY_DAILY_GAME_HASHES = new Set(['#tab-daily']);
 const EXAMPLE_DECK_PATH = './data/example/try_now_user.json';
+const LOCAL_PREVIEW_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+const LOCAL_REAL_DATA_QUERY_PARAM = 'devLoad';
+const LOCAL_REAL_DATA_QUERY_VALUE = 'skycards_user';
+const LOCAL_REAL_DATA_PATH = '/skycards_user.json';
 const COMPLETION_SORT_CATEGORIES = new Set(['percent', 'total', 'captured', 'name']);
 const COMPLETION_SORT_DIRECTIONS = new Set(['asc', 'desc']);
 const LEAFLET_TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
@@ -423,10 +427,13 @@ const state = {
       secondsUntilRefresh: COMPLETIONIST_DEFAULT_BROWSER_REFRESH_SECONDS,
       requestToken: 0,
       layer: null,
+      focusedDestinationLayer: null,
       markersByFlightId: new Map(),
       hasRenderedView: false,
       markerAssetStatusByTypeCode: new Map(),
       markerRefreshQueued: false,
+      popupCloseResetSuppressed: false,
+      popupCloseResetTimer: null,
       listRenderSignature: '',
     },
   },
@@ -5217,6 +5224,7 @@ function setAircraftDetailModalOpen(isOpen, options = {}) {
 }
 
 function clearDashboardPanels() {
+  elements.mapLegend.hidden = false;
   elements.mapLegend.innerHTML = '';
   elements.mapAirportKpi.textContent = '';
   elements.mapCompletionistStatus.textContent = '';
@@ -5229,7 +5237,7 @@ function clearDashboardPanels() {
     elements.mapCompletionistFilterBar.innerHTML = '';
   }
   if (elements.mapCompletionistDismissSummary) {
-    elements.mapCompletionistDismissSummary.textContent = 'Use Hide airport or Hide aircraft on a live card to clear things you already handled. Hidden targets stay out of view for this browser session only.';
+    elements.mapCompletionistDismissSummary.textContent = 'Hide airport or Hide aircraft to clear handled targets for this browser session.';
   }
   if (elements.mapCompletionistRestoreButton) {
     elements.mapCompletionistRestoreButton.hidden = true;
@@ -6175,11 +6183,11 @@ function formatCompletionistHiddenLabel(count, singular, plural) {
 
 function buildCompletionistDismissSummaryText(model) {
   if (!model) {
-    return 'Use Hide airport or Hide aircraft on a live card to clear things you already handled. Hidden targets stay out of view for this browser session only.';
+    return 'Hide airport or Hide aircraft to clear handled targets for this browser session.';
   }
   const counts = getCompletionistDismissedCounts();
   if (!counts.total) {
-    return 'Use Hide airport or Hide aircraft on a live card to clear things you already handled. Hidden targets stay out of view for this browser session only.';
+    return 'Hide airport or Hide aircraft to clear handled targets for this browser session.';
   }
   const parts = [];
   if (counts.airport) {
@@ -6191,7 +6199,7 @@ function buildCompletionistDismissSummaryText(model) {
   const hiddenLabel = parts.length > 1
     ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
     : parts[0];
-  return `Hidden this session: ${hiddenLabel}. Restore hidden matches to bring them back.`;
+  return `Hidden this session: ${hiddenLabel}.`;
 }
 
 function getSearchFilteredCompletionistMatches() {
@@ -6331,30 +6339,13 @@ function buildCompletionistFlightFr24Url(match) {
 
 function buildCompletionistReasonChips(match) {
   return [
-    match.hasMissingDestination ? '<span class="completionist-flight-chip is-airport">Missing destination</span>' : '',
+    match.hasMissingDestination ? '<span class="completionist-flight-chip is-airport">Missing airport</span>' : '',
     match.hasNewCard ? '<span class="completionist-flight-chip is-card">New card</span>' : '',
   ].filter(Boolean).join('');
 }
 
 function getCompletionistMatchTone(match) {
   return getCompletionistMatchKind(match) || 'neutral';
-}
-
-function getCompletionistMatchLabel(match, isSelected = false) {
-  if (isSelected) {
-    return 'Focused';
-  }
-  const tone = getCompletionistMatchTone(match);
-  if (tone === 'both') {
-    return 'Dual match';
-  }
-  if (tone === 'airport') {
-    return 'Airport gap';
-  }
-  if (tone === 'card') {
-    return 'New card';
-  }
-  return 'Live match';
 }
 
 function buildCompletionistReasonNotes(match) {
@@ -6366,6 +6357,154 @@ function buildCompletionistReasonNotes(match) {
     noteParts.push(`New card: ${match.typeCode || 'Unknown ICAO'} - ${match.modelLabel}`);
   }
   return noteParts;
+}
+
+function buildCompletionistAircraftSummary(match) {
+  const typeCode = sanitizeText(match?.typeCode);
+  const modelLabel = sanitizeText(match?.modelLabel);
+  if (typeCode && modelLabel) {
+    return `${modelLabel} (${typeCode})`;
+  }
+  return modelLabel || typeCode || 'Unknown aircraft';
+}
+
+function buildCompletionistPrimaryLabel(match) {
+  return normalizeCompletionistRegistration(match?.registration)
+    || sanitizeText(match?.displayFlightLabel)
+    || sanitizeText(match?.typeCode)
+    || 'Unknown aircraft';
+}
+
+function buildCompletionistSecondaryLabel(match) {
+  const primary = buildCompletionistPrimaryLabel(match).toUpperCase();
+  const candidates = [
+    sanitizeText(match?.flightNumber),
+    sanitizeText(match?.callsign),
+    sanitizeText(match?.displayFlightLabel),
+  ];
+  return candidates.find((candidate) => candidate && candidate.toUpperCase() !== primary) || '';
+}
+
+function buildCompletionistRegistrationSummary(match) {
+  const registration = normalizeCompletionistRegistration(match?.registration);
+  const callsign = sanitizeText(match?.callsign);
+  if (registration && callsign && callsign.toUpperCase() !== registration.toUpperCase()) {
+    return `${registration} (${callsign})`;
+  }
+  return registration || callsign || 'Registration unavailable';
+}
+
+function buildCompletionistRouteCode(airport, fallbackCode = '') {
+  const iata = sanitizeText(airport?.iata).toUpperCase();
+  if (iata) {
+    return iata;
+  }
+  const fallback = sanitizeText(fallbackCode).toUpperCase();
+  return fallback.length === 3 ? fallback : 'N/A';
+}
+
+function buildCompletionistRouteName(airport, fallbackCode = '') {
+  const airportName = sanitizeText(airport?.name);
+  if (airportName) {
+    return airportName;
+  }
+  const fallback = buildCompletionistRouteCode(airport, fallbackCode);
+  return fallback === 'N/A' ? 'Airport not reported' : fallback;
+}
+
+function buildCompletionistRouteAircraftIconHtml(match) {
+  const cleanedTypeCode = normalizeCompletionistCode(match?.typeCode);
+  const markerUrl = resolveCompletionistMarkerUrl(cleanedTypeCode);
+  if (!markerUrl) {
+    return '<span class="completionist-route-icon-fallback" aria-hidden="true">→</span>';
+  }
+  return `
+    <img
+      class="completionist-route-icon-image"
+      src="${markerUrl}"
+      alt=""
+      loading="lazy"
+      data-type-code="${escapeHtml(cleanedTypeCode)}"
+      style="transform: rotate(90deg);"
+      onerror="window.__skyvizCompletionistMarkerError?.(this.dataset.typeCode); this.closest('.completionist-route-icon')?.classList.add('is-fallback'); this.remove()"
+    >
+    <span class="completionist-route-icon-fallback" aria-hidden="true">→</span>
+  `;
+}
+
+function buildCompletionistRouteGraphic(match, options = {}) {
+  const compactClass = options.compact ? ' is-compact' : '';
+  const originCode = buildCompletionistRouteCode(match?.originAirport, match?.origin);
+  const destinationCode = buildCompletionistRouteCode(match?.destinationAirport, match?.destination);
+  const originName = buildCompletionistRouteName(match?.originAirport, match?.origin);
+  const destinationName = buildCompletionistRouteName(match?.destinationAirport, match?.destination);
+  return `
+    <div class="completionist-route${compactClass}">
+      <div class="completionist-route-codes" aria-label="Route ${escapeHtml(originCode)} to ${escapeHtml(destinationCode)}">
+        <strong class="completionist-route-code completionist-route-code--origin">${escapeHtml(originCode)}</strong>
+        <span class="completionist-route-icon" aria-hidden="true">
+          ${buildCompletionistRouteAircraftIconHtml(match)}
+        </span>
+        <strong class="completionist-route-code completionist-route-code--destination">${escapeHtml(destinationCode)}</strong>
+      </div>
+      <div class="completionist-route-names">
+        <span class="completionist-route-name completionist-route-name--origin">${escapeHtml(originName)}</span>
+        <span class="completionist-route-name completionist-route-name--destination">${escapeHtml(destinationName)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function buildCompletionistDismissButtons(match, options = {}) {
+  const actionClass = options.popup ? ' completionist-popup-action' : '';
+  const aircraftSummary = buildCompletionistAircraftSummary(match);
+  const airportDismissKey = match.hasMissingDestination
+    ? (match.airportTargetKey || getCompletionistAirportDismissKey(match.destinationAirport, match.destination))
+    : '';
+  const modelDismissKey = match.hasNewCard
+    ? (match.cardTargetKey || getCompletionistModelDismissKey(match.typeCode))
+    : '';
+  return [
+    airportDismissKey
+      ? `
+        <button
+          type="button"
+          class="completionist-flight-dismiss completionist-flight-dismiss--airport${actionClass}"
+          data-action="dismiss-completionist-target"
+          data-dismiss-kind="airport"
+          data-dismiss-key="${escapeHtml(airportDismissKey)}"
+          data-dismiss-label="${escapeHtml(buildCompletionistAirportDisplay(match.destinationAirport, match.destination))}"
+        >
+          Hide airport
+        </button>
+      `
+      : '',
+    modelDismissKey
+      ? `
+        <button
+          type="button"
+          class="completionist-flight-dismiss completionist-flight-dismiss--card${actionClass}"
+          data-action="dismiss-completionist-target"
+          data-dismiss-kind="card"
+          data-dismiss-key="${escapeHtml(modelDismissKey)}"
+          data-dismiss-label="${escapeHtml(aircraftSummary)}"
+        >
+          Hide aircraft
+        </button>
+      `
+      : '',
+  ].filter(Boolean).join('');
+}
+
+function suppressCompletionistPopupCloseReset() {
+  state.map.completionist.popupCloseResetSuppressed = true;
+  if (state.map.completionist.popupCloseResetTimer) {
+    window.clearTimeout(state.map.completionist.popupCloseResetTimer);
+  }
+  state.map.completionist.popupCloseResetTimer = window.setTimeout(() => {
+    state.map.completionist.popupCloseResetSuppressed = false;
+    state.map.completionist.popupCloseResetTimer = null;
+  }, 0);
 }
 
 function buildCompletionistTelemetryBits(match, options = {}) {
@@ -6582,6 +6721,7 @@ function fitCompletionistMatchesOnMap(matches) {
 }
 
 function closeCompletionistPopups() {
+  suppressCompletionistPopupCloseReset();
   state.map.instance?.closePopup();
   state.map.completionist.markersByFlightId.forEach((marker) => {
     marker.closePopup();
@@ -6623,6 +6763,7 @@ function clearCompletionistFlightSelection(options = {}) {
     closeCompletionistPopups();
   }
   updateCompletionistMarkerIcons();
+  syncCompletionistFocusedDestinationLayer();
   if (options.fitToResults) {
     fitCompletionistMatchesOnMap(getVisibleCompletionistMatches());
   }
@@ -6635,15 +6776,36 @@ function focusCompletionistFlight(model, flightId, options = {}) {
   }
   state.map.completionist.selectedFlightId = flightId;
   updateCompletionistMarkerIcons();
+  syncCompletionistFocusedDestinationLayer();
   renderMapKpis(model);
   renderMapCompletionistPanel(model);
   const marker = state.map.completionist.markersByFlightId.get(flightId);
   if (marker && state.map.instance) {
     if (options.pan !== false) {
-      state.map.instance.flyTo(marker.getLatLng(), Math.max(state.map.instance.getZoom(), 4), {
-        animate: true,
-        duration: 0.45,
-      });
+      const destinationPoint = getCompletionistFocusedDestinationPoint(match);
+      if (destinationPoint) {
+        const bounds = window.L.latLngBounds([
+          marker.getLatLng(),
+          [destinationPoint.lat, destinationPoint.lon],
+        ]);
+        if (bounds.isValid()) {
+          state.map.instance.flyToBounds(bounds.pad(0.18), {
+            animate: true,
+            duration: 0.45,
+            maxZoom: Math.max(state.map.instance.getZoom(), 5),
+          });
+        } else {
+          state.map.instance.flyTo(marker.getLatLng(), Math.max(state.map.instance.getZoom(), 4), {
+            animate: true,
+            duration: 0.45,
+          });
+        }
+      } else {
+        state.map.instance.flyTo(marker.getLatLng(), Math.max(state.map.instance.getZoom(), 4), {
+          animate: true,
+          duration: 0.45,
+        });
+      }
     }
     if (options.openPopup !== false) {
       marker.openPopup();
@@ -6680,7 +6842,7 @@ function buildCompletionistStatusMessage(visibleMatches, visibleCounts) {
   }
   const targetCount = getCompletionistCountForFilter(visibleCounts);
   const targetLabel = formatCompletionistTargetLabel(state.map.completionist.filter, targetCount);
-  return `Showing ${formatNumber(visibleMatches.length)} flights covering ${targetLabel} from a shared ${formatNumber(Math.round(getCompletionistSnapshotSeconds() / 60))}-minute snapshot.`;
+  return `${formatNumber(visibleMatches.length)} flights covering ${targetLabel} in the current shared snapshot.`;
 }
 
 function buildCompletionistListRenderSignature(matches) {
@@ -6697,18 +6859,16 @@ function buildCompletionistListRenderSignature(matches) {
 }
 
 function syncCompletionistFlightAgeLabels(matches) {
-  if (!elements.mapCompletionistList) {
-    return;
-  }
   matches.forEach((match) => {
-    const ageTarget = elements.mapCompletionistList
-      .querySelector(`[data-flight-row-id="${escapeSelectorValue(match.id)}"] .completionist-flight-age`);
-    if (!(ageTarget instanceof HTMLElement)) {
-      return;
-    }
-    ageTarget.textContent = Number.isFinite(match.seenAt)
-      ? formatRelativeAgeFromMillis(Date.now() - (match.seenAt * 1000))
-      : 'Unknown age';
+    const ageTargets = document.querySelectorAll(`.completionist-flight-age[data-flight-age-id="${escapeSelectorValue(match.id)}"]`);
+    ageTargets.forEach((ageTarget) => {
+      if (!(ageTarget instanceof HTMLElement)) {
+        return;
+      }
+      ageTarget.textContent = Number.isFinite(match.seenAt)
+        ? formatRelativeAgeFromMillis(Date.now() - (match.seenAt * 1000))
+        : 'Unknown age';
+    });
   });
 }
 
@@ -6824,17 +6984,25 @@ function renderMapCompletionistPanel(model) {
 }
 
 function buildCompletionistPopup(match) {
-  const reasonLines = buildCompletionistReasonNotes(match);
-  const statBits = buildCompletionistTelemetryBits(match, { includeHeading: true, includeHex: true });
+  const aircraftSummary = buildCompletionistAircraftSummary(match);
+  const registrationSummary = buildCompletionistRegistrationSummary(match);
   const fr24Url = buildCompletionistFlightFr24Url(match);
+  const dismissButtons = buildCompletionistDismissButtons(match, { popup: true });
+  const seenLabel = Number.isFinite(match.seenAt)
+    ? formatRelativeAgeFromMillis(Date.now() - (match.seenAt * 1000))
+    : 'Unknown age';
   return `
     <div class="completionist-popup">
-      <strong class="completionist-popup-title">${escapeHtml(match.displayFlightLabel)}</strong>
-      <div class="completionist-popup-route">${escapeHtml(match.routeLabel)}</div>
-      <div class="completionist-flight-chip-row completionist-popup-chip-row">${buildCompletionistReasonChips(match)}</div>
-      <p class="completionist-popup-note">${escapeHtml(reasonLines.join(' | ') || match.modelLabel)}</p>
-      <p class="completionist-popup-meta">${escapeHtml(statBits.join(' | ') || 'Telemetry unavailable.')}</p>
-      <a class="completionist-popup-link" href="${fr24Url}" target="_blank" rel="noopener noreferrer">Open in FR24</a>
+      <div class="completionist-popup-topline">
+        <strong class="completionist-popup-title">${escapeHtml(aircraftSummary)}</strong>
+        <span class="completionist-flight-age completionist-popup-age" data-flight-age-id="${escapeHtml(match.id)}">${escapeHtml(seenLabel)}</span>
+      </div>
+      <p class="completionist-popup-registration">${escapeHtml(registrationSummary)}</p>
+      ${buildCompletionistRouteGraphic(match, { compact: true })}
+      <div class="completionist-popup-actions">
+        <a class="completionist-popup-link completionist-popup-action" href="${fr24Url}" target="_blank" rel="noopener noreferrer">Open in FR24</a>
+        ${dismissButtons}
+      </div>
     </div>
   `;
 }
@@ -6851,58 +7019,10 @@ function renderCompletionistFlightList(matches) {
   return matches.map((match) => {
     const isSelected = match.id === state.map.completionist.selectedFlightId;
     const matchTone = getCompletionistMatchTone(match);
-    const chips = buildCompletionistReasonChips(match);
-    const reasonParts = buildCompletionistReasonNotes(match);
-    const telemetry = buildCompletionistTelemetryBits(match, { compact: true });
-    const aircraftSummary = [
-      match.typeCode || '',
-      match.modelLabel || '',
-    ].filter(Boolean).join(' | ') || 'Unknown aircraft';
-    const targetSummary = match.hasMissingDestination
-      ? buildCompletionistAirportDisplay(match.destinationAirport, match.destination)
-      : match.hasNewCard
-        ? aircraftSummary
-        : 'Live completionist match.';
-    const summaryBits = telemetry.length
-      ? telemetry.join(' | ')
-      : 'Route telemetry unavailable.';
+    const aircraftSummary = buildCompletionistAircraftSummary(match);
+    const registrationSummary = buildCompletionistRegistrationSummary(match);
     const fr24Url = buildCompletionistFlightFr24Url(match);
-    const airportDismissKey = match.hasMissingDestination
-      ? (match.airportTargetKey || getCompletionistAirportDismissKey(match.destinationAirport, match.destination))
-      : '';
-    const modelDismissKey = match.hasNewCard
-      ? (match.cardTargetKey || getCompletionistModelDismissKey(match.typeCode))
-      : '';
-    const dismissButtons = [
-      airportDismissKey
-        ? `
-          <button
-            type="button"
-            class="completionist-flight-dismiss completionist-flight-dismiss--airport"
-            data-action="dismiss-completionist-target"
-            data-dismiss-kind="airport"
-            data-dismiss-key="${escapeHtml(airportDismissKey)}"
-            data-dismiss-label="${escapeHtml(buildCompletionistAirportDisplay(match.destinationAirport, match.destination))}"
-          >
-            Hide airport
-          </button>
-        `
-        : '',
-      modelDismissKey
-        ? `
-          <button
-            type="button"
-            class="completionist-flight-dismiss completionist-flight-dismiss--card"
-            data-action="dismiss-completionist-target"
-            data-dismiss-kind="card"
-            data-dismiss-key="${escapeHtml(modelDismissKey)}"
-            data-dismiss-label="${escapeHtml(aircraftSummary)}"
-          >
-            Hide aircraft
-          </button>
-        `
-        : '',
-    ].filter(Boolean).join('');
+    const dismissButtons = buildCompletionistDismissButtons(match);
     const seenLabel = Number.isFinite(match.seenAt)
       ? formatRelativeAgeFromMillis(Date.now() - (match.seenAt * 1000))
       : 'Unknown age';
@@ -6915,35 +7035,16 @@ function renderCompletionistFlightList(matches) {
           data-flight-id="${escapeHtml(match.id)}"
           aria-pressed="${String(isSelected)}"
         >
-          <div class="completionist-flight-eyebrow-row">
-            <span class="completionist-flight-selection-tag${isSelected ? '' : ` is-${matchTone}`}${!isSelected && matchTone === 'neutral' ? ' is-muted' : ''}">${escapeHtml(getCompletionistMatchLabel(match, isSelected))}</span>
-            <span class="completionist-flight-age">${escapeHtml(seenLabel)}</span>
+          <div class="completionist-flight-topline">
+            <strong class="completionist-flight-title">${escapeHtml(aircraftSummary)}</strong>
+            <span class="completionist-flight-age" data-flight-age-id="${escapeHtml(match.id)}">${escapeHtml(seenLabel)}</span>
           </div>
-          <div class="completionist-flight-head">
-            <div class="completionist-flight-title-stack">
-              <strong>${escapeHtml(match.displayFlightLabel)}</strong>
-              <span>${escapeHtml(match.routeLabel)}</span>
-            </div>
-          </div>
-          <div class="completionist-flight-chip-row">${chips}</div>
-          <div class="completionist-flight-glance-grid">
-            <div class="completionist-flight-glance-card">
-              <span class="completionist-flight-glance-label">Target</span>
-              <strong class="completionist-flight-glance-value">${escapeHtml(targetSummary)}</strong>
-            </div>
-            <div class="completionist-flight-glance-card">
-              <span class="completionist-flight-glance-label">Aircraft</span>
-              <strong class="completionist-flight-glance-value">${escapeHtml(aircraftSummary)}</strong>
-            </div>
-          </div>
-          <div class="completionist-flight-support">
-            <p class="completionist-flight-note">${escapeHtml(reasonParts.join(' | ') || 'Live completionist match.')}</p>
-            <p class="completionist-flight-meta">${escapeHtml(summaryBits)}</p>
-          </div>
+          <p class="completionist-flight-registration">${escapeHtml(registrationSummary)}</p>
+          ${buildCompletionistRouteGraphic(match)}
         </button>
         <div class="completionist-flight-actions">
-          ${dismissButtons}
           <a class="completionist-flight-link" href="${fr24Url}" target="_blank" rel="noopener noreferrer">Open in FR24</a>
+          ${dismissButtons}
         </div>
       </article>
     `;
@@ -7764,9 +7865,14 @@ function clearMapLayers() {
   state.map.capturedLayer = null;
   state.map.missingLayer = null;
   if (state.map.instance && state.map.completionist.layer) {
+    suppressCompletionistPopupCloseReset();
     state.map.instance.removeLayer(state.map.completionist.layer);
   }
   state.map.completionist.layer = null;
+  if (state.map.instance && state.map.completionist.focusedDestinationLayer) {
+    state.map.instance.removeLayer(state.map.completionist.focusedDestinationLayer);
+  }
+  state.map.completionist.focusedDestinationLayer = null;
   state.map.completionist.markersByFlightId = new Map();
 }
 
@@ -7788,11 +7894,59 @@ function buildAirportPopup(point) {
   `;
 }
 
+function getCompletionistFocusedDestinationPoint(match = getSelectedCompletionistMatch()) {
+  if (!match || !match.hasMissingDestination) {
+    return null;
+  }
+  const lat = Number(match.destinationAirport?.lat);
+  const lon = Number(match.destinationAirport?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+  return {
+    lat,
+    lon,
+    code: buildCompletionistRouteCode(match.destinationAirport, match.destination),
+    label: buildCompletionistAirportDisplay(match.destinationAirport, match.destination),
+  };
+}
+
+function syncCompletionistFocusedDestinationLayer() {
+  if (state.map.instance && state.map.completionist.focusedDestinationLayer) {
+    state.map.instance.removeLayer(state.map.completionist.focusedDestinationLayer);
+  }
+  state.map.completionist.focusedDestinationLayer = null;
+  if (!state.map.instance || !window.L || !isCompletionistModeEnabled()) {
+    return null;
+  }
+  const point = getCompletionistFocusedDestinationPoint();
+  if (!point) {
+    return null;
+  }
+  const marker = window.L.marker([point.lat, point.lon], {
+    interactive: false,
+    keyboard: false,
+    zIndexOffset: 1100,
+    icon: window.L.divIcon({
+      className: 'completionist-destination-marker-shell',
+      html: '<span class="completionist-destination-marker" aria-hidden="true"></span>',
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+    }),
+    title: `Destination ${point.code}: ${point.label}`,
+  });
+  state.map.completionist.focusedDestinationLayer = window.L.layerGroup([marker]);
+  state.map.completionist.focusedDestinationLayer.addTo(state.map.instance);
+  return marker;
+}
+
 function renderCompletionistLeafletMap(model) {
   const map = ensureMapInstance();
   if (!map || !window.L) {
     return;
   }
+  elements.mapLegend.hidden = true;
+  elements.mapLegend.innerHTML = '';
   const hasRenderedView = state.map.completionist.hasRenderedView;
   clearMapLayers();
   const visibleMatches = getVisibleCompletionistMatches();
@@ -7800,16 +7954,6 @@ function renderCompletionistLeafletMap(model) {
     if (!hasRenderedView) {
       map.setView(MAP_BASE_VIEW.center, MAP_BASE_VIEW.zoom);
     }
-    elements.mapLegend.innerHTML = `
-      <span class="map-legend-chip">
-        <span class="map-legend-dot" style="background:#0f3f70;"></span>
-        Waiting for matching flights
-      </span>
-      <span class="map-legend-chip">
-        <span class="map-legend-dot" style="background:#168392;"></span>
-        Browser-only matching
-      </span>
-    `;
     state.map.completionist.hasRenderedView = true;
     requestAnimationFrame(() => {
       map.invalidateSize();
@@ -7823,16 +7967,18 @@ function renderCompletionistLeafletMap(model) {
     const marker = window.L.marker([match.lat, match.lon], {
       icon: buildCompletionistMarkerIcon(match, match.id === state.map.completionist.selectedFlightId),
       keyboard: true,
-      title: match.displayFlightLabel,
+      title: buildCompletionistPrimaryLabel(match),
       zIndexOffset: match.id === state.map.completionist.selectedFlightId ? 1200 : 0,
     });
     marker.bindPopup(buildCompletionistPopup(match), {
-      maxWidth: 320,
+      maxWidth: 340,
       className: 'completionist-popup-shell',
     });
     marker.on('click', () => {
       if (state.map.completionist.selectedFlightId === match.id) {
-        focusCompletionistFlight(model, match.id, { pan: false, openPopup: false, scrollRow: true });
+        clearCompletionistFlightSelection();
+        renderMapKpis(model);
+        renderMapCompletionistPanel(model);
         return;
       }
       focusCompletionistFlight(model, match.id, { pan: false, openPopup: false, scrollRow: true });
@@ -7844,32 +7990,35 @@ function renderCompletionistLeafletMap(model) {
   state.map.completionist.layer = window.L.layerGroup(markers);
   state.map.completionist.layer.addTo(map);
   state.map.completionist.markersByFlightId = markersByFlightId;
+  syncCompletionistFocusedDestinationLayer();
 
   const selectedMatch = getSelectedCompletionistMatch();
   if (selectedMatch) {
     const selectedMarker = markersByFlightId.get(selectedMatch.id);
     if (selectedMarker) {
-      map.setView(selectedMarker.getLatLng(), Math.max(map.getZoom(), 4));
+      const destinationPoint = getCompletionistFocusedDestinationPoint(selectedMatch);
+      if (destinationPoint) {
+        const bounds = window.L.latLngBounds([
+          selectedMarker.getLatLng(),
+          [destinationPoint.lat, destinationPoint.lon],
+        ]);
+        if (bounds.isValid()) {
+          map.fitBounds(bounds.pad(0.18), {
+            animate: false,
+            maxZoom: Math.max(map.getZoom(), 5),
+          });
+        } else {
+          map.setView(selectedMarker.getLatLng(), Math.max(map.getZoom(), 4));
+        }
+      } else {
+        map.setView(selectedMarker.getLatLng(), Math.max(map.getZoom(), 4));
+      }
       selectedMarker.openPopup();
     }
   } else if (!hasRenderedView) {
     fitCompletionistMatchesOnMap(visibleMatches);
   }
 
-  elements.mapLegend.innerHTML = `
-    <span class="map-legend-chip">
-      <span class="map-legend-dot" style="background:#0f3f70;"></span>
-      Matching flights ${formatNumber(visibleMatches.length)}
-    </span>
-    <span class="map-legend-chip">
-      <span class="map-legend-dot" style="background:#ec7f35;"></span>
-      Missing destination
-    </span>
-    <span class="map-legend-chip">
-      <span class="map-legend-dot" style="background:#168392;"></span>
-      New card
-    </span>
-  `;
   state.map.completionist.hasRenderedView = true;
   requestAnimationFrame(() => {
     map.invalidateSize();
@@ -7881,6 +8030,7 @@ function renderLeafletMap(model) {
   if (!map) {
     return;
   }
+  elements.mapLegend.hidden = false;
   clearMapLayers();
   const points = model.map.airportPoints;
   const capturedMarkers = [];
@@ -9167,6 +9317,13 @@ function endDashboardLoadingState(previousVisibility, restorePreviousView = fals
   elements.dashboard.hidden = previousVisibility.dashboardHidden;
 }
 
+function shouldAutoLoadLocalRealData() {
+  if (!LOCAL_PREVIEW_HOSTS.has(window.location.hostname)) {
+    return false;
+  }
+  return new URLSearchParams(window.location.search).get(LOCAL_REAL_DATA_QUERY_PARAM) === LOCAL_REAL_DATA_QUERY_VALUE;
+}
+
 async function handleFile(file) {
   if (!file) {
     return;
@@ -9249,6 +9406,57 @@ async function handleExampleView() {
   }
 }
 
+async function handleLocalPreviewRealDataAutoload() {
+  if (!shouldAutoLoadLocalRealData()) {
+    return false;
+  }
+  setBanner('');
+  const previousVisibility = beginDashboardLoadingState('Loading repo-root skycards_user.json...');
+  let loaded = false;
+  setUploadStatus('Loading repo-root skycards_user.json...');
+  try {
+    const response = await fetch(LOCAL_REAL_DATA_PATH, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(
+        `Failed to load ${LOCAL_REAL_DATA_PATH} (${response.status}). Start the preview with python scripts/serve_local_preview.py.`,
+      );
+    }
+    const text = await response.text();
+    setBootState(true, 'Validating repo-root skycards_user.json...');
+    const payload = parseUserCollection(text, 'skycards_user.json');
+    setBootState(true, 'Enriching repo-root skycards_user.json with reference data...');
+    setUploadStatus('Enriching repo-root skycards_user.json with reference data...');
+    const references = await loadReferenceData();
+    setBootState(true, 'Building dashboard for repo-root skycards_user.json...');
+    const model = buildDashboardModelWithManualMappings(payload, references);
+    state.upload.fileName = 'skycards_user.json';
+    state.upload.text = text;
+    renderDashboard(model, references);
+    loaded = true;
+    const shouldPersist = Boolean(elements.persistUpload.checked);
+    const persisted = await persistCurrentUploadIfEnabled();
+    setUploadStatus(
+      persisted
+        ? `Loaded repo-root skycards_user.json for ${model.user.name}. Saved only on this device (browser storage).`
+        : `Loaded repo-root skycards_user.json for ${model.user.name}. Not saved on this device.`,
+    );
+    if (!shouldPersist || persisted) {
+      setBanner('Loaded local real-data preview from the repo-root skycards_user.json fixture.', 'info', {
+        autoDismissMs: 10000,
+      });
+    }
+  } catch (error) {
+    setUploadStatus('Waiting for a collection export.');
+    setBanner(
+      error instanceof Error ? error.message : 'Failed to load the repo-root skycards_user.json preview fixture.',
+      'warning',
+    );
+  } finally {
+    endDashboardLoadingState(previousVisibility, !loaded);
+  }
+  return loaded;
+}
+
 function wireUpload() {
   elements.fileInput.addEventListener('change', (event) => {
     const file = event.target.files?.[0];
@@ -9284,6 +9492,25 @@ function wireUpload() {
 }
 
 function wireMapCompletionControls() {
+  function handleCompletionistDismissButton(button) {
+    const dismissKind = String(button.dataset.dismissKind || '').trim().toLowerCase();
+    const dismissKey = String(button.dataset.dismissKey || '').trim();
+    const dismissLabel = String(button.dataset.dismissLabel || '').trim() || 'target';
+    if (!dismissKey || (dismissKind !== 'airport' && dismissKind !== 'card')) {
+      return false;
+    }
+    if (dismissKind === 'airport') {
+      state.map.completionist.dismissedAirportKeys.add(dismissKey);
+    } else {
+      state.map.completionist.dismissedModelKeys.add(dismissKey);
+    }
+    renderMapTab(state.model);
+    setBanner(`Hidden ${dismissLabel} from live completionist for this browser session.`, 'info', {
+      autoDismissMs: 5000,
+    });
+    return true;
+  }
+
   elements.mapCompletionistToggle?.addEventListener('change', () => {
     state.map.completionist.enabled = Boolean(elements.mapCompletionistToggle.checked);
     state.map.completionist.selectedFlightId = '';
@@ -9327,6 +9554,34 @@ function wireMapCompletionControls() {
     setBanner('Restored all hidden completionist targets for this browser session.', 'info', {
       autoDismissMs: 5000,
     });
+  });
+
+  elements.mapCanvas?.addEventListener('click', (event) => {
+    if (!state.model || !isCompletionistModeEnabled() || state.activeTab !== 'map') {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const dismissButton = target.closest('button[data-action="dismiss-completionist-target"][data-dismiss-kind][data-dismiss-key]');
+    if (dismissButton) {
+      if (handleCompletionistDismissButton(dismissButton)) {
+        event.preventDefault();
+      }
+      return;
+    }
+    if (!target.closest('.leaflet-popup-close-button')) {
+      return;
+    }
+    window.setTimeout(() => {
+      if (!state.model || !state.map.completionist.selectedFlightId) {
+        return;
+      }
+      clearCompletionistFlightSelection({ closePopup: false });
+      renderMapKpis(state.model);
+      renderMapCompletionistPanel(state.model);
+    }, 0);
   });
 
   elements.mapCompletionistFilterBar?.addEventListener('click', (event) => {
@@ -9480,21 +9735,7 @@ function wireMapCompletionControls() {
     }
     const dismissButton = target.closest('button[data-action="dismiss-completionist-target"][data-dismiss-kind][data-dismiss-key]');
     if (dismissButton) {
-      const dismissKind = String(dismissButton.dataset.dismissKind || '').trim().toLowerCase();
-      const dismissKey = String(dismissButton.dataset.dismissKey || '').trim();
-      const dismissLabel = String(dismissButton.dataset.dismissLabel || '').trim() || 'target';
-      if (!dismissKey || (dismissKind !== 'airport' && dismissKind !== 'card')) {
-        return;
-      }
-      if (dismissKind === 'airport') {
-        state.map.completionist.dismissedAirportKeys.add(dismissKey);
-      } else {
-        state.map.completionist.dismissedModelKeys.add(dismissKey);
-      }
-      renderMapTab(state.model);
-      setBanner(`Hidden ${dismissLabel} from live completionist for this browser session.`, 'info', {
-        autoDismissMs: 5000,
-      });
+      handleCompletionistDismissButton(dismissButton);
       return;
     }
     const button = target.closest('button[data-action="focus-completionist-flight"][data-flight-id]');
@@ -9506,7 +9747,7 @@ function wireMapCompletionControls() {
       return;
     }
     if (state.map.completionist.selectedFlightId === flightId) {
-      clearCompletionistFlightSelection({ fitToResults: true });
+      clearCompletionistFlightSelection();
       renderMapKpis(state.model);
       renderMapCompletionistPanel(state.model);
       return;
@@ -10354,19 +10595,22 @@ async function bootstrap() {
   const persistedUpload = await readPersistedUpload();
   syncDashboardTabAvailability();
   syncDataToolsPanelState();
+  const shouldAutoLoadRealData = shouldAutoLoadLocalRealData();
   const shouldRestorePersistedUpload = elements.persistUpload.checked && Boolean(persistedUpload);
   setDataToolsOpen(false);
   setBootState(
     true,
-    shouldRestorePersistedUpload
-      ? 'Checking for saved local data on this device...'
-      : 'Preparing your private local workspace...',
+    shouldAutoLoadRealData
+      ? 'Loading repo-root skycards_user.json...'
+      : shouldRestorePersistedUpload
+        ? 'Checking for saved local data on this device...'
+        : 'Preparing your private local workspace...',
   );
   elements.landingView.hidden = true;
   elements.dashboard.hidden = true;
 
   if (window.location.protocol === 'file:') {
-    setBanner('Serve the site over HTTP to load reference data. Example: python -m http.server 4173 --directory site', 'warning');
+    setBanner('Serve the site over HTTP to load reference data. Example: python scripts/serve_local_preview.py', 'warning');
     setReferenceStatus('Reference manifest unavailable over file://', 'warning');
     setBootState(false);
     elements.landingView.hidden = false;
@@ -10384,7 +10628,9 @@ async function bootstrap() {
     const modelDate = formatDateFromMillis(manifest?.datasets?.models?.updatedAt);
     const airportDate = formatDateFromMillis(manifest?.datasets?.airports?.updatedAt);
     setReferenceStatus(`Reference snapshot: models ${modelDate}, airports ${airportDate}, client ${manifest?.clientVersion || 'unknown'}.`, 'ok');
-    if (shouldRestorePersistedUpload) {
+    if (shouldAutoLoadRealData) {
+      await handleLocalPreviewRealDataAutoload();
+    } else if (shouldRestorePersistedUpload) {
       setBootState(true, 'Loading saved local data from this device...');
       await tryLoadPersistedUpload(persistedUpload);
     }

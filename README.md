@@ -9,7 +9,7 @@ Skyviz is a static GitHub Pages dashboard for Skycards collection exports plus t
 - No server-side upload handling.
 - User collection data stays in the browser by default, with optional user-controlled browser-storage persistence on the same device.
 - Reference enrichment comes from static snapshots in `site/data/reference/` generated from the Skycards API.
-- Completionist mode uses a shared scheduled flight snapshot under `site/data/live/`, but matching against a user's collection still happens only in that user's browser.
+- Completionist mode uses a shared delayed flight snapshot served from Cloudflare in production, with `site/data/live/` kept as the local fixture path; matching against a user's collection still happens only in that user's browser.
 
 ## Repository shape
 
@@ -21,7 +21,11 @@ Skyviz is a static GitHub Pages dashboard for Skycards collection exports plus t
 - `cdn_index.json`: CDN route index for `https://cdn.skycards.oldapes.com/assets` (keys map to deeper URL segments/files; useful for diagnosing missing model images).
 - `site/data/airports/`: generated OurAirports CSV snapshots plus the derived airport-daily manifest and game dataset.
 - `site/data/reference/`: generated reference snapshots (ignored in git by default and produced in CI/Pages build).
-- `site/data/live/`: completionist-mode flight snapshot artifacts published with the static site.
+- `site/data/runtime-config.json`: production completionist manifest endpoint used by the browser.
+- `site/data/live/`: local completionist fixture artifacts for preview and offline validation.
+- `scripts/serve_local_preview.py`: repo-aware local preview server that serves `site/` plus the repo-root `skycards_user.json` fixture.
+- `workers/completionist-live/`: Cloudflare-native completionist cron, workflow, queue, coordinator, and live read endpoint.
+- `scripts/check_cloudflare_account.py`: Cloudflare account-lock preflight for Wrangler write operations.
 - `site/tools/aircraft-db-explorer.html`: local-only SQLite explorer for inspecting `aircraft_data.db` in-browser.
 - `site/tools/inferred-mapping-reviewer.html`: local-only reviewer for medium/ambiguous inferred type mappings.
 
@@ -42,17 +46,19 @@ python scripts/refresh_completionist_snapshot.py
 
 The completionist refresh script now does an adaptive global bounds sweep against the upstream live-flight feed rather than a single global request, so a full local run may take longer than the other refresh commands.
 
+Local preview automatically prefers the generated `site/data/live/` fixture path even when production is configured to read the Cloudflare endpoint from `site/data/runtime-config.json`.
+
 ```bash
-python -m http.server 4173 --directory site
+python scripts/serve_local_preview.py
 ```
 
 Then open `http://localhost:4173`.
 
-For meaningful browser validation, prefer uploading the repo-root `skycards_user.json` once the preview is running. Keep `View Example Dashboard` for the lightweight sample-deck flow.
+For real-data browser validation, open `http://localhost:4173/?devLoad=skycards_user` or upload the repo-root `skycards_user.json` once the preview is running. The localhost-only `devLoad` flow fetches that repo-root fixture directly into the browser, which keeps Playwright and manual testing on the same real collection data. Do not use `View Example Dashboard` when validating real collection or completionist behavior; keep it only for the lightweight sample-deck flow.
 
 ## Local DB explorer
 
-For private local SQLite exploration (no backend, no upload to remote services), serve `site/` and open:
+For private local SQLite exploration (no backend, no upload to remote services), run `python scripts/serve_local_preview.py` and open:
 
 - `http://localhost:4173/tools/aircraft-db-explorer.html`
 
@@ -60,7 +66,7 @@ Then load `aircraft_data.db` from your machine using the file picker.
 
 ## Local inferred-mapping reviewer
 
-To review medium/ambiguous inferred rows locally:
+To review medium/ambiguous inferred rows locally, run `python scripts/serve_local_preview.py` and open:
 
 - `http://localhost:4173/tools/inferred-mapping-reviewer.html`
 
@@ -72,7 +78,7 @@ Load `output/inferred_aircraft_type_mappings.json`, review rows, and export deci
 2. If no saved data is restored, Skyviz shows a privacy-first landing view with the `Skyviz` title stack, a short vertically stacked two-game daily CTA hub for `Navdle` and `Cardle`, the upload card, and export instructions (linked to `github.com/mfkp/skycards-export`).
 3. Both landing daily-game cards open without requiring a Skycards upload. Daily guesses, unlocks, streaks, and share-state stay in browser local storage only on the current device.
 4. (Optional) Enable the local save checkbox to keep the uploaded export in browser storage on the current device.
-5. Either upload your own Skycards export JSON file, upload the repo-root `skycards_user.json` for real-data validation, or use `View Example Dashboard` to load a built-in sample deck (20 airports + 20 popular models).
+5. Either upload your own Skycards export JSON file, use the repo-root `skycards_user.json` fixture for real-data validation (`http://localhost:4173/?devLoad=skycards_user` during local preview or manual upload), or use `View Example Dashboard` only for the lightweight sample-deck flow (20 airports + 20 popular models).
 6. During upload/example load, Skyviz reuses the private startup loading card so processing state is always visible while parsing and enrichment run.
 7. Skyviz enriches the cards and airport unlocks with the committed reference snapshots.
 8. The app switches into a tabbed dashboard shell. `Navdle` and `Cardle` are always available; `Map` and `Deck` unlock after an upload or example deck load.
@@ -81,7 +87,7 @@ Load `output/inferred_aircraft_type_mappings.json`, review rows, and export deci
     On mobile, the `Reset`, `Streak`, and `Win rate` chips stay compressed into a single row so they do not steal vertical room from the guesses.
     Community-note hints keep airport names visually concealed with a styled redaction treatment instead of a raw `[redacted]` token, and the full note is still restored once the answer is revealed.
 11. Use the `Cardle` tab for the aircraft-model mini-game: the command deck mirrors Navdle so the two games feel related, and it now uses the same tighter guesses-left progress strip directly under search. The player gets `8` total guesses, enters ICAO/manufacturer/model search terms, and each submitted row recolors eight stat cells (`first flight`, `rarity`, `wingspan`, `speed`, `range`, `ceiling`, `seats`, `weight`) into gray/yellow/green higher-lower-exact feedback just like Navdle's comparison language. Previous guesses still prioritize a larger aircraft image and slimmer stat tiles so the thumbnail stays visible instead of getting buried by the comparison grid. The live comparison card now behaves like Navdle's pinned `Best so far` tracker: it starts with `--` / `?` placeholders, keeps the closest logged clue in each tracked category, holds manufacturer and model name behind redaction boxes instead of mirroring the latest guess, swaps `Height` out for catchable-registration counts, and only locks the manufacturer open in green after an exact match. The registration-origin hotspot map and 3D model reveal stay in the same shell, with the map now leading on the left, both surfaces redacted at first, and the old stage headers/notes collapsed into on-surface overlay chips so the render area stays dominant. The hotspot map unlocks after guess `3`, the 3D reveal unlocks after guess `5`, and once the map is live the browser fetches live multipoint data from `https://api.skycards.oldapes.com/models/multipoint/{icao}` and plots those returned coordinates into an interactive Leaflet world map that reuses the same base-map runtime as the main `Map` tab. Solving now reuses Navdle-style celebration and reveal treatment, including the same share-action styling, while solved and lost states reveal the full target profile, the hotspot count, and a share-ready results grid linked back to `#cardle`. Cardle now initializes from the lighter models-plus-registration-count reference path instead of the full dashboard reference bundle, and both direct `#navdle` / `#cardle` loads and first-open daily-tab transitions keep the boot screen visible until the requested daily shell is interactive instead of exposing a blocked dashboard.
-12. Use the `Map` tab for captured vs missing airport plotting with airport completion shown directly on the map card plus a single right-side `Airport completion explorer` drill-down panel. The drill path is `Continents -> Countries -> US states` (US states appear when `United States` is selected). Continents and the `United States` row show explicit drill cues, and the panel includes helper copy plus `Back` + breadcrumb controls so it is always clear where you are in the hierarchy. Clicking a row focuses/highlights/zooms the map for that region and advances the drill level when a deeper level exists. The widget also includes explicit sort-category selection (`% complete`, `total airports`, `captured airports`, `name`), an adjacent ascending/descending arrow toggle (default `total airports` descending), and a `Details` expander per row with captured/remaining code lists plus per-scope `Copy` / `Export` actions. Airport dots scale up as you zoom in so map targets stay easier to click. Airport popups show `ICAO (IATA)` when available, the airport name, and direct links for both `View on FR24` and `View on Skydex`. At higher zoom levels, muted airport code labels render over dots with a cap to avoid excessive overlap. A `Completionist mode` toggle swaps that drill-down view for a live-flight hunter that checks a shared delayed snapshot against your local missing airports and missing aircraft cards, ignores live feed rows that do not include a usable registration, scales aircraft markers by map zoom, swaps the old match dropdown for filter chips, adds live sidebar search across flight properties, keeps map clicks and sidebar selection locked to one stable highlighted result row without runaway auto-scrolling, gives each sidebar card a stronger target-first hierarchy, and adds session-only `Hide airport` / `Hide aircraft` actions plus `Restore hidden matches` so users can clear already-handled live targets without altering the uploaded collection. Completionist summary text and filter-chip counts use unique target counts, so repeated flights to the same missing airport or repeated sightings of the same missing aircraft card do not inflate those totals. Each row still includes a direct `Open in FR24` handoff, and the same link remains in flight popups.
+12. Use the `Map` tab for captured vs missing airport plotting with airport completion shown directly on the map card plus a single right-side `Airport completion explorer` drill-down panel. The drill path is `Continents -> Countries -> US states` (US states appear when `United States` is selected). Continents and the `United States` row show explicit drill cues, and the panel includes helper copy plus `Back` + breadcrumb controls so it is always clear where you are in the hierarchy. Clicking a row focuses/highlights/zooms the map for that region and advances the drill level when a deeper level exists. The widget also includes explicit sort-category selection (`% complete`, `total airports`, `captured airports`, `name`), an adjacent ascending/descending arrow toggle (default `total airports` descending), and a `Details` expander per row with captured/remaining code lists plus per-scope `Copy` / `Export` actions. Airport dots scale up as you zoom in so map targets stay easier to click. Airport popups show `ICAO (IATA)` when available, the airport name, and direct links for both `View on FR24` and `View on Skydex`. At higher zoom levels, muted airport code labels render over dots with a cap to avoid excessive overlap. A `Completionist mode` toggle swaps that drill-down view for a live-flight hunter that checks a shared delayed snapshot against your local missing airports and missing aircraft cards, ignores live feed rows that do not include a usable registration, scales aircraft markers by map zoom, swaps the old match dropdown for filter chips, adds live sidebar search across flight properties, trims the right-hand header down to the essential snapshot stats, hides the base map legend while the live-hunter view is active, and keeps map clicks and sidebar selection locked to one stable highlighted result row without runaway auto-scrolling. Each completionist row now leads with the aircraft name plus ICAO type, keeps the age on the same line, drops the redundant match badges, shows the registration with optional callsign in muted text, compresses the route to IATA codes plus full airport names, reuses the same aircraft marker artwork as the live map between origin and destination, and keeps the `Open in FR24` plus session-only `Hide airport` / `Hide aircraft` actions inside the card surface for faster scanning with matched typography across those action controls. When a focused completionist flight also represents a missing airport target and the destination airport has valid reference coordinates, the map adds a temporary destination point and fits the focused view to both the aircraft and that missing airport. Completionist popups mirror that same compact aircraft-first hierarchy, and clicking the selected aircraft again or using the popup `X` clears focus cleanly. Completionist summary text and filter-chip counts use unique target counts, so repeated flights to the same missing airport or repeated sightings of the same missing aircraft card do not inflate those totals.
 13. On viewports larger than tablet, the default map view uses a 50/50 split: a full-height map card on the left and a full-height drill-down completion card on the right with vertical scrolling for long lists. When completionist mode is enabled, the map widens and the sidebar narrows to favor the live flight view. On tablet and phone widths, the layout collapses back to a clean single-column stack, the completionist toggle compacts into a smaller control, and the live-flight hunter stays usable without side-by-side overflow.
 14. Use the `Deck` tab in a split layout similar to `Map`: a large virtualized aircraft card deck on the left (or top on mobile) plus four interaction panels on the right (`Progress by type`, `Progress by category`, `Glows by tier`, `XP by tier`). Aircraft right-panel rows intentionally mirror the map explorer row UI/UX (same row structure, focus behavior, and details affordance) so interactions stay predictable across tabs. Clicking a row focuses/filters the deck by that slice, while `Details` only expands when the row's `Details` button is clicked. Expanded details include completed/missing model lists (`ICAO - name`) plus per-scope `Copy` / `Export` actions.
 15. Aircraft cards render model imagery from tier-aware Skycards CDN paths (`.../models/images/1/{tier}/{ICAO}_md.png`; tier comes from the model's dominant card tier in your deck). If the direct model image is missing, Skyviz falls back through the `cyber` tier and then through reference metadata aliases (`imageOverride`, then `images[]`) before showing `Image unavailable`. Clicking anywhere else on a card opens an aircraft detail modal with collection KPIs plus latent reference metadata such as engine count/type, range, ceiling, length, height, landing gear, wing position/shape, military status, and season span. That modal now opens directly into the optimized GLB preview through `model-viewer` when a matching 3D asset exists, without exposing a 2D media toggle. Cards still show XP plus a second badge for unique registrations caught (`caught / total possible` when reference counts are available), an XP-tier badge (`paper`, `bronze`, `silver`, `gold`, `platinum`, `cyber`), a six-stat grid (`first flight`, `rarity`, `wingspan`, `speed`, `seats`, `weight in tonnes`), and inline icon metrics under the model name for `Framing %` and `Cloud %`. Missing stat values render as `N/A` instead of `0`, and deck card height/spacing scales by viewport to keep these rows legible on mobile and less cramped on larger screens, while mobile deck totals (`Total XP`, `Total glows`, `Total regs`) stay in one row when viewport width allows. The deck header includes filtered totals for XP, glow count, and caught registrations that update with search/focus filters. Clicking a model's regs badge opens a dedicated caught-registration modal for that ICAO model with the same registration-accuracy caution copy used in the transparency flow. The orange caution icon in the aircraft deck header opens the global registration-transparency modal, listing each unique registration row with mapped transponder hex, confidence/ambiguity class, mapping notes, and inline manual-mapping controls for non-high-confidence rows (no browser prompt popups). Manual, high, medium, ambiguous, and low confidence chips are clickable filter shortcuts in the modal. Manual mappings are saved in browser local storage only; the modal includes warning copy plus `Export manual mappings` / `Import mappings` actions so users can back up and restore overrides when local browser storage is cleared. Sorting uses an explicit sort-category dropdown plus adjacent ascending/descending arrow control, matching the map completion sort pattern and supporting aircraft stat dimensions (`first flight`, `speed`, `rarity`, `seats`, `wingspan`, `weight`) alongside deck metrics.
@@ -187,7 +193,7 @@ The script writes:
 
 ## Refreshing the completionist live snapshot
 
-Completionist mode uses a delayed shared flight snapshot generated at build time. The refresh script does not rely on one global feed response anymore; it seeds coarse world tiles, requests each tile by bounds, and recursively splits only the tiles that come back capped so the published snapshot can cover materially more airborne flights.
+Production completionist refreshes are Cloudflare-native. `scripts/refresh_completionist_snapshot.py` now exists as the local fixture generator for preview, smoke checks, and offline debugging. It does not control the production refresh cadence.
 
 Refresh it locally with:
 
@@ -220,25 +226,37 @@ During Pages builds, the workflow refreshes:
 - `aircraft_lookup.json` only when `aircraft_data.db` is present in the build workspace
 - `manifest.json` after optional reference artifacts are generated so deployed browsers can discover them
 - the OurAirports CSV snapshots plus `site/data/airports/daily-game.json` / `site/data/airports/manifest.json` for `Navdle`
-- `site/data/live/completionist-manifest.json` / `site/data/live/completionist-snapshot.json` for Map-tab completionist mode, generated by an adaptive tiled sweep with capped-tile splitting and merged dedupe
 
-Push and manual Pages builds refresh the normal reference artifacts plus the completionist snapshot. Scheduled Pages builds keep the completionist refresh on the fastest GitHub Actions cadence available (`5` minutes), restore the generated reference and airport artifacts from cache, and republish the site with a fresh completionist snapshot so the live-flight hunter stays current without breaking upload or daily-game data.
+Push and manual Pages builds refresh the static shell's slower-moving generated artifacts. They no longer republish the site just to update completionist hot data.
 
-If the scheduled workflow ever starts from a cold cache, it falls back to rebuilding the required reference and airport artifacts before deploy. That schedule path still runs `python scripts/smoke_check.py --mode completionist-only`, which validates repo scaffolding, the committed sample deck, and the regenerated live snapshot while avoiding false failures on optional artifacts that are irrelevant to the live-only refresh.
+## Cloudflare completionist data plane
 
-The repo also includes a dedicated completionist-only Pages workflow in `.github/workflows/refresh-completionist-pages.yml` plus a Cloudflare Worker project in `workers/completionist-dispatch/`. That worker is intended to dispatch the lightweight completionist workflow every `5` minutes through GitHub's `workflow_dispatch` API instead of relying on GitHub's best-effort `schedule` delivery.
+Production completionist reads come from the manifest URL committed in `site/data/runtime-config.json`. That endpoint is served by `workers/completionist-live/`, which owns the `Cron Trigger -> Workflow -> Queue -> Durable Object -> R2` pipeline.
 
-To enable the Cloudflare path:
+All Cloudflare write operations in this repository must target:
+
+- email: `seansailer28@gmail.com`
+- account id: `172da47da00e3b33810d2e9c73c9a0b9`
+
+Verify that before any `wrangler` write command:
 
 ```bash
-cd workers/completionist-dispatch
-wrangler secret put GITHUB_TOKEN
-wrangler deploy
-gh variable set USE_EXTERNAL_COMPLETIONIST_SCHEDULER --body true
+python scripts/check_cloudflare_account.py
 ```
 
-The worker secret should be a GitHub token that can dispatch workflows for this repository. A fine-grained token with `Actions: write` on `chanzer0/skyviz` is the intended setup. Keep the repo variable unset until the worker is deployed; once `USE_EXTERNAL_COMPLETIONIST_SCHEDULER=true`, the legacy GitHub `schedule` path in `.github/workflows/deploy-pages.yml` skips scheduled deploys so the worker becomes the only repeating completionist trigger.
+Provision and deploy the completionist runtime with:
 
-The full `Deploy Pages` workflow and the lightweight `Refresh Completionist Pages` workflow now share the same per-ref Pages concurrency lane without `cancel-in-progress`, so push/manual deploys and 5-minute completionist refreshes queue behind each other instead of canceling active publishes mid-run.
+```bash
+python scripts/check_cloudflare_account.py
+cd workers/completionist-live
+npx wrangler r2 bucket create skyviz-completionist-live --config wrangler.provision.jsonc
+npx wrangler queues create skyviz-completionist-tile-fetch --config wrangler.provision.jsonc --message-retention-period-secs 86400
+npx wrangler queues create skyviz-completionist-tile-dlq --config wrangler.provision.jsonc --message-retention-period-secs 86400
+npx wrangler deploy
+```
 
-This repository ignores generated files under `site/data/reference/*`, `site/data/airports/*.csv` / `site/data/airports/daily-game.json` / `site/data/airports/manifest.json`, and `site/data/live/*.json` in git. CI and Pages workflows generate fresh snapshots before validation/deploy. Cardle continues to run from the committed reference snapshots; its hotspot hint depends on live browser access to the Skycards multipoint endpoint at play time, while completionist mode reads the delayed snapshot published with the static site.
+The worker keeps the stable manifest URL short-lived and publishes versioned snapshots under immutable run keys in `R2`. Browsers fetch the stable manifest first, then resolve the versioned snapshot from that manifest.
+
+Per-tile staging artifacts are deleted after publish, and older versioned run artifacts are pruned on a short retention window so the bucket does not accumulate unnecessary storage bloat.
+
+This repository ignores generated files under `site/data/reference/*`, `site/data/airports/*.csv` / `site/data/airports/daily-game.json` / `site/data/airports/manifest.json`, and `site/data/live/*.json` in git. CI and Pages workflows generate fresh reference and airport artifacts before validation/deploy. Cardle continues to run from the committed reference snapshots; its hotspot hint depends on live browser access to the Skycards multipoint endpoint at play time, while completionist mode reads the delayed snapshot from Cloudflare in production and from local fixtures during preview.

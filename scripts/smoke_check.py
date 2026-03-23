@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+EXPECTED_CLOUDFLARE_ACCOUNT_ID = '172da47da00e3b33810d2e9c73c9a0b9'
 
 
 def parse_args() -> argparse.Namespace:
@@ -56,12 +58,9 @@ def check_repo_hygiene(mode: str) -> None:
 
 
 def check_sample_collection() -> None:
-    preferred_path = REPO_ROOT / 'skycards_user.json'
-    fallback_path = REPO_ROOT / 'site' / 'data' / 'example' / 'try_now_user.json'
-    candidate_paths = [preferred_path, fallback_path]
-    sample_path = next((path for path in candidate_paths if path.exists()), None)
-    if sample_path is None:
-        raise SystemExit('smoke_check: no sample collection JSON found')
+    sample_path = REPO_ROOT / 'skycards_user.json'
+    if not sample_path.exists():
+        raise SystemExit('smoke_check: missing repo-root skycards_user.json fixture')
     payload = _load_json(sample_path)
     required_keys = {
         'id',
@@ -84,14 +83,42 @@ def check_sample_collection() -> None:
     for field in ('modelId', 'manufacturer', 'name', 'tier', 'category'):
         if field not in first_card:
             raise SystemExit(f'smoke_check: first card missing {field}')
-    source_label = 'real validation payload' if sample_path == preferred_path else 'fallback example payload'
     print(
-        f'{source_label}:',
+        'real validation payload:',
         f'path={sample_path.relative_to(REPO_ROOT)}',
         f"cards={len(payload['cards'])}",
         f"airports={len(payload['unlockedAirportIds'])}",
         f'unique_regs={len(caught_rows)}',
     )
+
+
+def check_runtime_config() -> None:
+    config_path = REPO_ROOT / 'site' / 'data' / 'runtime-config.json'
+    config = _load_json(config_path)
+    completionist = config.get('completionist') if isinstance(config, dict) else None
+    manifest_url = ''
+    if isinstance(completionist, dict):
+        manifest_url = str(completionist.get('manifestUrl') or '').strip()
+    elif isinstance(config, dict):
+        manifest_url = str(config.get('completionistManifestUrl') or '').strip()
+    if not manifest_url:
+        raise SystemExit('smoke_check: runtime-config missing completionist manifestUrl')
+    print('runtime config:', f'manifest_url={manifest_url}')
+
+
+def check_cloudflare_worker_config() -> None:
+    config_path = REPO_ROOT / 'workers' / 'completionist-live' / 'wrangler.jsonc'
+    text = config_path.read_text(encoding='utf-8')
+    match = re.search(r'"account_id"\s*:\s*"([^"]+)"', text)
+    if not match:
+        raise SystemExit('smoke_check: wrangler config missing account_id')
+    account_id = match.group(1).strip()
+    if account_id != EXPECTED_CLOUDFLARE_ACCOUNT_ID:
+        raise SystemExit(
+            'smoke_check: wrangler config account_id mismatch: '
+            f'expected {EXPECTED_CLOUDFLARE_ACCOUNT_ID}, got {account_id}',
+        )
+    print('cloudflare worker config:', f'account_id={account_id}')
 
 
 def check_reference_data() -> None:
@@ -212,6 +239,8 @@ def main() -> int:
     args = parse_args()
     check_repo_hygiene(args.mode)
     check_sample_collection()
+    check_runtime_config()
+    check_cloudflare_worker_config()
     if args.mode == 'full':
         check_reference_data()
         check_airport_daily_game_data()

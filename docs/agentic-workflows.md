@@ -15,15 +15,17 @@ This repository is meant to be maintained by agents and humans using the same re
 1. Read `docs/index.md` and the relevant architecture or workflow docs.
 2. Use the closest repo-local skill when one applies.
 3. Make the smallest coherent change that satisfies the task.
-4. Update docs, scripts, and workflow artifacts in the same pass when behavior changes.
-5. Run the offline checks and report any live validation that was not possible.
-6. Record durable architectural or workflow decisions in `docs/decisions/` when the reasoning will matter later.
+4. Before any Cloudflare write operation, run `python scripts/check_cloudflare_account.py` and confirm Wrangler is on `seansailer28@gmail.com` / `172da47da00e3b33810d2e9c73c9a0b9`.
+5. Update docs, scripts, and workflow artifacts in the same pass when behavior changes.
+6. Run the offline checks and report any live validation that was not possible.
+7. Record durable architectural or workflow decisions in `docs/decisions/` when the reasoning will matter later.
 
 ## Visual bug validation
 
 - Reproduce the bug in Playwright before changing code.
 - Re-run the same Playwright flow after edits to confirm the fix.
-- When a real collection is needed for UI validation, prefer the repo-root `skycards_user.json` over the built-in example deck.
+- Start local browser validation with `python scripts/serve_local_preview.py`.
+- When a real collection is needed for UI validation, use the repo-root `skycards_user.json` fixture (`http://localhost:4173/?devLoad=skycards_user` or manual upload) and do not use the built-in example deck.
 - Capture Playwright evidence (snapshot and/or screenshot) when possible.
 - If Playwright cannot run, state that limitation explicitly and do not claim browser confirmation.
 

@@ -25,9 +25,17 @@ CORE_REQUIRED_PATHS = [
     'site/src/main.js',
     'site/src/data.js',
     'site/src/charts.js',
+    'site/data/runtime-config.json',
     'scripts/refresh_completionist_snapshot.py',
+    'scripts/serve_local_preview.py',
+    'scripts/check_cloudflare_account.py',
     '.github/workflows/ci.yml',
     '.github/workflows/deploy-pages.yml',
+    'docs/decisions/2026-03-23-cloudflare-completionist-data-plane.md',
+    'workers/completionist-live/README.md',
+    'workers/completionist-live/wrangler.provision.jsonc',
+    'workers/completionist-live/wrangler.jsonc',
+    'workers/completionist-live/src/index.js',
 ]
 
 FULL_MODE_ONLY_PATHS = [

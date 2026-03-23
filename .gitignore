@@ -9,6 +9,7 @@ output/
 .playwright-cli/
 test-results/
 AGENTS.local.md
+workers/*/.wrangler/
 
 site/data/reference/*
 site/data/airports/*.csv

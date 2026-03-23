@@ -25,16 +25,18 @@ This file routes context. Durable knowledge lives in `docs/`.
 - `site/src/main.js`: boot flow, uploads, state transitions, and rendering orchestration.
 - `site/src/data.js`: validation, enrichment, and dashboard view-model creation.
 - `site/src/charts.js`: SVG and HTML visualization helpers.
+- `site/data/runtime-config.json`: production completionist manifest endpoint configuration.
 - `scripts/refresh_reference_data.py`: fetches `models` and `airports` from the Skycards API.
-- `.github/workflows/deploy-pages.yml`: full Pages deploy plus the legacy scheduled fallback path.
-- `.github/workflows/refresh-completionist-pages.yml`: lightweight completionist-only Pages deploy for external dispatches.
-- `workers/completionist-dispatch/`: Cloudflare cron worker that dispatches completionist refreshes.
+- `scripts/check_cloudflare_account.py`: verifies Wrangler auth and the locked Cloudflare account before write operations.
+- `.github/workflows/deploy-pages.yml`: full GitHub Pages deploy for the static shell and generated reference artifacts.
+- `workers/completionist-live/`: Cloudflare-native completionist cron, workflow, queue, coordinator, and live read path.
 - `site/data/reference/`: committed Skycards reference snapshots used by the static app.
 
 ## Non-Negotiable Rules
 
 - Keep collection processing browser-local. Do not add a backend unless the task explicitly changes the product model.
 - Enrich cards and airports from the official Skycards `models` and `airports` payloads, not ad hoc copies.
+- Any Cloudflare operation in this repo must target `seansailer28@gmail.com` / account id `172da47da00e3b33810d2e9c73c9a0b9`.
 - Keep `AGENTS.md` short. Move durable detail into `docs/`, `skills/`, or scripts.
 - Treat repo-root JSON files as data artifacts, not the source of truth for workflow guidance.
 
@@ -48,7 +50,8 @@ This file routes context. Durable knowledge lives in `docs/`.
 
 - `python scripts/smoke_check.py`
 - `python scripts/repo_hygiene_check.py`
-- Preview locally with `python -m http.server 4173 --directory site`
+- Preview locally with `python scripts/serve_local_preview.py`
+- For local real-data browser validation, use the repo-root `skycards_user.json` fixture (manual upload or `http://localhost:4173/?devLoad=skycards_user`); do not use the in-app example deck.
 - Use a browser pass for meaningful UI changes when the environment supports it.
 - For visual bug fixes, reproduce the issue with Playwright before edits and confirm the fix with Playwright after edits; if Playwright cannot run, say so explicitly.
 
