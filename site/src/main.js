@@ -105,9 +105,9 @@ const elements = {
   mapCompletionistRefresh: document.querySelector('#map-completionist-refresh'),
   mapCompletionistUpdated: document.querySelector('#map-completionist-updated'),
   mapCompletionistSearch: document.querySelector('#map-completionist-search'),
+  mapCompletionistSort: document.querySelector('#map-completionist-sort'),
   mapCompletionistFilterBar: document.querySelector('#map-completionist-filter-bar'),
   mapCompletionistRefreshButton: document.querySelector('#map-completionist-refresh-button'),
-  mapCompletionistDismissSummary: document.querySelector('#map-completionist-dismiss-summary'),
   mapCompletionistRestoreButton: document.querySelector('#map-completionist-restore-button'),
   mapCompletionistMeta: document.querySelector('#map-completionist-meta'),
   mapCompletionistList: document.querySelector('#map-completionist-list'),
@@ -241,7 +241,8 @@ const COMPLETIONIST_DEFAULT_BROWSER_REFRESH_SECONDS = 60;
 const COMPLETIONIST_DEFAULT_SNAPSHOT_SECONDS = 300;
 const COMPLETIONIST_DEFAULT_STALE_SECONDS = 900;
 const COMPLETIONIST_SEARCH_DEBOUNCE_MS = 140;
-const COMPLETIONIST_FILTER_VALUES = new Set(['all', 'airport', 'card', 'both']);
+const COMPLETIONIST_TARGET_FILTER_VALUES = Object.freeze(['airport', 'card']);
+const COMPLETIONIST_SORT_VALUES = new Set(['airport-traffic', 'card-traffic', 'latest']);
 const COMPLETIONIST_INVALID_REGISTRATION_VALUES = new Set([
   '',
   '0',
@@ -417,7 +418,11 @@ const state = {
       manifest: null,
       snapshot: null,
       matches: [],
-      filter: 'airport',
+      filters: {
+        airport: true,
+        card: true,
+      },
+      sort: 'airport-traffic',
       query: '',
       selectedFlightId: '',
       dismissedAirportKeys: new Set(),
@@ -5233,11 +5238,11 @@ function clearDashboardPanels() {
   if (elements.mapCompletionistSearch) {
     elements.mapCompletionistSearch.value = '';
   }
+  if (elements.mapCompletionistSort) {
+    elements.mapCompletionistSort.value = 'airport-traffic';
+  }
   if (elements.mapCompletionistFilterBar) {
     elements.mapCompletionistFilterBar.innerHTML = '';
-  }
-  if (elements.mapCompletionistDismissSummary) {
-    elements.mapCompletionistDismissSummary.textContent = 'Hide airport or Hide aircraft to clear handled targets for this browser session.';
   }
   if (elements.mapCompletionistRestoreButton) {
     elements.mapCompletionistRestoreButton.hidden = true;
@@ -5544,7 +5549,11 @@ async function resetToLanding({
   state.map.usStateQuery = '';
   state.map.usStateSort = 'total_desc';
   state.map.completionist.enabled = false;
-  state.map.completionist.filter = 'airport';
+  state.map.completionist.filters = {
+    airport: true,
+    card: true,
+  };
+  state.map.completionist.sort = 'airport-traffic';
   state.map.completionist.query = '';
   resetCompletionistState();
   resetMapDrillState();
@@ -5985,7 +5994,7 @@ function getCompletionistMatchPriority(matchKind) {
   return 3;
 }
 
-function sortCompletionistMatches(matches) {
+function sortCompletionistMatchesByPriority(matches) {
   return matches
     .slice()
     .sort(
@@ -6131,7 +6140,7 @@ function applyCompletionistDismissals(matches) {
   const dismissedModelKeys = state.map.completionist.dismissedModelKeys instanceof Set
     ? state.map.completionist.dismissedModelKeys
     : new Set();
-  return sortCompletionistMatches(
+  return sortCompletionistMatchesByPriority(
     (matches || [])
       .map((match) => {
         const hasMissingDestination = Boolean(
@@ -6181,13 +6190,10 @@ function formatCompletionistHiddenLabel(count, singular, plural) {
   return `${formatNumber(count)} ${count === 1 ? singular : plural}`;
 }
 
-function buildCompletionistDismissSummaryText(model) {
-  if (!model) {
-    return 'Hide airport or Hide aircraft to clear handled targets for this browser session.';
-  }
+function buildCompletionistDismissSummaryText() {
   const counts = getCompletionistDismissedCounts();
   if (!counts.total) {
-    return 'Hide airport or Hide aircraft to clear handled targets for this browser session.';
+    return '';
   }
   const parts = [];
   if (counts.airport) {
@@ -6211,17 +6217,166 @@ function getSearchFilteredCompletionistMatches() {
   return matches.filter((match) => tokens.every((token) => match.searchText.includes(token)));
 }
 
-function filterCompletionistMatchesByKind(matches, filterValue) {
-  if (filterValue === 'airport') {
+function getCompletionistActiveFilterValues(filters = state.map.completionist.filters) {
+  return COMPLETIONIST_TARGET_FILTER_VALUES.filter((value) => Boolean(filters?.[value]));
+}
+
+function isCompletionistTargetFilterEnabled(filterValue, filters = state.map.completionist.filters) {
+  return Boolean(filters?.[filterValue]);
+}
+
+function normalizeCompletionistSortValue(sortValue = state.map.completionist.sort) {
+  return COMPLETIONIST_SORT_VALUES.has(sortValue) ? sortValue : 'airport-traffic';
+}
+
+function getCompletionistSortLabel(sortValue = state.map.completionist.sort) {
+  switch (normalizeCompletionistSortValue(sortValue)) {
+    case 'card-traffic':
+      return 'flights / card';
+    case 'latest':
+      return 'latest seen';
+    case 'airport-traffic':
+    default:
+      return 'flights / airport';
+  }
+}
+
+function filterCompletionistMatchesByTargets(matches, filters = state.map.completionist.filters) {
+  const showAirport = Boolean(filters?.airport);
+  const showCard = Boolean(filters?.card);
+  if (showAirport && showCard) {
+    return matches.slice();
+  }
+  if (showAirport) {
     return matches.filter((match) => match.hasMissingDestination);
   }
-  if (filterValue === 'card') {
+  if (showCard) {
     return matches.filter((match) => match.hasNewCard);
   }
-  if (filterValue === 'both') {
-    return matches.filter((match) => match.hasMissingDestination && match.hasNewCard);
-  }
-  return matches.slice();
+  return [];
+}
+
+function createCompletionistGroupMaps(matches) {
+  const airportGroups = new Map();
+  const cardGroups = new Map();
+  const updateGroup = (groupMap, key, label, seenAt) => {
+    const cleanedKey = sanitizeText(key);
+    if (!cleanedKey) {
+      return;
+    }
+    const existing = groupMap.get(cleanedKey) || {
+      count: 0,
+      newestSeenAt: 0,
+      label: sanitizeText(label),
+    };
+    existing.count += 1;
+    existing.newestSeenAt = Math.max(existing.newestSeenAt, Number(seenAt) || 0);
+    if (!existing.label && label) {
+      existing.label = sanitizeText(label);
+    }
+    groupMap.set(cleanedKey, existing);
+  };
+  (matches || []).forEach((match) => {
+    if (match.hasMissingDestination && match.airportTargetKey) {
+      updateGroup(
+        airportGroups,
+        match.airportTargetKey,
+        buildCompletionistAirportDisplay(match.destinationAirport, match.destination),
+        match.seenAt,
+      );
+    }
+    if (match.hasNewCard && match.cardTargetKey) {
+      updateGroup(
+        cardGroups,
+        match.cardTargetKey,
+        buildCompletionistAircraftSummary(match),
+        match.seenAt,
+      );
+    }
+  });
+  return {
+    airportGroups,
+    cardGroups,
+  };
+}
+
+function decorateCompletionistMatchesForSort(matches) {
+  const { airportGroups, cardGroups } = createCompletionistGroupMaps(matches);
+  const getGroupRecord = (groupMap, key) => {
+    if (!key) {
+      return {
+        count: 0,
+        newestSeenAt: 0,
+        label: '',
+      };
+    }
+    return groupMap.get(key) || {
+      count: 0,
+      newestSeenAt: 0,
+      label: '',
+    };
+  };
+  return (matches || []).map((match) => {
+    const airportGroup = getGroupRecord(airportGroups, match.hasMissingDestination ? match.airportTargetKey : '');
+    const cardGroup = getGroupRecord(cardGroups, match.hasNewCard ? match.cardTargetKey : '');
+    return {
+      ...match,
+      airportFlightCount: airportGroup.count,
+      airportGroupNewestSeenAt: airportGroup.newestSeenAt,
+      airportGroupLabel: airportGroup.label,
+      cardFlightCount: cardGroup.count,
+      cardGroupNewestSeenAt: cardGroup.newestSeenAt,
+      cardGroupLabel: cardGroup.label,
+    };
+  });
+}
+
+function compareCompletionistMatchesBySeen(left, right) {
+  return (Number(right.seenAt) || 0) - (Number(left.seenAt) || 0)
+    || left.displayFlightLabel.localeCompare(right.displayFlightLabel);
+}
+
+function compareCompletionistGroupTraffic(left, right, specs) {
+  const leftCount = Number(left?.[specs.countKey]) || 0;
+  const rightCount = Number(right?.[specs.countKey]) || 0;
+  const leftSeen = Number(left?.[specs.seenKey]) || 0;
+  const rightSeen = Number(right?.[specs.seenKey]) || 0;
+  const leftLabel = sanitizeText(left?.[specs.labelKey]).toLowerCase();
+  const rightLabel = sanitizeText(right?.[specs.labelKey]).toLowerCase();
+  return rightCount - leftCount
+    || rightSeen - leftSeen
+    || leftLabel.localeCompare(rightLabel);
+}
+
+function sortVisibleCompletionistMatches(matches) {
+  const decoratedMatches = decorateCompletionistMatchesForSort(matches);
+  const airportSpecs = {
+    countKey: 'airportFlightCount',
+    seenKey: 'airportGroupNewestSeenAt',
+    labelKey: 'airportGroupLabel',
+  };
+  const cardSpecs = {
+    countKey: 'cardFlightCount',
+    seenKey: 'cardGroupNewestSeenAt',
+    labelKey: 'cardGroupLabel',
+  };
+  const sortValue = normalizeCompletionistSortValue();
+  return decoratedMatches.sort((left, right) => {
+    if (sortValue === 'latest') {
+      return compareCompletionistMatchesBySeen(left, right)
+        || left.matchPriority - right.matchPriority;
+    }
+    if (sortValue === 'card-traffic') {
+      return compareCompletionistGroupTraffic(left, right, cardSpecs)
+        || compareCompletionistGroupTraffic(left, right, airportSpecs)
+        || compareCompletionistMatchesBySeen(left, right)
+        || left.matchPriority - right.matchPriority;
+    }
+    return compareCompletionistGroupTraffic(left, right, airportSpecs)
+      || compareCompletionistGroupTraffic(left, right, cardSpecs)
+      || compareCompletionistMatchesBySeen(left, right)
+      || left.matchPriority - right.matchPriority;
+  });
 }
 
 function getCompletionistUniqueTargetCounts(matches = []) {
@@ -6258,7 +6413,7 @@ function getCompletionistFilterCounts(matches = getSearchFilteredCompletionistMa
   return getCompletionistUniqueTargetCounts(matches);
 }
 
-function getCompletionistCountForFilter(counts, filterValue = state.map.completionist.filter) {
+function getCompletionistCountForFilter(counts, filterValue) {
   if (!counts || typeof counts !== 'object') {
     return 0;
   }
@@ -6279,10 +6434,48 @@ function formatCompletionistTargetLabel(filterValue, count) {
   return `${formatNumber(count)} ${count === 1 ? 'unique target' : 'unique targets'}`;
 }
 
+function joinCompletionistLabels(parts) {
+  if (!parts.length) {
+    return '';
+  }
+  if (parts.length === 1) {
+    return parts[0];
+  }
+  if (parts.length === 2) {
+    return `${parts[0]} and ${parts[1]}`;
+  }
+  return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
+}
+
+function buildCompletionistTargetSummary(counts, filters = state.map.completionist.filters, options = {}) {
+  const activeFilters = getCompletionistActiveFilterValues(filters);
+  if (!activeFilters.length) {
+    return 'no target types enabled';
+  }
+  const includeZero = options.includeZero === true;
+  const parts = activeFilters
+    .map((filterValue) => ({
+      filterValue,
+      count: getCompletionistCountForFilter(counts, filterValue),
+    }))
+    .filter((entry) => includeZero || entry.count > 0);
+  const fallbackParts = parts.length
+    ? parts
+    : activeFilters.map((filterValue) => ({
+      filterValue,
+      count: getCompletionistCountForFilter(counts, filterValue),
+    }));
+  return joinCompletionistLabels(
+    fallbackParts.map(({ filterValue, count }) => formatCompletionistTargetLabel(filterValue, count)),
+  );
+}
+
 function getCompletionistViewState() {
   const allMatches = getActiveCompletionistMatches();
   const searchMatches = getSearchFilteredCompletionistMatches();
-  const visibleMatches = filterCompletionistMatchesByKind(searchMatches, state.map.completionist.filter);
+  const visibleMatches = sortVisibleCompletionistMatches(
+    filterCompletionistMatchesByTargets(searchMatches, state.map.completionist.filters),
+  );
   const allCounts = getCompletionistUniqueTargetCounts(allMatches);
   const searchCounts = getCompletionistUniqueTargetCounts(searchMatches);
   const visibleCounts = getCompletionistUniqueTargetCounts(visibleMatches);
@@ -6529,36 +6722,36 @@ function buildCompletionistTelemetryBits(match, options = {}) {
 }
 
 function buildCompletionistMetaText(visibleCounts, searchCounts, totalCounts) {
-  const hiddenCount = getCompletionistDismissedCounts().total;
-  const hiddenSuffix = hiddenCount
-    ? ` ${formatNumber(hiddenCount)} ${hiddenCount === 1 ? 'target is' : 'targets are'} hidden this session.`
-    : '';
-  const filterValue = state.map.completionist.filter;
-  const visibleTargetLabel = formatCompletionistTargetLabel(filterValue, getCompletionistCountForFilter(visibleCounts, filterValue));
-  const searchTargetLabel = formatCompletionistTargetLabel(filterValue, getCompletionistCountForFilter(searchCounts, filterValue));
-  const totalTargetLabel = formatCompletionistTargetLabel(filterValue, getCompletionistCountForFilter(totalCounts, filterValue));
-  if (getCompletionistSearchTokens().length) {
-    return `${formatNumber(visibleCounts.flights)} flights shown for ${visibleTargetLabel} from ${searchTargetLabel} (${totalTargetLabel} total).${hiddenSuffix}`;
+  const parts = [];
+  if (!getCompletionistActiveFilterValues().length) {
+    parts.push('No target types enabled.');
+  } else if (getCompletionistSearchTokens().length) {
+    parts.push(`Showing ${formatNumber(visibleCounts.flights)} of ${formatNumber(searchCounts.flights)} matching flights.`);
+  } else {
+    parts.push(`Showing ${formatNumber(visibleCounts.flights)} of ${formatNumber(totalCounts.flights)} flights.`);
   }
-  return `${formatNumber(visibleCounts.flights)} flights shown for ${visibleTargetLabel} (${totalTargetLabel} in snapshot).${hiddenSuffix}`;
+  parts.push(`Sorted by ${getCompletionistSortLabel()}.`);
+  const hiddenSummary = buildCompletionistDismissSummaryText();
+  if (hiddenSummary) {
+    parts.push(hiddenSummary);
+  }
+  return parts.join(' ');
 }
 
 function buildCompletionistFilterChips(counts, disabled = false) {
   const chipDefinitions = [
-    { value: 'all', label: 'All targets' },
     { value: 'airport', label: 'Missing airport' },
     { value: 'card', label: 'New card' },
-    { value: 'both', label: 'Both' },
   ];
   return chipDefinitions.map(({ value, label }) => {
     const count = counts[value] || 0;
-    const isActive = state.map.completionist.filter === value;
+    const isActive = isCompletionistTargetFilterEnabled(value);
     return `
       <button
         type="button"
         class="completionist-filter-chip${isActive ? ' is-active' : ''}"
-        data-action="set-completionist-filter"
-        data-filter="${value}"
+        data-action="toggle-completionist-filter"
+        data-filter-key="${value}"
         aria-pressed="${String(isActive)}"
         ${disabled ? 'disabled' : ''}
       >
@@ -6819,6 +7012,7 @@ function focusCompletionistFlight(model, flightId, options = {}) {
 }
 
 function buildCompletionistStatusMessage(visibleMatches, visibleCounts) {
+  const activeFilters = getCompletionistActiveFilterValues();
   if (state.map.completionist.loading && !state.map.completionist.snapshot) {
     return 'Loading the latest completionist snapshot...';
   }
@@ -6831,24 +7025,26 @@ function buildCompletionistStatusMessage(visibleMatches, visibleCounts) {
   if (!state.map.completionist.snapshot) {
     return 'Waiting for the first completionist snapshot.';
   }
+  if (!activeFilters.length) {
+    return 'Enable Missing airport or New card to show live completionist targets.';
+  }
   if (!visibleMatches.length) {
     if (!getActiveCompletionistMatches().length && getCompletionistDismissedCounts().total) {
       return 'All current completionist matches are hidden for this browser session.';
     }
     if (getCompletionistSearchTokens().length) {
-      return 'No live flights match the current completionist search and filter.';
+      return 'No live flights match the current completionist search and target filters.';
     }
     return 'No live flights in the latest shared snapshot match your current missing airports or cards.';
   }
-  const targetCount = getCompletionistCountForFilter(visibleCounts);
-  const targetLabel = formatCompletionistTargetLabel(state.map.completionist.filter, targetCount);
-  return `${formatNumber(visibleMatches.length)} flights covering ${targetLabel} in the current shared snapshot.`;
+  return `${formatNumber(visibleMatches.length)} flights across ${buildCompletionistTargetSummary(visibleCounts, state.map.completionist.filters)}.`;
 }
 
 function buildCompletionistListRenderSignature(matches) {
   return [
     state.map.completionist.manifest?.generatedAt || '',
-    state.map.completionist.filter,
+    getCompletionistActiveFilterValues().join('|'),
+    normalizeCompletionistSortValue(),
     state.map.completionist.query.trim().toLowerCase(),
     state.map.completionist.selectedFlightId,
     Array.from(state.map.completionist.dismissedAirportKeys || []).sort().join('|'),
@@ -6927,6 +7123,17 @@ function renderCompletionistFlightListLegacy(matches) {
   }).join('');
 }
 
+function buildCompletionistSortTag(match) {
+  const sortValue = normalizeCompletionistSortValue();
+  if (sortValue === 'airport-traffic' && match.hasMissingDestination && Number(match.airportFlightCount) > 1) {
+    return `<span class="completionist-flight-selection-tag is-airport">${formatNumber(match.airportFlightCount)} airport flights</span>`;
+  }
+  if (sortValue === 'card-traffic' && match.hasNewCard && Number(match.cardFlightCount) > 1) {
+    return `<span class="completionist-flight-selection-tag is-card">${formatNumber(match.cardFlightCount)} new card flights</span>`;
+  }
+  return '';
+}
+
 function renderMapCompletionistPanel(model) {
   const {
     visibleMatches,
@@ -6952,11 +7159,12 @@ function renderMapCompletionistPanel(model) {
     elements.mapCompletionistSearch.value = state.map.completionist.query;
     elements.mapCompletionistSearch.disabled = !model;
   }
+  if (elements.mapCompletionistSort) {
+    elements.mapCompletionistSort.value = normalizeCompletionistSortValue();
+    elements.mapCompletionistSort.disabled = !model;
+  }
   if (elements.mapCompletionistFilterBar) {
     elements.mapCompletionistFilterBar.innerHTML = buildCompletionistFilterChips(filterCounts, !model);
-  }
-  if (elements.mapCompletionistDismissSummary) {
-    elements.mapCompletionistDismissSummary.textContent = buildCompletionistDismissSummaryText(model);
   }
   if (elements.mapCompletionistRestoreButton) {
     const hasDismissedTargets = getCompletionistDismissedCounts().total > 0;
@@ -6964,11 +7172,13 @@ function renderMapCompletionistPanel(model) {
     elements.mapCompletionistRestoreButton.disabled = !model || !hasDismissedTargets;
   }
   elements.mapCompletionistRefreshButton.disabled = state.map.completionist.loading || !model;
-  elements.mapCompletionistMeta.textContent = buildCompletionistMetaText(
-    visibleCounts,
-    searchCounts,
-    allCounts,
-  );
+  elements.mapCompletionistMeta.textContent = model
+    ? buildCompletionistMetaText(
+      visibleCounts,
+      searchCounts,
+      allCounts,
+    )
+    : 'Upload a collection export to match live targets locally in this browser.';
   if (!model) {
     elements.mapCompletionistList.innerHTML = '<div class="empty-copy">Upload a collection export to use completionist mode.</div>';
     state.map.completionist.listRenderSignature = 'no-model';
@@ -7009,12 +7219,15 @@ function buildCompletionistPopup(match) {
 
 function renderCompletionistFlightList(matches) {
   if (!matches.length) {
+    if (!getCompletionistActiveFilterValues().length) {
+      return '<div class="empty-copy">Enable Missing airport or New card to show live targets.</div>';
+    }
     if (!getCompletionistSearchTokens().length && !getActiveCompletionistMatches().length && getCompletionistDismissedCounts().total) {
-      return '<div class="empty-copy">All current live matches are hidden for this browser session. Use Restore hidden matches to bring them back.</div>';
+      return '<div class="empty-copy">All current live matches are hidden for this browser session. Use Restore hidden to bring them back.</div>';
     }
     return getCompletionistSearchTokens().length
-      ? '<div class="empty-copy">No live flights match the current search and filter.</div>'
-      : '<div class="empty-copy">No matching flights are visible for the current completionist filter.</div>';
+      ? '<div class="empty-copy">No live flights match the current search and target filters.</div>'
+      : '<div class="empty-copy">No matching live flights are visible for the active target filters.</div>';
   }
   return matches.map((match) => {
     const isSelected = match.id === state.map.completionist.selectedFlightId;
@@ -7023,6 +7236,7 @@ function renderCompletionistFlightList(matches) {
     const registrationSummary = buildCompletionistRegistrationSummary(match);
     const fr24Url = buildCompletionistFlightFr24Url(match);
     const dismissButtons = buildCompletionistDismissButtons(match);
+    const sortTag = buildCompletionistSortTag(match);
     const seenLabel = Number.isFinite(match.seenAt)
       ? formatRelativeAgeFromMillis(Date.now() - (match.seenAt * 1000))
       : 'Unknown age';
@@ -7037,7 +7251,10 @@ function renderCompletionistFlightList(matches) {
         >
           <div class="completionist-flight-topline">
             <strong class="completionist-flight-title">${escapeHtml(aircraftSummary)}</strong>
-            <span class="completionist-flight-age" data-flight-age-id="${escapeHtml(match.id)}">${escapeHtml(seenLabel)}</span>
+            <div class="completionist-flight-topline-meta">
+              ${sortTag}
+              <span class="completionist-flight-age" data-flight-age-id="${escapeHtml(match.id)}">${escapeHtml(seenLabel)}</span>
+            </div>
           </div>
           <p class="completionist-flight-registration">${escapeHtml(registrationSummary)}</p>
           ${buildCompletionistRouteGraphic(match)}
@@ -7135,8 +7352,12 @@ function renderMapKpis(model) {
     const searchActive = getCompletionistSearchTokens().length > 0;
     const scopeCounts = searchActive ? searchCounts : allCounts;
     const scopeLabel = searchActive ? 'in search' : 'in snapshot';
+    const targetBreakdown = [
+      formatCompletionistTargetLabel('airport', scopeCounts.airport),
+      formatCompletionistTargetLabel('card', scopeCounts.card),
+    ].join(', ');
     elements.mapAirportKpi.textContent = state.map.completionist.snapshot
-      ? `${formatCompletionistTargetLabel('all', scopeCounts.all)} ${scopeLabel}: ${formatCompletionistTargetLabel('airport', scopeCounts.airport)}, ${formatCompletionistTargetLabel('card', scopeCounts.card)}, ${formatCompletionistTargetLabel('both', scopeCounts.both)}. ${formatNumber(visibleMatches.length)} flights visible in the current filter.${staleSuffix}`
+      ? `${formatCompletionistTargetLabel('all', scopeCounts.all)} ${scopeLabel}: ${targetBreakdown}. ${formatNumber(visibleMatches.length)} flights visible in the current target view.${staleSuffix}`
       : 'Completionist mode compares the shared live snapshot against your local collection only in this browser.';
     return;
   }
@@ -9223,7 +9444,11 @@ function renderDashboard(model, references = null) {
   state.map.usStateQuery = '';
   state.map.usStateSort = 'total_desc';
   state.map.completionist.enabled = false;
-  state.map.completionist.filter = 'airport';
+  state.map.completionist.filters = {
+    airport: true,
+    card: true,
+  };
+  state.map.completionist.sort = 'airport-traffic';
   state.map.completionist.query = '';
   resetCompletionistState();
   resetMapDrillState();
@@ -9584,6 +9809,14 @@ function wireMapCompletionControls() {
     }, 0);
   });
 
+  elements.mapCompletionistSort?.addEventListener('change', () => {
+    if (!state.model) {
+      return;
+    }
+    state.map.completionist.sort = normalizeCompletionistSortValue(elements.mapCompletionistSort.value);
+    renderMapTab(state.model);
+  });
+
   elements.mapCompletionistFilterBar?.addEventListener('click', (event) => {
     if (!state.model) {
       return;
@@ -9592,12 +9825,27 @@ function wireMapCompletionControls() {
     if (!(target instanceof Element)) {
       return;
     }
-    const button = target.closest('button[data-action="set-completionist-filter"][data-filter]');
+    const button = target.closest('button[data-action="toggle-completionist-filter"][data-filter-key]');
     if (!button || button.hasAttribute('disabled')) {
       return;
     }
-    const nextFilter = String(button.dataset.filter || '').trim().toLowerCase();
-    state.map.completionist.filter = COMPLETIONIST_FILTER_VALUES.has(nextFilter) ? nextFilter : 'all';
+    const filterKey = String(button.dataset.filterKey || '').trim().toLowerCase();
+    if (!COMPLETIONIST_TARGET_FILTER_VALUES.includes(filterKey)) {
+      return;
+    }
+    state.map.completionist.filters = {
+      ...state.map.completionist.filters,
+      [filterKey]: !isCompletionistTargetFilterEnabled(filterKey),
+    };
+    const activeFilters = getCompletionistActiveFilterValues();
+    if (activeFilters.length === 1) {
+      if (activeFilters[0] === 'airport' && normalizeCompletionistSortValue() === 'card-traffic') {
+        state.map.completionist.sort = 'airport-traffic';
+      }
+      if (activeFilters[0] === 'card' && normalizeCompletionistSortValue() === 'airport-traffic') {
+        state.map.completionist.sort = 'card-traffic';
+      }
+    }
     if (!getSelectedCompletionistMatch()) {
       state.map.completionist.selectedFlightId = '';
     }

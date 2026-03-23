@@ -42,7 +42,7 @@
       crossorigin=""
     >
     <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
-  <link rel="stylesheet" href="./styles.css?v=20260323-completionist-destination-1">
+  <link rel="stylesheet" href="./styles.css?v=20260323-completionist-sort-1">
   </head>
   <body>
     <a class="skip-link" href="#dashboard">Skip to dashboard</a>
@@ -390,9 +390,19 @@
                     <p class="eyebrow">Completionist mode</p>
                     <h3>Live flight hunter</h3>
                   </div>
-                  <button id="map-completionist-refresh-button" class="region-action-button" type="button">
-                    Refresh now
-                  </button>
+                  <div class="map-completionist-head-actions">
+                    <button
+                      id="map-completionist-restore-button"
+                      class="region-action-button completionist-dismiss-restore"
+                      type="button"
+                      hidden
+                    >
+                      Restore hidden
+                    </button>
+                    <button id="map-completionist-refresh-button" class="region-action-button" type="button">
+                      Refresh now
+                    </button>
+                  </div>
                 </div>
                 <div class="map-completionist-summary-strip">
                   <p class="panel-kpi-line map-completionist-status-line" id="map-completionist-status"></p>
@@ -407,19 +417,6 @@
                     </span>
                   </div>
                 </div>
-                <div class="completionist-dismiss-shell">
-                  <p id="map-completionist-dismiss-summary" class="completionist-dismiss-summary">
-                    Hide airport or Hide aircraft to clear handled targets for this browser session.
-                  </p>
-                  <button
-                    id="map-completionist-restore-button"
-                    class="region-action-button completionist-dismiss-restore"
-                    type="button"
-                    hidden
-                  >
-                    Restore hidden matches
-                  </button>
-                </div>
                 <div class="map-completionist-toolbar">
                   <label class="control-field completion-control completionist-search-control">
                     <span class="sr-only">Search live matches</span>
@@ -428,6 +425,14 @@
                       type="search"
                       placeholder="Registration, type, airport, callsign"
                     >
+                  </label>
+                  <label class="control-field completion-control completionist-sort-control">
+                    <span class="sr-only">Sort live completionist matches</span>
+                    <select id="map-completionist-sort" aria-label="Sort live completionist matches">
+                      <option value="airport-traffic">Flights / airport</option>
+                      <option value="card-traffic">Flights / card</option>
+                      <option value="latest">Latest seen</option>
+                    </select>
                   </label>
                   <div
                     id="map-completionist-filter-bar"
@@ -926,7 +931,7 @@
       type="module"
       src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.1.0/model-viewer.min.js"
     ></script>
-  <script type="module" src="./src/main.js?v=20260323-completionist-destination-1"></script>
+  <script type="module" src="./src/main.js?v=20260323-completionist-sort-1"></script>
   </body>
 </html>
 

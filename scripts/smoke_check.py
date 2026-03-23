@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -10,6 +11,13 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_CLOUDFLARE_ACCOUNT_ID = '172da47da00e3b33810d2e9c73c9a0b9'
+
+
+def _is_ci_environment() -> bool:
+    return (
+        os.environ.get('GITHUB_ACTIONS', '').strip().lower() == 'true'
+        or os.environ.get('CI', '').strip().lower() == 'true'
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -60,6 +68,9 @@ def check_repo_hygiene(mode: str) -> None:
 def check_sample_collection() -> None:
     sample_path = REPO_ROOT / 'skycards_user.json'
     if not sample_path.exists():
+        if _is_ci_environment():
+            print('real validation payload: skipped (repo-root skycards_user.json fixture not present in CI)')
+            return
         raise SystemExit('smoke_check: missing repo-root skycards_user.json fixture')
     payload = _load_json(sample_path)
     required_keys = {

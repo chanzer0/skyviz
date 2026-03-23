@@ -57,7 +57,7 @@
   - aircraft image candidates resolved as tier-aware CDN URLs using `*_md.png` first, then `cyber` tier + model metadata alias fallback (`imageOverride`, `images[]`)
   - aircraft detail modal metadata slices for engine profile, performance, airframe geometry, military status, and seasonal span
   - aircraft detail media candidates resolved from optimized Skycards CDN GLB assets
-  - completionist-mode flight matches built by comparing the shared delayed snapshot from the production Cloudflare manifest endpoint (or the local `site/data/live/` fixture path on localhost) against the current user's missing airport unlocks and missing aircraft models entirely in-browser after discarding live rows without usable registrations, with completionist summary/filter counts tracking unique airport and card targets instead of duplicate flight rows
+  - completionist-mode flight matches built by comparing the shared delayed snapshot from the production Cloudflare manifest endpoint (or the local `site/data/live/` fixture path on localhost) against the current user's missing airport unlocks and missing aircraft models entirely in-browser after discarding live rows without usable registrations, with compact `Missing airport` / `New card` target toggles enabled by default, a separate live sort control for busiest airport/card groups vs latest sightings, and completionist summary/pill counts tracking unique airport and card targets instead of duplicate flight rows
 11. The loaded UI transitions to a tabbed dashboard (`Navdle`, `Cardle`, `Map`, and `Deck`) without sending upload data to any server. The two daily tabs remain available even when no collection upload is active.
 
 ## Completionist live snapshot contract
