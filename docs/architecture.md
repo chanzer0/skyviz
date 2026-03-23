@@ -70,6 +70,7 @@ Completionist mode does not fetch its upstream live-flight feed directly from th
 - the repository includes a lightweight completionist-only Pages workflow at `.github/workflows/refresh-completionist-pages.yml`, designed for external `workflow_dispatch` triggers that refresh the snapshot every `5` minutes
 - the repository also keeps the legacy GitHub `schedule` path in `.github/workflows/deploy-pages.yml` as a fallback until the repo variable `USE_EXTERNAL_COMPLETIONIST_SCHEDULER` is set to `true`
 - once that repo variable is `true`, scheduled runs of `.github/workflows/deploy-pages.yml` skip their schedule path so the external scheduler becomes the only repeating completionist trigger
+- both Pages workflows share the same per-ref concurrency lane without cancel-in-progress so a completionist refresh queues behind an active full deploy instead of canceling it mid-run
 - those scheduled Pages runs restore cached generated reference and airport artifacts before deploy so the static app keeps its upload and daily-game data even when the schedule path only refreshes the live snapshot
 - if that cache is cold, the schedule path falls back to rebuilding the required reference and airport artifacts before publish
 - the repo includes a Cloudflare Worker project in `workers/completionist-dispatch/` that dispatches the lightweight workflow on a `*/5 * * * *` cron once deployed and given a GitHub workflow-dispatch token

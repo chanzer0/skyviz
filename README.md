@@ -239,4 +239,6 @@ gh variable set USE_EXTERNAL_COMPLETIONIST_SCHEDULER --body true
 
 The worker secret should be a GitHub token that can dispatch workflows for this repository. A fine-grained token with `Actions: write` on `chanzer0/skyviz` is the intended setup. Keep the repo variable unset until the worker is deployed; once `USE_EXTERNAL_COMPLETIONIST_SCHEDULER=true`, the legacy GitHub `schedule` path in `.github/workflows/deploy-pages.yml` skips scheduled deploys so the worker becomes the only repeating completionist trigger.
 
+The full `Deploy Pages` workflow and the lightweight `Refresh Completionist Pages` workflow now share the same per-ref Pages concurrency lane without `cancel-in-progress`, so push/manual deploys and 5-minute completionist refreshes queue behind each other instead of canceling active publishes mid-run.
+
 This repository ignores generated files under `site/data/reference/*`, `site/data/airports/*.csv` / `site/data/airports/daily-game.json` / `site/data/airports/manifest.json`, and `site/data/live/*.json` in git. CI and Pages workflows generate fresh snapshots before validation/deploy. Cardle continues to run from the committed reference snapshots; its hotspot hint depends on live browser access to the Skycards multipoint endpoint at play time, while completionist mode reads the delayed snapshot published with the static site.
