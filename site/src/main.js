@@ -238,6 +238,22 @@ const COMPLETIONIST_DEFAULT_SNAPSHOT_SECONDS = 300;
 const COMPLETIONIST_DEFAULT_STALE_SECONDS = 900;
 const COMPLETIONIST_SEARCH_DEBOUNCE_MS = 140;
 const COMPLETIONIST_FILTER_VALUES = new Set(['all', 'airport', 'card', 'both']);
+const COMPLETIONIST_INVALID_REGISTRATION_VALUES = new Set([
+  '',
+  '0',
+  '00',
+  '000',
+  '0000',
+  '00000',
+  '000000',
+  '0000000',
+  '00000000',
+  'N/A',
+  'NA',
+  'NONE',
+  'NULL',
+  'UNKNOWN',
+]);
 const REGION_CODE_PREVIEW_LIMIT = 56;
 const REGISTRATION_MODAL_PAGE_SIZE = 120;
 const MODEL_REGISTRATION_MODAL_PAGE_SIZE = 120;
@@ -5794,6 +5810,18 @@ function normalizeCompletionistCode(value) {
   return sanitizeText(value).toUpperCase();
 }
 
+function normalizeCompletionistRegistration(value) {
+  return sanitizeText(value).toUpperCase().replace(/\s+/g, '');
+}
+
+function hasValidCompletionistRegistration(value) {
+  const registration = normalizeCompletionistRegistration(value);
+  if (!registration || COMPLETIONIST_INVALID_REGISTRATION_VALUES.has(registration)) {
+    return false;
+  }
+  return /^[A-Z0-9-]{3,}$/.test(registration);
+}
+
 function escapeSelectorValue(value) {
   if (window.CSS?.escape) {
     return window.CSS.escape(value);
@@ -6025,6 +6053,11 @@ function buildCompletionistMatches(model, references, liveRows) {
 
   return (liveRows || [])
     .map((flight) => {
+      const registration = normalizeCompletionistRegistration(flight.registration);
+      // Skip feed rows FR24 does not back with a usable registration.
+      if (!hasValidCompletionistRegistration(registration)) {
+        return null;
+      }
       const destinationCode = normalizeCompletionistCode(flight.destination);
       const originCode = normalizeCompletionistCode(flight.origin);
       const typeCode = normalizeCompletionistCode(flight.typeCode);
@@ -6055,6 +6088,7 @@ function buildCompletionistMatches(model, references, liveRows) {
         : '';
       const baseMatch = {
         ...flight,
+        registration,
         typeCode,
         origin: originCode,
         destination: destinationCode,
@@ -6276,7 +6310,7 @@ function buildCompletionistFlightFr24Url(match) {
   if (!match || typeof match !== 'object') {
     return 'https://www.flightradar24.com/';
   }
-  const registration = sanitizeText(match.registration).toUpperCase().replace(/\s+/g, '');
+  const registration = normalizeCompletionistRegistration(match.registration);
   if (registration) {
     return `https://www.flightradar24.com/${encodeURIComponent(registration)}`;
   }
