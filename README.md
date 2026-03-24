@@ -246,7 +246,7 @@ Production completionist reads come from the active source configured in `site/d
 
 The browser reads only one active manifest at a time, but the runtime config keeps both active and shadow sources explicit so parity checks and eventual cutover do not require code changes.
 
-As of `2026-03-24`, production should remain on `skyvizLegacy`: the first live parity check against `fr24Shared` showed `10696` legacy rows vs `8599` fr24-derived rows, so the cutover gate is still data parity rather than deploy readiness.
+As of `2026-03-24`, the cutover target is `fr24Shared` with `skyvizLegacy` kept as the shadow rollback source during burn-in. The deciding check was user-visible completionist parity against the repo-root `skycards_user.json` fixture: `705` legacy displayable targets vs `712` fr24-shared displayable targets, with `701` overlapping, `4` legacy-only, and `11` fr24-shared-only.
 
 All Cloudflare write operations in this repository must target:
 
@@ -274,7 +274,7 @@ The worker keeps the stable manifest URL short-lived and publishes versioned sna
 
 Per-tile staging artifacts are deleted after publish, and older versioned run artifacts are pruned on a short retention window so the bucket does not accumulate unnecessary storage bloat.
 
-Before flipping `activeSource` to `fr24Shared`, compare the runtime-config active and shadow sources with:
+During burn-in, compare the runtime-config active and shadow sources with:
 
 ```bash
 python scripts/compare_completionist_sources.py

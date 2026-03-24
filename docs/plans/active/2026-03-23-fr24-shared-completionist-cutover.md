@@ -4,9 +4,15 @@
 
 Move Skyviz from its legacy Skyviz-owned completionist Cloudflare worker to the fr24-derived shared completionist manifest without changing the browser-local product model.
 
+This plan now depends on the producer-side dual-source architecture tracked in:
+
+- `D:/Repositories/fr24-discord-bot-cloudflare/docs/plans/active/2026-03-24-dual-source-live-flight-unification.md`
+
 ## Current status
 
-Shadow-mode consumer support is implemented. Production still reads the legacy Skyviz source by default, and the first live parity check on `2026-03-24` showed that cutover should remain blocked for now.
+Producer-side dual-source unification is now live from `fr24-discord-bot`, and the consumer cutover is approved in this branch. `site/data/runtime-config.json` now flips production reads to `fr24Shared` while keeping `skyvizLegacy` as the shadow rollback source during burn-in.
+
+The deciding evidence is no longer raw feed-row parity by itself. The more important gate is user-visible completionist parity for a real Skycards fixture, and the latest `2026-03-24` check against the repo-root `skycards_user.json` fixture is close enough to cut over safely.
 
 ## Completed in this phase
 
@@ -15,14 +21,15 @@ Shadow-mode consumer support is implemented. Production still reads the legacy S
 - Preserved the localhost/local-fixture default under `site/data/live/`.
 - Added `scripts/compare_completionist_sources.py` for active-vs-shadow parity checks.
 - Updated durable docs and worker notes so `workers/completionist-live/` is clearly treated as the legacy shadow producer during the cutover.
+- Flipped `runtime-config.json` to `activeSource=fr24Shared` / `shadowSource=skyvizLegacy` for the production cutover branch.
+- Re-based the cutover decision on the unified producer artifact from `fr24-discord-bot` instead of the earlier ADS-B-only producer output.
 
 ## Remaining rollout steps
 
-- Keep the consumer branch merged and deployed with `activeSource=skyvizLegacy` / `shadowSource=fr24Shared`.
-- Run parity checks against the deployed fr24-derived manifest until overlap, freshness, and target parity are acceptable.
-- Flip `activeSource` from `skyvizLegacy` to `fr24Shared` after approval.
-- Burn in the fr24-derived source in production.
-- Retire `workers/completionist-live/` after cutover and update docs again when that deletion is approved.
+- Merge and deploy the consumer branch with `activeSource=fr24Shared` / `shadowSource=skyvizLegacy`.
+- Run burn-in parity checks against the live shared manifest and keep the legacy worker available as rollback while confidence builds.
+- Watch for material user-visible regressions in missing-airport / new-card targets rather than chasing raw feed-row equality.
+- Retire `workers/completionist-live/` only after burn-in is stable and the removal is explicitly approved.
 
 ## Validation for this checkpoint
 
@@ -35,11 +42,15 @@ Shadow-mode consumer support is implemented. Production still reads the legacy S
 
 - The browser still fetches only one completionist manifest at a time.
 - Shadow mode is an operational/runtime-config concern, not a dual-fetch UI feature.
-- If the fr24-derived manifest is unavailable, production remains on the legacy source until a deliberate config flip is approved.
-- First live parity snapshot on `2026-03-24`:
-  - legacy `skyviz` source: `10696` rows
-  - fr24-derived source: `8599` rows
-  - overlap: `7429` shared flight IDs
-  - legacy-only rows: `3267`
-  - fr24-only rows: `1170`
-- That delta points to a real source-coverage mismatch between the legacy direct-FR24 sweep and the bot-produced canonical live snapshot. Consumer shadow support is still worth merging because it keeps the runtime-config and parity tooling ready without changing production reads.
+- If the fr24-shared manifest regresses during burn-in, rollback is a runtime-config change back to `skyvizLegacy`.
+- Raw parity remains looser than display parity, which is expected:
+  - latest raw feed snapshot on `2026-03-24`: `16772` legacy rows vs `15803` fr24-shared rows
+  - overlap: `14453` shared flight IDs
+  - legacy-only rows: `2319`
+  - fr24-shared-only rows: `1350`
+- The deciding cutover check is displayable-target parity for a real collection, not raw feed-row equality:
+  - latest fixture check on `2026-03-24`: `705` legacy displayable targets vs `712` fr24-shared displayable targets
+  - overlap: `701`
+  - legacy-only displayable targets: `4`
+  - fr24-shared-only displayable targets: `11`
+- The remaining legacy-only displayable rows were narrow edge cases rather than a broad coverage gap, while the fr24-shared-only rows were legitimate missing-airport or new-card targets.

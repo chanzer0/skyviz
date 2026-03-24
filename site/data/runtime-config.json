@@ -1,17 +1,17 @@
 {
   "completionist": {
-    "activeSource": "skyvizLegacy",
-    "shadowSource": "fr24Shared",
+    "activeSource": "fr24Shared",
+    "shadowSource": "skyvizLegacy",
     "sources": {
       "skyvizLegacy": {
         "label": "Skyviz legacy Cloudflare pipeline",
         "manifestUrl": "https://skyviz-completionist-live.seansailer28.workers.dev/live/completionist-manifest.json",
-        "role": "active"
+        "role": "shadow"
       },
       "fr24Shared": {
         "label": "fr24 shared data plane",
         "manifestUrl": "https://fr24-shared-data-plane.seansailer28.workers.dev/v1/derived/completionist/manifest.json",
-        "role": "shadow"
+        "role": "active"
       }
     }
   }

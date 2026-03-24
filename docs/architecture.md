@@ -65,10 +65,10 @@
 Completionist mode does not fetch its upstream live-flight feed directly from the browser.
 
 - production completionist reads are selected from `site/data/runtime-config.json`, which now keeps both an `activeSource` and a `shadowSource`
-- the current active source still points at the Skyviz-owned `workers/completionist-live/` pipeline during shadow-mode burn-in
-- the shadow source points at the fr24-derived completionist manifest produced by `fr24-discord-bot`
+- the active source now points at the fr24-derived completionist manifest produced by `fr24-discord-bot`
+- the shadow source points at the legacy Skyviz-owned `workers/completionist-live/` pipeline for rollback and burn-in parity
 - the browser still reads only one manifest at a time; shadow parity is handled by explicit runtime-config selection or repo scripts, not by dual-fetching in the main UI
-- the Skyviz-owned `workers/completionist-live/` pipeline remains available only as the legacy shadow producer until fr24 cutover is approved
+- the Skyviz-owned `workers/completionist-live/` pipeline remains available only as the legacy shadow producer during burn-in and rollback
 - a Worker `Cron Trigger` fires every `5` minutes and starts one `Workflow` run for that schedule slot
 - the workflow seeds world tiles onto a `Queue`; queue consumers fetch the upstream live-flight feed by bounds, normalize rows, and write per-tile artifacts to `R2`
 - a `Durable Object` coordinator owns tile leases, retry-safe counters, split decisions, budget exhaustion, and single-writer publish readiness
@@ -77,10 +77,10 @@ Completionist mode does not fetch its upstream live-flight feed directly from th
 - published artifacts are written to versioned `R2` keys, and the stable manifest key is updated last so the browser's `manifest -> snapshot` fetch stays consistent
 - per-tile `R2` artifacts are deleted after a successful publish, and versioned run artifacts are pruned on a short retention window so the bucket does not accumulate unnecessary storage bloat
 - the browser resolves the production manifest URL from the runtime-config `activeSource`, unless query-string overrides force `completionistSource=active`, `completionistSource=shadow`, or one explicit `completionistManifestUrl`
-- as of `2026-03-24`, `activeSource` should stay on `skyvizLegacy` because the first live parity check against `fr24Shared` showed a material coverage gap (`10696` legacy rows vs `8599` fr24-derived rows)
+- as of `2026-03-24`, `activeSource` should point at `fr24Shared`; producer-side dual-source unification closed the meaningful user-visible parity gap, and the deciding fixture check showed `705` legacy displayable targets vs `712` fr24-shared displayable targets with `701` overlapping
 - when served from `localhost`, `127.0.0.1`, or `file:`, the browser ignores the production endpoint and prefers `site/data/live/completionist-manifest.json` unless one of those explicit completionist query-string overrides is present
 - `scripts/refresh_completionist_snapshot.py` still runs the same adaptive tiled sweep locally and writes `site/data/live/completionist-manifest.json` plus `site/data/live/completionist-snapshot.json` for preview and offline validation
-- `scripts/compare_completionist_sources.py` compares the runtime-config active and shadow sources for parity before cutover
+- `scripts/compare_completionist_sources.py` compares the runtime-config active and shadow sources for parity during burn-in and rollback review
 - the repository requires `python scripts/check_cloudflare_account.py` before any Cloudflare write operation; that guardrail verifies Wrangler auth is on `seansailer28@gmail.com` / `172da47da00e3b33810d2e9c73c9a0b9`
 - the snapshot payload keeps only the fields needed for matching and map rendering: flight id, aircraft hex, coordinates, heading, altitude, speed, type code, registration, seen time, origin, destination, flight number, and callsign
 - snapshot metadata keeps only the browser-facing refresh contract: generated time, row count, field order, and refresh cadence

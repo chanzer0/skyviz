@@ -39,7 +39,7 @@ npx wrangler queues create skyviz-completionist-tile-dlq --config wrangler.provi
 npx wrangler deploy
 ```
 
-During shadow mode, keep [`runtime-config.json`](/D:/Repositories/skyviz/site/data/runtime-config.json) pointed at the worker's stable manifest route through the `skyvizLegacy` source entry:
+During burn-in, keep this worker configured as the `skyvizLegacy` shadow/rollback source in [`runtime-config.json`](/D:/Repositories/skyviz/site/data/runtime-config.json):
 
 - `/live/completionist-manifest.json`
 
@@ -49,6 +49,6 @@ The runtime deletes per-tile staging artifacts after a successful publish and pr
 
 ## Local development
 
-- Production completionist reads use the currently selected source in [`runtime-config.json`](/D:/Repositories/skyviz/site/data/runtime-config.json); this worker is the `skyvizLegacy` source during the fr24 migration.
+- Production completionist reads now default to `fr24Shared` in [`runtime-config.json`](/D:/Repositories/skyviz/site/data/runtime-config.json); this worker remains available as the `skyvizLegacy` shadow source during burn-in.
 - Local preview on `localhost` or `file:` always prefers `site/data/live/completionist-manifest.json`.
 - `scripts/refresh_completionist_snapshot.py` remains the local fixture generator for that path.
