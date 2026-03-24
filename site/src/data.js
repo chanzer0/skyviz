@@ -145,8 +145,12 @@ const airportGameState = {
 const runtimeConfigState = {
   promise: null,
 };
+const dailyMissionsState = {
+  previewSource: null,
+};
 const SITE_BASE_URL = new URL('../', import.meta.url);
 const COMPLETIONIST_LOCAL_SOURCE_KEY = 'local';
+const DAILY_MISSIONS_LOCAL_SOURCE_KEY = 'local';
 
 function resolveSiteAssetUrl(path) {
   return new URL(path, SITE_BASE_URL).toString();
@@ -308,6 +312,42 @@ export async function fetchCompletionistSnapshotData() {
   };
 }
 
+export async function fetchDailyMissionsSnapshotData() {
+  const source = await resolveDailyMissionsManifestSource();
+  let manifestUrl = source.manifestUrl;
+  let manifest = await fetchJsonOptional(manifestUrl);
+  let fallbackUsed = false;
+  let effectiveSource = source;
+  if (!manifest && source.fallbackSource?.manifestUrl && source.fallbackSource.manifestUrl !== manifestUrl) {
+    manifestUrl = source.fallbackSource.manifestUrl;
+    manifest = await fetchJson(manifestUrl);
+    fallbackUsed = true;
+    effectiveSource = source.fallbackSource;
+    if (isLocalPreviewLocation()) {
+      dailyMissionsState.previewSource = source.fallbackSource;
+    }
+  }
+  if (!manifest) {
+    throw new Error(`Failed to load ${source.manifestUrl}`);
+  }
+  const snapshotPath = resolveLiveDatasetPath(
+    manifest?.snapshotPath || './daily-missions-snapshot.json',
+    manifestUrl,
+  );
+  const payload = await fetchJson(snapshotPath);
+  return {
+    manifestUrl,
+    manifest,
+    payload,
+    source: {
+      ...effectiveSource,
+      manifestUrl,
+      snapshotUrl: snapshotPath,
+      fallbackUsed,
+    },
+  };
+}
+
 async function loadRuntimeConfig() {
   if (!runtimeConfigState.promise) {
     runtimeConfigState.promise = fetchJsonOptional(resolveSiteAssetUrl('data/runtime-config.json'))
@@ -327,6 +367,17 @@ function getCompletionistManifestOverride() {
   }
 }
 
+function getDailyMissionsManifestOverride() {
+  if (typeof window !== 'object' || !(window.location instanceof Location)) {
+    return '';
+  }
+  try {
+    return sanitizeText(new URL(window.location.href).searchParams.get('dailyMissionsManifestUrl'));
+  } catch (_error) {
+    return '';
+  }
+}
+
 function getCompletionistSourceOverride() {
   if (typeof window !== 'object' || !(window.location instanceof Location)) {
     return '';
@@ -339,14 +390,7 @@ function getCompletionistSourceOverride() {
 }
 
 function shouldPreferLocalCompletionistManifest() {
-  if (typeof window !== 'object' || !(window.location instanceof Location)) {
-    return false;
-  }
-  return (
-    window.location.protocol === 'file:'
-    || window.location.hostname === 'localhost'
-    || window.location.hostname === '127.0.0.1'
-  );
+  return isLocalPreviewLocation();
 }
 
 function normalizeCompletionistSourceKey(value) {
@@ -369,6 +413,45 @@ function buildLocalCompletionistSource() {
     manifestUrl: resolveSiteAssetUrl('data/live/completionist-manifest.json'),
     role: 'local',
     selection: 'local-preview',
+  };
+}
+
+function buildLocalDailyMissionsSource(localManifestUrl = '', fallbackManifestUrl = '') {
+  const normalizedFallbackManifestUrl = typeof fallbackManifestUrl === 'object'
+    ? sanitizeText(fallbackManifestUrl?.manifestUrl)
+    : sanitizeText(fallbackManifestUrl);
+  const fallbackSource = typeof fallbackManifestUrl === 'object' && normalizedFallbackManifestUrl
+    ? {
+      key: sanitizeText(fallbackManifestUrl.key) || 'runtime-active',
+      label: sanitizeText(fallbackManifestUrl.label) || 'Daily missions',
+      manifestUrl: normalizedFallbackManifestUrl,
+      role: sanitizeText(fallbackManifestUrl.role) || 'active',
+      selection: sanitizeText(fallbackManifestUrl.selection) || 'runtime-active',
+    }
+    : null;
+  return {
+    key: DAILY_MISSIONS_LOCAL_SOURCE_KEY,
+    label: 'Local fixture',
+    manifestUrl: sanitizeText(localManifestUrl) || resolveSiteAssetUrl('data/live/daily-missions-manifest.json'),
+    fallbackManifestUrl: normalizedFallbackManifestUrl,
+    fallbackSource,
+    role: 'local',
+    selection: 'local-preview',
+  };
+}
+
+function buildConfiguredDailyMissionsSource(runtimeConfig, selection = 'runtime-active') {
+  const manifestUrl = sanitizeText(runtimeConfig?.manifestUrl);
+  if (!manifestUrl) {
+    return null;
+  }
+  return {
+    key: 'runtime-active',
+    label: sanitizeText(runtimeConfig?.label) || 'Daily missions',
+    manifestUrl,
+    fallbackManifestUrl: '',
+    role: 'active',
+    selection,
   };
 }
 
@@ -488,6 +571,61 @@ async function resolveCompletionistManifestSource() {
     };
   }
   return buildLocalCompletionistSource();
+}
+
+function normalizeDailyMissionsRuntimeConfig(runtimeConfig) {
+  const dailyMissions = runtimeConfig?.dailyMissions;
+  return {
+    label: sanitizeText(dailyMissions?.label) || 'Daily missions',
+    manifestUrl: sanitizeText(dailyMissions?.manifestUrl || runtimeConfig?.dailyMissionsManifestUrl),
+    localManifestUrl: sanitizeText(dailyMissions?.localManifestUrl)
+      ? resolveSiteAssetUrl(sanitizeText(dailyMissions.localManifestUrl).replace(/^\.\//, ''))
+      : '',
+  };
+}
+
+async function resolveDailyMissionsManifestSource() {
+  const override = getDailyMissionsManifestOverride();
+  if (override) {
+    return {
+      key: 'manifest-override',
+      label: 'Manual manifest override',
+      manifestUrl: override,
+      fallbackManifestUrl: '',
+      role: 'override',
+      selection: 'manifest-override',
+    };
+  }
+  const runtimeConfig = await loadRuntimeConfig();
+  const normalizedRuntimeConfig = normalizeDailyMissionsRuntimeConfig(runtimeConfig);
+  const configuredSource = buildConfiguredDailyMissionsSource(normalizedRuntimeConfig);
+  if (isLocalPreviewLocation()) {
+    if (dailyMissionsState.previewSource) {
+      return {
+        ...dailyMissionsState.previewSource,
+        selection: 'local-preview-cached',
+      };
+    }
+    return buildLocalDailyMissionsSource(
+      normalizedRuntimeConfig.localManifestUrl || resolveSiteAssetUrl('data/live/daily-missions-manifest.json'),
+      configuredSource,
+    );
+  }
+  if (configuredSource) {
+    return configuredSource;
+  }
+  return buildLocalDailyMissionsSource();
+}
+
+function isLocalPreviewLocation() {
+  if (typeof window !== 'object' || !(window.location instanceof Location)) {
+    return false;
+  }
+  return (
+    window.location.protocol === 'file:'
+    || window.location.hostname === 'localhost'
+    || window.location.hostname === '127.0.0.1'
+  );
 }
 
 function getManifestDatasetPath(manifest, datasetKey, fallbackPath = null) {

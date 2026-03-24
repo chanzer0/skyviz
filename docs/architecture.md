@@ -3,8 +3,11 @@
 ## Components
 
 - Static application shell in `site/index.html`.
+- Standalone daily-missions shell in `site/daily-missions/index.html`.
 - Visual system and responsive layout in `site/styles.css`.
+- Daily-missions page-specific layout in `site/daily-missions/styles.css`.
 - Browser runtime in `site/src/main.js`.
+- Standalone daily-missions runtime in `site/src/daily-missions-main.js`.
 - Daily airport-game helpers in `site/src/daily.js`.
 - Daily aircraft-game helpers in `site/src/cardle.js`.
 - Collection parsing, enrichment, and derived metrics in `site/src/data.js`.
@@ -12,6 +15,7 @@
 - SVG and HTML chart helpers in `site/src/charts.js`.
 - Generated OurAirports snapshots and daily-game dataset in `site/data/airports/`.
 - Production completionist runtime source selection in `site/data/runtime-config.json`.
+- Production daily-missions manifest selection in `site/data/runtime-config.json`.
 - Local/offline completionist fixture artifacts in `site/data/live/`.
 - Built-in example collection deck in `site/data/example/try_now_user.json`.
 - Local-only SQLite explorer in `site/tools/aircraft-db-explorer.html` for inspecting `aircraft_data.db` in-browser.
@@ -36,7 +40,7 @@
 ## Data flow
 
 1. A user opens the static site from GitHub Pages.
-2. The user can open either always-available daily game directly from the landing view without uploading a Skycards export.
+2. The user can open either always-available daily game directly from the landing view without uploading a Skycards export, or load the standalone `/daily-missions/` board directly.
 3. For `Navdle`, the browser loads the generated airport manifest and derived daily-game dataset from `site/data/airports/`, restores the current UTC day's guesses from browser `localStorage`, and picks the airport of the day deterministically from the generated pool.
 4. For `Cardle`, the browser loads the committed Skycards reference snapshots, derives a guessable aircraft-model pool from `models.json`, restores the current UTC day's guesses from browser `localStorage`, and picks the model of the day deterministically from that reference pool.
 5. The user can alternatively upload a Skycards export JSON file or use the landing-page `View Example Dashboard` button to load a built-in sample deck.
@@ -59,6 +63,7 @@
   - aircraft detail media candidates resolved from optimized Skycards CDN GLB assets
   - completionist-mode flight matches built by comparing the shared delayed snapshot from the production Cloudflare source selected in `site/data/runtime-config.json` (or the local `site/data/live/` fixture path on localhost) against the current user's missing airport unlocks and missing aircraft models entirely in-browser after discarding live rows without usable registrations, with compact `Missing airport` / `New card` target toggles enabled by default, a separate live sort control for busiest airport/card groups vs latest sightings, and completionist summary/pill counts tracking unique airport and card targets instead of duplicate flight rows
 11. The loaded UI transitions to a tabbed dashboard (`Navdle`, `Cardle`, `Map`, and `Deck`) without sending upload data to any server. The two daily tabs remain available even when no collection upload is active.
+12. Separately, the standalone `/daily-missions/` route reads the shared daily-missions manifest directly in-browser, resolves the current snapshot, renders one selected mission by default, and keeps the map, FR24 finder panel, and live flight list synchronized as the browser refreshes the board on the published cadence.
 
 ## Completionist live snapshot contract
 
@@ -85,6 +90,18 @@ Completionist mode does not fetch its upstream live-flight feed directly from th
 - the repository requires `python scripts/check_cloudflare_account.py` before any Cloudflare write operation; that guardrail verifies Wrangler auth is on `seansailer28@gmail.com` / `172da47da00e3b33810d2e9c73c9a0b9`
 - the snapshot payload keeps only the fields needed for matching and map rendering: flight id, aircraft hex, coordinates, heading, altitude, speed, type code, registration, seen time, origin, destination, flight number, and callsign
 - snapshot metadata keeps only the browser-facing refresh contract: generated time, row count, field order, and refresh cadence
+
+## Daily missions live artifact contract
+
+The standalone `/daily-missions/` route consumes the canonical shared artifact produced by `fr24-discord-bot`.
+
+- production daily-missions reads are configured in `site/data/runtime-config.json`
+- the browser supports `?dailyMissionsManifestUrl=<absolute-url>` to force one explicit manifest URL for local debugging
+- during localhost preview, the browser tries `site/data/live/daily-missions-manifest.json` first and falls back to the shared live manifest when that optional fixture does not exist
+- the browser does not parse raw mission text or reconstruct matching logic; it renders the published mission metadata, finder sections, and denormalized matching flights directly
+- the manifest contract exposes the stable browser-facing fields: `artifactFamily`, `schemaVersion`, `generatedAt`, `missionDate`, `publishIntervalSeconds`, `staleAfterSeconds`, `missionCount`, `rowCount`, and `snapshotPath`
+- the snapshot contract exposes `missions[]` with mission titles/counts/finder sections and `flights[]` with live coordinates, route summary, speed, altitude, FR24 URL, and `matchedMissionKeys[]`
+- the standalone page defaults to one selected mission, supports `All missions`, and uses query-string state (`?date=` and `?mission=`) only as browser-side selection hints
 
 ## Reference data contract
 
@@ -143,7 +160,9 @@ The browser does not parse the raw CSVs directly during normal gameplay. It load
 ## Primary repository surfaces
 
 - `site/index.html`: layout shell and upload affordances.
+- `site/daily-missions/index.html`: standalone mission-board shell and metadata.
 - `site/src/main.js`: file loading, status banners, tab state, Leaflet map orchestration, and virtualized aircraft list rendering.
+- `site/src/daily-missions-main.js`: standalone mission-board fetch, filtering, Leaflet map rendering, and list synchronization.
 - `site/src/daily.js`: airport daily-game selection, search, comparison, hint, and streak helpers.
 - `site/src/cardle.js`: aircraft daily-game selection, search, comparison, hotspot, and share helpers.
 - `site/src/data.js`: validation, normalization, enrichment, and tab-specific dashboard model building.

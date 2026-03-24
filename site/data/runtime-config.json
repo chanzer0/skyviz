@@ -14,5 +14,10 @@
         "role": "active"
       }
     }
+  },
+  "dailyMissions": {
+    "label": "fr24 shared daily missions",
+    "manifestUrl": "https://fr24-shared-data-plane.seansailer28.workers.dev/v1/derived/daily-missions/manifest.json",
+    "localManifestUrl": "./data/live/daily-missions-manifest.json"
   }
 }

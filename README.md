@@ -1,6 +1,6 @@
 # Skyviz
 
-Skyviz is a static GitHub Pages dashboard for Skycards collection exports plus two always-available browser-only daily aviation games: `Navdle` for airport clue-chasing and `Cardle` for Skycards model stat guessing. A user can upload their `skycards_user.json` file for the collection dashboard or jump straight into the daily games without an upload.
+Skyviz is a static GitHub Pages dashboard for Skycards collection exports plus two always-available browser-only daily aviation games: `Navdle` for airport clue-chasing and `Cardle` for Skycards model stat guessing. It now also includes a standalone `/daily-missions/` live mission board that reads the shared fr24 daily-missions artifact with no upload required. A user can upload their `skycards_user.json` file for the collection dashboard or jump straight into the daily games or mission board without an upload.
 
 ## Product model
 
@@ -10,6 +10,7 @@ Skyviz is a static GitHub Pages dashboard for Skycards collection exports plus t
 - User collection data stays in the browser by default, with optional user-controlled browser-storage persistence on the same device.
 - Reference enrichment comes from static snapshots in `site/data/reference/` generated from the Skycards API.
 - Completionist mode uses a shared delayed flight snapshot served from Cloudflare in production, with `site/data/runtime-config.json` selecting the active and shadow sources, `site/data/live/` kept as the local fixture path, and matching against a user's collection still happening only in that user's browser.
+- Daily missions uses a separate standalone page at `site/daily-missions/` and reads the canonical `derived/daily-missions` manifest published by `fr24-discord-bot`, with query-string support for `?date=YYYY-MM-DD`, `?mission=<mission-key>`, and `?dailyMissionsManifestUrl=<absolute-url>`.
 
 ## Repository shape
 
@@ -22,6 +23,8 @@ Skyviz is a static GitHub Pages dashboard for Skycards collection exports plus t
 - `site/data/airports/`: generated OurAirports CSV snapshots plus the derived airport-daily manifest and game dataset.
 - `site/data/reference/`: generated reference snapshots (ignored in git by default and produced in CI/Pages build).
 - `site/data/runtime-config.json`: production completionist source selection plus active/shadow manifest endpoints used by the browser.
+- `site/daily-missions/`: standalone mission-board route with its own HTML shell and page-specific styles.
+- `site/src/daily-missions-main.js`: dedicated browser runtime for the standalone daily-missions board.
 - `site/data/live/`: local completionist fixture artifacts for preview and offline validation.
 - `scripts/serve_local_preview.py`: repo-aware local preview server that serves `site/` plus the repo-root `skycards_user.json` fixture.
 - `workers/completionist-live/`: legacy Skyviz-owned Cloudflare completionist producer kept for shadow-mode parity during the fr24 shared-data cutover.
@@ -62,6 +65,12 @@ For completionist shadow-mode validation, the browser also accepts:
 - `?completionistSource=shadow` to force the runtime-config shadow Cloudflare source
 - `?completionistManifestUrl=<absolute-url>` to force one explicit manifest URL
 
+For the standalone daily-missions page, the browser also accepts:
+
+- `/daily-missions/?date=<YYYY-MM-DD>` to preserve/share a specific mission-board date context
+- `/daily-missions/?date=<YYYY-MM-DD>&mission=<mission-key>` to open with one mission preselected
+- `/daily-missions/?dailyMissionsManifestUrl=<absolute-url>` to force one explicit manifest URL during local debugging
+
 ## Local DB explorer
 
 For private local SQLite exploration (no backend, no upload to remote services), run `python scripts/serve_local_preview.py` and open:
@@ -81,7 +90,7 @@ Load `output/inferred_aircraft_type_mappings.json`, review rows, and export deci
 ## Usage flow
 
 1. A short private startup screen appears while Skyviz checks for saved local data on the current device.
-2. If no saved data is restored, Skyviz shows a privacy-first landing view with the `Skyviz` title stack, a short vertically stacked two-game daily CTA hub for `Navdle` and `Cardle`, the upload card, and export instructions (linked to `github.com/mfkp/skycards-export`).
+2. If no saved data is restored, Skyviz shows a privacy-first landing view with the `Skyviz` title stack, a short vertically stacked two-game daily CTA hub for `Navdle` and `Cardle`, a quick link to the standalone daily-missions board, the upload card, and export instructions (linked to `github.com/mfkp/skycards-export`).
 3. Both landing daily-game cards open without requiring a Skycards upload. Daily guesses, unlocks, streaks, and share-state stay in browser local storage only on the current device.
 4. (Optional) Enable the local save checkbox to keep the uploaded export in browser storage on the current device.
 5. Either upload your own Skycards export JSON file, use the repo-root `skycards_user.json` fixture for real-data validation (`http://localhost:4173/?devLoad=skycards_user` during local preview or manual upload), or use `View Example Dashboard` only for the lightweight sample-deck flow (20 airports + 20 popular models).
@@ -100,6 +109,7 @@ Load `output/inferred_aircraft_type_mappings.json`, review rows, and export deci
 16. Dashboard cards use responsive layouts and collapse to single-column full-width flows on mobile viewports.
 17. Local-save restore notices appear as dismissible overlay toasts with a 10-second countdown.
 18. A structured footer is always available with quick links, privacy reminders, browser-local processing context, the OurAirports daily-game attribution link, and the Cardle hotspot-hint disclosure that live model-origin coordinates are fetched only after the reveal unlocks.
+19. The standalone `/daily-missions/` page has its own mission-first shell: a strong date header, mission selector rail, live refresh status, dedicated Leaflet map, synchronized flight board, copyable FR24 finder values, and a mobile layout that keeps the mission rail sticky while stacking map, finder panel, and list vertically.
 
 ## Validation
 
@@ -222,6 +232,8 @@ The script writes:
 
 - `site/data/live/completionist-manifest.json`
 - `site/data/live/completionist-snapshot.json`
+
+Production daily-missions reads are browser-consumer only. The page resolves the shared manifest from `site/data/runtime-config.json`, tries the optional local fixture path `site/data/live/daily-missions-manifest.json` first during localhost preview, and falls back to the shared live Cloudflare manifest when that local fixture is not present.
 
 ## GitHub Pages
 
