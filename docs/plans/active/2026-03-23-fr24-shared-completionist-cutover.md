@@ -6,7 +6,7 @@ Move Skyviz from its legacy Skyviz-owned completionist Cloudflare worker to the 
 
 ## Current status
 
-Shadow-mode consumer support is implemented. Production still reads the legacy Skyviz source by default.
+Shadow-mode consumer support is implemented. Production still reads the legacy Skyviz source by default, and the first live parity check on `2026-03-24` showed that cutover should remain blocked for now.
 
 ## Completed in this phase
 
@@ -18,6 +18,7 @@ Shadow-mode consumer support is implemented. Production still reads the legacy S
 
 ## Remaining rollout steps
 
+- Keep the consumer branch merged and deployed with `activeSource=skyvizLegacy` / `shadowSource=fr24Shared`.
 - Run parity checks against the deployed fr24-derived manifest until overlap, freshness, and target parity are acceptable.
 - Flip `activeSource` from `skyvizLegacy` to `fr24Shared` after approval.
 - Burn in the fr24-derived source in production.
@@ -35,3 +36,10 @@ Shadow-mode consumer support is implemented. Production still reads the legacy S
 - The browser still fetches only one completionist manifest at a time.
 - Shadow mode is an operational/runtime-config concern, not a dual-fetch UI feature.
 - If the fr24-derived manifest is unavailable, production remains on the legacy source until a deliberate config flip is approved.
+- First live parity snapshot on `2026-03-24`:
+  - legacy `skyviz` source: `10696` rows
+  - fr24-derived source: `8599` rows
+  - overlap: `7429` shared flight IDs
+  - legacy-only rows: `3267`
+  - fr24-only rows: `1170`
+- That delta points to a real source-coverage mismatch between the legacy direct-FR24 sweep and the bot-produced canonical live snapshot. Consumer shadow support is still worth merging because it keeps the runtime-config and parity tooling ready without changing production reads.

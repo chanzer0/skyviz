@@ -246,6 +246,8 @@ Production completionist reads come from the active source configured in `site/d
 
 The browser reads only one active manifest at a time, but the runtime config keeps both active and shadow sources explicit so parity checks and eventual cutover do not require code changes.
 
+As of `2026-03-24`, production should remain on `skyvizLegacy`: the first live parity check against `fr24Shared` showed `10696` legacy rows vs `8599` fr24-derived rows, so the cutover gate is still data parity rather than deploy readiness.
+
 All Cloudflare write operations in this repository must target:
 
 - email: `seansailer28@gmail.com`

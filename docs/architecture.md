@@ -77,6 +77,7 @@ Completionist mode does not fetch its upstream live-flight feed directly from th
 - published artifacts are written to versioned `R2` keys, and the stable manifest key is updated last so the browser's `manifest -> snapshot` fetch stays consistent
 - per-tile `R2` artifacts are deleted after a successful publish, and versioned run artifacts are pruned on a short retention window so the bucket does not accumulate unnecessary storage bloat
 - the browser resolves the production manifest URL from the runtime-config `activeSource`, unless query-string overrides force `completionistSource=active`, `completionistSource=shadow`, or one explicit `completionistManifestUrl`
+- as of `2026-03-24`, `activeSource` should stay on `skyvizLegacy` because the first live parity check against `fr24Shared` showed a material coverage gap (`10696` legacy rows vs `8599` fr24-derived rows)
 - when served from `localhost`, `127.0.0.1`, or `file:`, the browser ignores the production endpoint and prefers `site/data/live/completionist-manifest.json` unless one of those explicit completionist query-string overrides is present
 - `scripts/refresh_completionist_snapshot.py` still runs the same adaptive tiled sweep locally and writes `site/data/live/completionist-manifest.json` plus `site/data/live/completionist-snapshot.json` for preview and offline validation
 - `scripts/compare_completionist_sources.py` compares the runtime-config active and shadow sources for parity before cutover
