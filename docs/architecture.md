@@ -63,7 +63,7 @@
   - aircraft detail media candidates resolved from optimized Skycards CDN GLB assets
   - completionist-mode flight matches built by comparing the shared delayed snapshot from the production Cloudflare source selected in `site/data/runtime-config.json` (or the local `site/data/live/` fixture path on localhost) against the current user's missing airport unlocks and missing aircraft models entirely in-browser after discarding live rows without usable registrations, with compact `Missing airport` / `New card` target toggles enabled by default, a separate live sort control for busiest airport/card groups vs latest sightings, and completionist summary/pill counts tracking unique airport and card targets instead of duplicate flight rows
 11. The loaded UI transitions to a tabbed dashboard (`Navdle`, `Cardle`, `Map`, and `Deck`) without sending upload data to any server. The two daily tabs remain available even when no collection upload is active.
-12. Separately, the standalone `/daily-missions/` route reads the shared daily-missions manifest directly in-browser, resolves the current snapshot, renders one selected mission by default, and keeps the map, FR24 finder panel, and live flight list synchronized as the browser refreshes the board on the published cadence.
+12. Separately, the standalone `/daily-missions/` route reads the shared daily-missions manifest directly in-browser, resolves the current snapshot, opens in `All missions` mode by default, and keeps the map-first workspace, FR24 finder panel, and live flight list synchronized as the browser refreshes the board on the published cadence.
 
 ## Completionist live snapshot contract
 
@@ -101,7 +101,7 @@ The standalone `/daily-missions/` route consumes the canonical shared artifact p
 - the browser does not parse raw mission text or reconstruct matching logic; it renders the published mission metadata, finder sections, and denormalized matching flights directly
 - the manifest contract exposes the stable browser-facing fields: `artifactFamily`, `schemaVersion`, `generatedAt`, `missionDate`, `publishIntervalSeconds`, `staleAfterSeconds`, `missionCount`, `rowCount`, and `snapshotPath`
 - the snapshot contract exposes `missions[]` with mission titles/counts/finder sections and `flights[]` with live coordinates, route summary, speed, altitude, FR24 URL, and `matchedMissionKeys[]`
-- the standalone page defaults to one selected mission, supports `All missions`, and uses query-string state (`?date=` and `?mission=`) only as browser-side selection hints
+- the standalone page defaults to `All missions`, supports pinning one mission lane at a time, and uses query-string state (`?date=` and `?mission=`) only as browser-side selection hints
 
 ## Reference data contract
 

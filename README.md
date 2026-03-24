@@ -10,7 +10,7 @@ Skyviz is a static GitHub Pages dashboard for Skycards collection exports plus t
 - User collection data stays in the browser by default, with optional user-controlled browser-storage persistence on the same device.
 - Reference enrichment comes from static snapshots in `site/data/reference/` generated from the Skycards API.
 - Completionist mode uses a shared delayed flight snapshot served from Cloudflare in production, with `site/data/runtime-config.json` selecting the active and shadow sources, `site/data/live/` kept as the local fixture path, and matching against a user's collection still happening only in that user's browser.
-- Daily missions uses a separate standalone page at `site/daily-missions/` and reads the canonical `derived/daily-missions` manifest published by `fr24-discord-bot`, with query-string support for `?date=YYYY-MM-DD`, `?mission=<mission-key>`, and `?dailyMissionsManifestUrl=<absolute-url>`.
+- Daily missions uses a separate standalone page at `site/daily-missions/`, opens in `All missions` mode by default, and reads the canonical `derived/daily-missions` manifest published by `fr24-discord-bot`, with query-string support for `?date=YYYY-MM-DD`, `?mission=<mission-key>`, and `?dailyMissionsManifestUrl=<absolute-url>`.
 
 ## Repository shape
 
@@ -109,7 +109,7 @@ Load `output/inferred_aircraft_type_mappings.json`, review rows, and export deci
 16. Dashboard cards use responsive layouts and collapse to single-column full-width flows on mobile viewports.
 17. Local-save restore notices appear as dismissible overlay toasts with a 10-second countdown.
 18. A structured footer is always available with quick links, privacy reminders, browser-local processing context, the OurAirports daily-game attribution link, and the Cardle hotspot-hint disclosure that live model-origin coordinates are fetched only after the reveal unlocks.
-19. The standalone `/daily-missions/` page has its own mission-first shell: a strong date header, mission selector rail, live refresh status, dedicated Leaflet map, synchronized flight board, copyable FR24 finder values, and a mobile layout that keeps the mission rail sticky while stacking map, finder panel, and list vertically.
+19. The standalone `/daily-missions/` page now opens in `All missions` mode with a denser mission-command header, a map-first workspace, a right-rail mission/finder panel on larger screens, and a mobile layout that keeps the mission rail sticky while preserving a clear map -> finder -> live matches flow.
 
 ## Validation
 

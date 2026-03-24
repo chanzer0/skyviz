@@ -1,44 +1,44 @@
 .daily-missions-shell {
-  padding-top: 1rem;
+  padding-top: 0.75rem;
 }
 
 .daily-missions-app {
   display: grid;
-  gap: 0.9rem;
+  gap: 0.95rem;
 }
 
 .daily-missions-app > * {
   min-width: 0;
 }
 
-.daily-missions-hero,
+.daily-missions-command-bar,
 .daily-missions-selector-panel,
-.daily-missions-toolbar,
 .daily-missions-map-panel,
 .daily-missions-intel-panel,
 .daily-missions-list-panel {
   border: 1px solid rgba(18, 44, 70, 0.16);
   border-radius: 24px;
-  padding: 1rem;
+  padding: 0.98rem;
   background:
-    linear-gradient(170deg, rgba(255, 255, 255, 0.97), rgba(248, 252, 247, 0.91)),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.97), rgba(248, 252, 247, 0.92)),
     var(--panel);
   box-shadow: var(--shadow-soft);
 }
 
-.daily-missions-hero {
+.daily-missions-command-bar {
   position: relative;
   overflow: hidden;
   display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
   gap: 1rem;
   color: #f3f8ff;
   background:
     radial-gradient(circle at top left, rgba(22, 131, 146, 0.18), transparent 32%),
     radial-gradient(circle at right center, rgba(236, 127, 53, 0.18), transparent 28%),
-    linear-gradient(145deg, rgba(9, 31, 52, 0.96), rgba(18, 58, 88, 0.96));
+    linear-gradient(145deg, rgba(9, 31, 52, 0.98), rgba(18, 58, 88, 0.96));
 }
 
-.daily-missions-hero::after {
+.daily-missions-command-bar::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -47,20 +47,31 @@
     linear-gradient(rgba(210, 235, 255, 0.08) 1px, transparent 1px),
     linear-gradient(90deg, rgba(210, 235, 255, 0.08) 1px, transparent 1px);
   background-size: 22px 22px;
-  mask-image: radial-gradient(circle at 82% 18%, rgba(0, 0, 0, 0.88), transparent 72%);
+  mask-image: radial-gradient(circle at 84% 24%, rgba(0, 0, 0, 0.92), transparent 74%);
 }
 
-.daily-missions-hero-copy,
-.daily-missions-hero-actions,
-.daily-missions-meta-grid,
+.daily-missions-command-main,
+.daily-missions-command-actions,
 .daily-missions-banner {
   position: relative;
   z-index: 1;
   min-width: 0;
 }
 
+.daily-missions-command-main {
+  display: grid;
+  gap: 0.72rem;
+  align-content: start;
+}
+
+.daily-missions-heading-group {
+  display: grid;
+  gap: 0.36rem;
+}
+
 .daily-missions-home-link {
   display: inline-flex;
+  width: fit-content;
   color: rgba(243, 248, 255, 0.84);
   font-size: 0.8rem;
   font-weight: 700;
@@ -69,24 +80,28 @@
   text-decoration: none;
 }
 
-.daily-missions-hero .eyebrow {
-  color: rgba(227, 241, 255, 0.66);
+.daily-missions-command-bar .eyebrow {
+  margin-bottom: 0.12rem;
+  color: rgba(227, 241, 255, 0.68);
 }
 
 #mission-board-title,
-.mission-intel-head h2,
+.daily-missions-map-head h2,
 .mission-intel-head h3,
 .mission-finder-head h4,
-.mission-flight-title-wrap h3 {
+.mission-flight-title-wrap h3,
+.daily-missions-selector-head h2,
+.daily-missions-list-head h2,
+.daily-missions-intel-panel .section-head h2 {
   margin: 0;
   font-family: 'DM Serif Display', serif;
   letter-spacing: -0.03em;
 }
 
 #mission-board-title {
-  font-size: clamp(2.4rem, 5vw, 4.3rem);
+  font-size: clamp(1.95rem, 3.6vw, 3.25rem);
   line-height: 0.94;
-  max-width: 12ch;
+  max-width: 10ch;
   text-wrap: balance;
 }
 
@@ -95,16 +110,25 @@
 .daily-missions-toolbar-summary,
 .mission-muted-copy,
 .mission-note-list,
-.mission-flight-route,
-.mission-flight-metrics,
 .mission-flight-title-wrap p {
   margin: 0;
   line-height: 1.5;
-  color: rgba(18, 33, 53, 0.74);
 }
 
 .daily-missions-summary {
+  max-width: 62ch;
   color: rgba(236, 246, 255, 0.86);
+}
+
+.daily-missions-command-actions {
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+}
+
+.daily-missions-action-row {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .daily-missions-primary-action,
@@ -124,35 +148,35 @@
 }
 
 .daily-missions-primary-action {
-  min-height: 2.9rem;
+  min-height: 2.65rem;
   border: 1px solid rgba(245, 198, 143, 0.55);
-  padding: 0.5rem 1rem;
+  padding: 0.46rem 1rem;
   color: #10233a;
   background: linear-gradient(135deg, #f4c88d, #ffebc6);
-  box-shadow: 0 16px 32px rgba(5, 18, 30, 0.2);
+  box-shadow: 0 16px 32px rgba(5, 18, 30, 0.18);
 }
 
 .daily-missions-meta-grid {
   display: grid;
-  gap: 0.7rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.62rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .daily-missions-meta-card {
   display: grid;
-  gap: 0.2rem;
-  padding: 0.78rem 0.82rem;
-  border: 1px solid rgba(184, 221, 248, 0.2);
+  gap: 0.16rem;
+  padding: 0.72rem 0.78rem;
+  border: 1px solid rgba(184, 221, 248, 0.18);
   border-radius: 16px;
   background: rgba(243, 249, 255, 0.1);
 }
 
 .daily-missions-meta-label {
-  font-size: 0.66rem;
+  font-size: 0.64rem;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(236, 246, 255, 0.68);
+  color: rgba(236, 246, 255, 0.66);
 }
 
 .daily-missions-meta-value {
@@ -160,7 +184,8 @@
 }
 
 .daily-missions-banner {
-  padding: 0.78rem 0.84rem;
+  grid-column: 1 / -1;
+  padding: 0.72rem 0.82rem;
   border: 1px solid rgba(188, 221, 248, 0.16);
   border-radius: 16px;
   background: rgba(243, 249, 255, 0.12);
@@ -173,45 +198,77 @@
   color: #fff4de;
 }
 
-.daily-missions-selector {
+.daily-missions-stage {
   display: grid;
-  gap: 0.7rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  min-width: 0;
+  gap: 0.95rem;
+  align-items: start;
+  grid-template-columns: minmax(0, 1.72fr) minmax(320px, 0.88fr);
+  grid-template-areas:
+    'map selector'
+    'map intel';
 }
 
-.mission-selector-card {
+.daily-missions-selector-panel {
+  grid-area: selector;
+}
+
+.daily-missions-map-panel {
+  grid-area: map;
   display: grid;
-  gap: 0.42rem;
-  min-height: 128px;
-  border: 1px solid rgba(20, 45, 70, 0.14);
-  border-radius: 18px;
-  padding: 0.82rem 0.88rem;
-  font: inherit;
-  text-align: left;
-  color: var(--ink-950);
-  cursor: pointer;
+  gap: 0.82rem;
+  min-height: 0;
   background:
-    linear-gradient(155deg, rgba(15, 63, 112, 0.03), rgba(22, 131, 146, 0.08)),
-    rgba(255, 255, 255, 0.94);
+    radial-gradient(circle at 78% 0%, rgba(236, 127, 53, 0.09), transparent 20%),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.98), rgba(247, 251, 245, 0.94));
 }
 
-.mission-selector-card.is-active {
-  border-color: rgba(15, 63, 112, 0.42);
-  background:
-    radial-gradient(circle at top right, rgba(244, 200, 141, 0.2), transparent 42%),
-    linear-gradient(155deg, rgba(15, 63, 112, 0.08), rgba(22, 131, 146, 0.13)),
-    rgba(255, 255, 255, 0.98);
+.daily-missions-intel-panel {
+  grid-area: intel;
+  display: grid;
+  gap: 0.72rem;
+  min-height: 0;
 }
 
+.daily-missions-selector-head,
+.daily-missions-list-head {
+  align-items: flex-start;
+}
+
+.daily-missions-panel-copy,
+.daily-missions-toolbar-summary,
+.mission-muted-copy,
+.mission-note-list {
+  color: rgba(18, 33, 53, 0.72);
+}
+
+.daily-missions-map-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.daily-missions-map-head h2 {
+  font-size: clamp(1.6rem, 2vw, 2rem);
+}
+
+.daily-missions-map-head-status {
+  display: grid;
+  gap: 0.18rem;
+  justify-items: end;
+  text-align: right;
+}
+
+.daily-missions-scope-pill,
 .mission-selector-card-index,
 .mission-status-pill,
-.mission-flight-badge {
+.mission-flight-badge,
+.mission-flight-metric {
   display: inline-flex;
   align-items: center;
   width: fit-content;
-  min-height: 1.8rem;
-  padding: 0.15rem 0.62rem;
+  min-height: 1.72rem;
+  padding: 0.14rem 0.62rem;
   border-radius: 999px;
   background: color-mix(in srgb, var(--mission-accent, #0f3f70) 14%, white);
   color: var(--mission-accent, #0f3f70);
@@ -221,37 +278,78 @@
   text-transform: uppercase;
 }
 
+.daily-missions-scope-pill[data-tone='all'],
 .mission-selector-card--all .mission-selector-card-index,
-.mission-status-pill--neutral {
+.mission-status-pill--neutral,
+.mission-flight-metric--neutral {
   background: rgba(20, 45, 70, 0.08);
   color: var(--ink-700);
 }
 
-.daily-missions-toolbar-controls,
-.daily-missions-main-grid {
-  display: grid;
-  gap: 0.9rem;
-  min-width: 0;
+.daily-missions-scope-meta {
+  color: rgba(18, 33, 53, 0.64);
+  font-size: 0.84rem;
 }
 
 .daily-missions-toolbar-controls {
-  grid-template-columns: minmax(0, 1.55fr) minmax(220px, 0.65fr);
+  display: grid;
+  gap: 0.72rem;
+  grid-template-columns: minmax(0, 1.45fr) minmax(220px, 0.62fr);
 }
 
-.daily-missions-main-grid {
-  grid-template-columns: minmax(0, 1.8fr) minmax(300px, 0.9fr);
-  align-items: start;
-}
-
-.daily-missions-map {
-  min-height: 520px;
-  border: 1px solid rgba(20, 45, 70, 0.12);
-  border-radius: 20px;
-  overflow: hidden;
+.daily-missions-control-field {
+  min-width: 0;
 }
 
 .daily-missions-map-shell {
   position: relative;
+  min-width: 0;
+}
+
+.daily-missions-map-overlay {
+  position: absolute;
+  top: 0.82rem;
+  left: 0.82rem;
+  z-index: 420;
+  pointer-events: none;
+}
+
+.daily-missions-overlay-card {
+  display: grid;
+  gap: 0.08rem;
+  min-width: min(270px, calc(100vw - 4rem));
+  padding: 0.72rem 0.82rem;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 18px;
+  background:
+    linear-gradient(160deg, rgba(10, 29, 48, 0.88), rgba(17, 51, 77, 0.76));
+  color: #f5fbff;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 16px 34px rgba(10, 29, 48, 0.24);
+}
+
+.daily-missions-overlay-kicker {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(227, 241, 255, 0.64);
+}
+
+#mission-map-overlay-title {
+  font-size: 1rem;
+}
+
+#mission-map-overlay-meta {
+  color: rgba(227, 241, 255, 0.82);
+  font-size: 0.83rem;
+}
+
+.daily-missions-map {
+  min-height: clamp(520px, 66vh, 760px);
+  border: 1px solid rgba(20, 45, 70, 0.12);
+  border-radius: 22px;
+  overflow: hidden;
 }
 
 .daily-missions-map-empty,
@@ -270,17 +368,73 @@
   inset: 0;
 }
 
-.daily-missions-intel {
+.daily-missions-selector {
   display: grid;
-  gap: 0.9rem;
+  gap: 0.58rem;
+  grid-template-columns: 1fr;
   min-width: 0;
 }
 
-.mission-intel-card.is-compact {
+.mission-selector-card {
+  display: grid;
+  gap: 0.36rem;
+  min-height: 0;
+  border: 1px solid rgba(20, 45, 70, 0.14);
+  border-radius: 18px;
+  padding: 0.78rem 0.84rem;
+  font: inherit;
+  text-align: left;
+  color: var(--ink-950);
+  cursor: pointer;
+  background:
+    linear-gradient(155deg, rgba(15, 63, 112, 0.03), rgba(22, 131, 146, 0.08)),
+    rgba(255, 255, 255, 0.96);
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.mission-selector-card:hover,
+.mission-selector-card:focus-visible {
+  border-color: rgba(15, 63, 112, 0.28);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(15, 43, 64, 0.08);
+}
+
+.mission-selector-card.is-active {
+  border-color: rgba(15, 63, 112, 0.38);
+  background:
+    radial-gradient(circle at top right, rgba(244, 200, 141, 0.18), transparent 42%),
+    linear-gradient(155deg, rgba(15, 63, 112, 0.08), rgba(22, 131, 146, 0.13)),
+    rgba(255, 255, 255, 0.98);
+  box-shadow: 0 16px 28px rgba(15, 43, 64, 0.08);
+}
+
+.mission-selector-card-title {
+  font-size: 1rem;
+  line-height: 1.28;
+}
+
+.mission-selector-card-meta {
+  color: rgba(18, 33, 53, 0.72);
+  font-size: 0.86rem;
+}
+
+.daily-missions-intel {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.mission-intel-card {
+  display: grid;
+  gap: 0.72rem;
   padding: 0.82rem;
   border: 1px solid rgba(20, 45, 70, 0.12);
   border-radius: 18px;
   background: rgba(249, 252, 247, 0.9);
+}
+
+.mission-intel-card.is-compact {
+  gap: 0.68rem;
 }
 
 .mission-intel-head,
@@ -292,24 +446,19 @@
   gap: 0.7rem;
 }
 
-.mission-finder-list,
-.daily-missions-flight-list {
+.mission-finder-list {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.62rem;
   min-width: 0;
 }
 
-.mission-finder-block,
-.mission-flight-row {
+.mission-finder-block {
+  padding: 0.72rem;
+  display: grid;
+  gap: 0.58rem;
   border: 1px solid rgba(20, 45, 70, 0.12);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.92);
-}
-
-.mission-finder-block {
-  padding: 0.75rem;
-  display: grid;
-  gap: 0.6rem;
+  background: rgba(255, 255, 255, 0.94);
 }
 
 .mission-finder-kicker {
@@ -326,14 +475,14 @@
   border: 1px solid rgba(15, 63, 112, 0.22);
   padding: 0.34rem 0.76rem;
   color: #0f3f70;
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.96);
   text-decoration: none;
 }
 
 .mission-finder-code {
   display: block;
   border-radius: 14px;
-  padding: 0.8rem;
+  padding: 0.76rem;
   overflow-x: auto;
   white-space: nowrap;
   font-size: 0.84rem;
@@ -341,42 +490,98 @@
 }
 
 .mission-note-list {
-  padding-left: 1.15rem;
+  padding-left: 1.1rem;
+}
+
+.daily-missions-list-panel {
+  display: grid;
+  gap: 0.72rem;
+}
+
+.daily-missions-flight-list {
+  display: grid;
+  gap: 0.72rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.mission-flight-row {
+  display: grid;
+  gap: 0;
+  border: 1px solid rgba(20, 45, 70, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.94);
 }
 
 .mission-flight-row.is-selected {
   border-color: rgba(15, 63, 112, 0.34);
+  background:
+    linear-gradient(150deg, rgba(15, 63, 112, 0.05), rgba(22, 131, 146, 0.08)),
+    rgba(255, 255, 255, 0.98);
   box-shadow: 0 18px 36px rgba(15, 43, 64, 0.09);
 }
 
 .mission-flight-focus {
   width: 100%;
   border: 0;
-  border-radius: 16px;
-  padding: 0.78rem 0.82rem 0.5rem;
+  border-radius: 16px 16px 0 0;
+  padding: 0.8rem 0.82rem 0.54rem;
   text-align: left;
   background: transparent;
   color: inherit;
   cursor: pointer;
 }
 
-.mission-flight-badges {
+.mission-flight-title-wrap {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.mission-flight-title-wrap h3 {
+  font-size: 1.14rem;
+  line-height: 1.02;
+}
+
+.mission-flight-title-wrap p {
+  color: rgba(18, 33, 53, 0.7);
+}
+
+.mission-flight-badges,
+.mission-flight-route {
   display: flex;
   flex-wrap: wrap;
+}
+
+.mission-flight-badges {
   gap: 0.35rem;
 }
 
 .mission-flight-route {
+  gap: 0.4rem 0.48rem;
+  margin-top: 0.26rem;
+}
+
+.mission-flight-route > span:first-child {
+  font-weight: 700;
+  color: rgba(18, 33, 53, 0.86);
+}
+
+.mission-flight-meta-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem 1rem;
-  margin-top: 0.2rem;
+  gap: 0.38rem;
+  margin-top: 0.66rem;
+}
+
+.mission-flight-metric {
+  min-height: 1.65rem;
 }
 
 .mission-flight-actions {
   display: flex;
   justify-content: flex-end;
-  padding: 0 0.82rem 0.76rem;
+  padding: 0 0.82rem 0.8rem;
 }
 
 .mission-map-marker {
@@ -427,62 +632,116 @@
   border: 0;
 }
 
-@media (max-width: 1120px) {
-  .daily-missions-selector {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+@media (max-width: 1180px) {
+  .daily-missions-command-bar {
+    grid-template-columns: 1fr;
   }
 
-  .daily-missions-main-grid {
+  .daily-missions-action-row {
+    justify-content: flex-start;
+  }
+
+  .daily-missions-stage {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'selector'
+      'map'
+      'intel';
+  }
+
+  .daily-missions-flight-list {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 760px) {
-  .daily-missions-hero,
+  .daily-missions-command-bar,
   .daily-missions-selector-panel,
-  .daily-missions-toolbar,
   .daily-missions-map-panel,
   .daily-missions-intel-panel,
   .daily-missions-list-panel {
     border-radius: 18px;
-    padding: 0.85rem;
+    padding: 0.84rem;
+  }
+
+  #mission-board-title {
+    font-size: clamp(1.86rem, 9vw, 2.5rem);
+  }
+
+  .daily-missions-summary {
+    font-size: 0.95rem;
   }
 
   .daily-missions-meta-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .daily-missions-meta-card {
+    padding: 0.62rem 0.68rem;
+  }
+
   .daily-missions-selector-panel {
     position: sticky;
-    top: 0.4rem;
-    z-index: 20;
-    backdrop-filter: blur(12px);
+    top: 0.45rem;
+    z-index: 30;
+    backdrop-filter: blur(14px);
+  }
+
+  .daily-missions-selector-head {
+    gap: 0.55rem;
+  }
+
+  .daily-missions-selector-head .daily-missions-panel-copy {
+    font-size: 0.82rem;
   }
 
   .daily-missions-selector {
     grid-auto-flow: column;
-    grid-auto-columns: minmax(250px, 84vw);
+    grid-auto-columns: minmax(242px, 84vw);
     overflow-x: auto;
     scrollbar-width: none;
+    padding-bottom: 0.1rem;
   }
 
   .daily-missions-selector::-webkit-scrollbar {
     display: none;
   }
 
+  .daily-missions-map-head,
+  .mission-intel-head,
+  .mission-finder-head,
+  .mission-flight-topline,
+  .daily-missions-list-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .daily-missions-map-head-status {
+    justify-items: start;
+    text-align: left;
+  }
+
   .daily-missions-toolbar-controls {
     grid-template-columns: 1fr;
   }
 
-  .daily-missions-map {
-    min-height: 42vh;
+  .daily-missions-map-shell {
+    display: grid;
+    gap: 0.58rem;
   }
 
-  .mission-intel-head,
-  .mission-finder-head,
-  .mission-flight-topline {
-    flex-direction: column;
-    align-items: stretch;
+  .daily-missions-map-overlay {
+    position: static;
+    pointer-events: auto;
+  }
+
+  .daily-missions-overlay-card {
+    min-width: 0;
+    border-radius: 16px;
+  }
+
+  .daily-missions-map {
+    min-height: 46vh;
   }
 
   .mission-flight-actions {
@@ -495,7 +754,11 @@
 }
 
 @media (max-width: 480px) {
-  .daily-missions-meta-grid {
-    grid-template-columns: 1fr;
+  .mission-flight-meta-grid {
+    gap: 0.32rem;
+  }
+
+  .mission-flight-metric {
+    width: 100%;
   }
 }

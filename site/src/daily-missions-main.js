@@ -20,6 +20,11 @@ const el = {
   refreshButton: $('#mission-refresh-button'),
   map: $('#mission-map'),
   mapEmpty: $('#mission-map-empty'),
+  mapScope: $('#mission-map-scope'),
+  mapScopeMeta: $('#mission-map-scope-meta'),
+  mapOverlay: $('#mission-map-overlay'),
+  mapOverlayTitle: $('#mission-map-overlay-title'),
+  mapOverlayMeta: $('#mission-map-overlay-meta'),
 };
 
 const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
@@ -31,7 +36,7 @@ const VIEW = { center: [18, 0], zoom: 2 };
 const state = {
   board: null,
   source: null,
-  active: '',
+  active: 'all',
   query: '',
   sort: 'freshest',
   selected: '',
@@ -61,7 +66,14 @@ const friendlyDate = (dateKey) => {
 const timeLabel = (value) => {
   const timestamp = Date.parse(value || '');
   return Number.isFinite(timestamp)
-    ? new Date(timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' })
+    ? new Date(timestamp).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: 'UTC',
+      timeZoneName: 'short',
+    })
     : '--';
 };
 
@@ -146,6 +158,11 @@ function activeMission() {
   return state.active === 'all' ? null : state.board?.missionMap?.get(state.active);
 }
 
+function activeMissionAccent() {
+  const mission = activeMission();
+  return mission ? COLORS[(mission.ordinal - 1) % COLORS.length] : MULTI;
+}
+
 function visibleFlights() {
   const tokens = normalizeText(state.query).split(/\s+/).filter(Boolean);
   const flights = (state.board?.flights || []).filter((flight) => state.active === 'all' || flight.matchedMissionKeys.includes(state.active));
@@ -174,7 +191,7 @@ function markerIcon(flight) {
   const label = state.active === 'all' ? `${ordinals.length > 1 ? ordinals.length : activeOrdinal}` : `${activeOrdinal}`;
   return window.L.divIcon({
     className: '',
-    html: `<div class=\"mission-map-marker${flight.id === state.selected ? ' is-selected' : ''}\" style=\"--mission-marker-color:${color}\"><span>${escapeHtml(label)}</span></div>`,
+    html: `<div class="mission-map-marker${flight.id === state.selected ? ' is-selected' : ''}" style="--mission-marker-color:${color}"><span>${escapeHtml(label)}</span></div>`,
     iconSize: [34, 34],
     iconAnchor: [17, 17],
   });
@@ -184,17 +201,17 @@ function clusterColor(markers) {
   const ordinals = new Set();
   markers.forEach((marker) => {
     const missionOrdinals = Array.isArray(marker.options?.missionOrdinals) ? marker.options.missionOrdinals : [];
-    missionOrdinals.forEach((ordinal) => {
-      if (Number.isFinite(ordinal)) {
-        ordinals.add(ordinal);
+    missionOrdinals.forEach((ordinalValue) => {
+      if (Number.isFinite(ordinalValue)) {
+        ordinals.add(ordinalValue);
       }
     });
   });
   if (state.active === 'all' && ordinals.size > 1) {
     return MULTI;
   }
-  const ordinal = activeMission()?.ordinal || ordinals.values().next().value || 1;
-  return COLORS[(ordinal - 1) % COLORS.length];
+  const ordinalValue = activeMission()?.ordinal || ordinals.values().next().value || 1;
+  return COLORS[(ordinalValue - 1) % COLORS.length];
 }
 
 function clusterIcon(cluster) {
@@ -232,8 +249,12 @@ function renderMap() {
       title: flight.callsign,
       missionOrdinals: flight.matchedMissionOrdinals || [],
     });
-    marker.bindPopup(`<strong>${escapeHtml(flight.callsign)}</strong><br>${escapeHtml(flight.displayRouteLabel)}<br><a href=\"${escapeHtml(flight.fr24Url || '#')}\" target=\"_blank\" rel=\"noopener noreferrer\">Open in FR24</a>`);
-    marker.on('click', () => { state.selected = flight.id; renderList(); renderMap(); });
+    marker.bindPopup(`<strong>${escapeHtml(flight.callsign)}</strong><br>${escapeHtml(flight.displayRouteLabel)}<br><a href="${escapeHtml(flight.fr24Url || '#')}" target="_blank" rel="noopener noreferrer">Open in FR24</a>`);
+    marker.on('click', () => {
+      state.selected = flight.id;
+      renderList();
+      renderMap();
+    });
     state.markers.set(flight.id, marker);
     return marker;
   });
@@ -268,17 +289,19 @@ function renderMap() {
   map.fitBounds(window.L.latLngBounds(flights.map((flight) => [flight.lat, flight.lon])).pad(0.16), { animate: false, maxZoom: 7 });
 }
 
-function renderHero() {
+function renderHeader() {
   const stale = Date.now() - Date.parse(state.board.generatedAt || 0) > (Number(state.board.staleAfterSeconds) || 900) * 1000;
+  const requestedDate = dateFromUrl();
   const source = sanitizeText(state.source?.label) || 'Shared mission board';
-  el.title.textContent = `${friendlyDate(state.board.missionDate)} Daily Missions`;
-  el.summary.textContent = [
-    'Live mission board for the current Skycards daily challenge set.',
-    source ? `Source: ${source}.` : '',
-    dateFromUrl() && dateFromUrl() !== state.board.missionDate ? `Requested ${dateFromUrl()}, showing ${state.board.missionDate} because that is the published live board.` : '',
+  const summary = [
+    'All missions first, then pin one lane for exact FR24 finder values.',
+    `Source: ${source}.`,
+    requestedDate && requestedDate !== state.board.missionDate ? `Requested ${requestedDate}; showing ${state.board.missionDate}.` : '',
   ].filter(Boolean).join(' ');
+  el.title.textContent = `${friendlyDate(state.board.missionDate)} Daily Missions`;
+  el.summary.textContent = summary;
   el.updated.textContent = timeLabel(state.board.generatedAt);
-  el.refresh.textContent = `${stale ? 'Stale' : 'Refresh'} | ${countdownLabel(state.seconds)}`;
+  el.refresh.textContent = stale ? `Stale | ${countdownLabel(state.seconds)}` : countdownLabel(state.seconds);
   el.flights.textContent = formatNumber(state.board.rowCount || 0);
   el.source.textContent = sanitizeText(state.source?.role) ? `${source} | ${sanitizeText(state.source.role)}` : source;
   document.title = `${friendlyDate(state.board.missionDate)} Daily Missions | Skyviz`;
@@ -295,18 +318,18 @@ function renderBanner() {
 function renderSelector() {
   const totalMissionMatches = (state.board.missions || []).reduce((sum, mission) => sum + mission.matchCount, 0);
   const allCard = `
-    <button class=\"mission-selector-card mission-selector-card--all${state.active === 'all' ? ' is-active' : ''}\" type=\"button\" data-mission=\"all\" aria-pressed=\"${state.active === 'all' ? 'true' : 'false'}\">
-      <span class=\"mission-selector-card-index\">All missions</span>
-      <strong class=\"mission-selector-card-title\">Merge every live mission lane</strong>
-      <span class=\"mission-selector-card-meta\">${formatCompact(totalMissionMatches)} mission matches across ${formatNumber(state.board.rowCount || 0)} published flights</span>
+    <button class="mission-selector-card mission-selector-card--all${state.active === 'all' ? ' is-active' : ''}" type="button" data-mission="all" aria-pressed="${state.active === 'all' ? 'true' : 'false'}">
+      <span class="mission-selector-card-index">All missions</span>
+      <strong class="mission-selector-card-title">Show the entire live mission board</strong>
+      <span class="mission-selector-card-meta">${formatCompact(totalMissionMatches)} mission matches across ${formatNumber(state.board.rowCount || 0)} published flights</span>
     </button>`;
   el.selector.innerHTML = [
     allCard,
     ...state.board.missions.map((mission) => `
-      <button class=\"mission-selector-card${mission.key === state.active ? ' is-active' : ''}\" type=\"button\" data-mission=\"${escapeHtml(mission.key)}\" aria-pressed=\"${mission.key === state.active ? 'true' : 'false'}\">
-        <span class=\"mission-selector-card-index\" style=\"--mission-accent:${COLORS[(mission.ordinal - 1) % COLORS.length]}\">Mission ${mission.ordinal}</span>
-        <strong class=\"mission-selector-card-title\">${escapeHtml(mission.title)}</strong>
-        <span class=\"mission-selector-card-meta\">${mission.truncated ? `Showing ${formatNumber(mission.displayedMatchCount)} of ${formatCompact(mission.matchCount)}` : `${formatNumber(mission.matchCount)} live matches`}</span>
+      <button class="mission-selector-card${mission.key === state.active ? ' is-active' : ''}" type="button" data-mission="${escapeHtml(mission.key)}" aria-pressed="${mission.key === state.active ? 'true' : 'false'}">
+        <span class="mission-selector-card-index" style="--mission-accent:${COLORS[(mission.ordinal - 1) % COLORS.length]}">Mission ${mission.ordinal}</span>
+        <strong class="mission-selector-card-title">${escapeHtml(mission.title)}</strong>
+        <span class="mission-selector-card-meta">${mission.truncated ? `${formatNumber(mission.displayedMatchCount)} shown of ${formatCompact(mission.matchCount)}` : `${formatNumber(mission.matchCount)} live matches`}</span>
       </button>`),
   ].join('');
 }
@@ -314,57 +337,102 @@ function renderSelector() {
 function renderIntel() {
   const missions = state.active === 'all' ? state.board.missions : [activeMission()].filter(Boolean);
   el.intel.innerHTML = missions.map((mission) => `
-    <section class=\"mission-intel-card${state.active === 'all' ? ' is-compact' : ''}\">
-      <div class=\"mission-intel-head\">
+    <section class="mission-intel-card${state.active === 'all' ? ' is-compact' : ''}">
+      <div class="mission-intel-head">
         <div>
-          <p class=\"eyebrow\">Mission ${mission.ordinal}</p>
+          <p class="eyebrow">Mission ${mission.ordinal}</p>
           <h3>${escapeHtml(mission.title)}</h3>
         </div>
-        <span class=\"mission-status-pill\" style=\"--mission-accent:${COLORS[(mission.ordinal - 1) % COLORS.length]}\">${mission.truncated ? `${formatNumber(mission.displayedMatchCount)} shown` : `${formatNumber(mission.matchCount)} live`}</span>
+        <span class="mission-status-pill" style="--mission-accent:${COLORS[(mission.ordinal - 1) % COLORS.length]}">${mission.truncated ? `${formatNumber(mission.displayedMatchCount)} shown` : `${formatNumber(mission.matchCount)} live`}</span>
       </div>
-      <div class=\"mission-finder-list\">
+      <div class="mission-finder-list">
         ${(mission.finder.sections || []).map((section) => `
-          <article class=\"mission-finder-block\">
-            <div class=\"mission-finder-head\">
+          <article class="mission-finder-block">
+            <div class="mission-finder-head">
               <div>
-                <p class=\"mission-finder-kicker\">${escapeHtml(mission.title)}</p>
+                <p class="mission-finder-kicker">Mission ${mission.ordinal}</p>
                 <h4>${escapeHtml(section.label)}</h4>
               </div>
-              <button class=\"mission-copy-button\" type=\"button\" data-copy=\"${escapeHtml(section.copyText)}\" data-label=\"${escapeHtml(`${mission.title} ${section.label}`)}\">Copy</button>
+              <button class="mission-copy-button" type="button" data-copy="${escapeHtml(section.copyText)}" data-label="${escapeHtml(`${mission.title} ${section.label}`)}">Copy</button>
             </div>
-            <code class=\"mission-finder-code\">${escapeHtml(section.copyText)}</code>
+            <code class="mission-finder-code">${escapeHtml(section.copyText)}</code>
           </article>`).join('')}
       </div>
-      ${(mission.finder.notes || []).length ? `<ul class=\"mission-note-list\">${mission.finder.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul>` : '<p class=\"mission-muted-copy\">Paste the copied values into FR24 finder fields that match the label above.</p>'}
+      ${(mission.finder.notes || []).length
+        ? `<ul class="mission-note-list">${mission.finder.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul>`
+        : '<p class="mission-muted-copy">Paste the copied values into the matching FR24 finder field.</p>'}
     </section>`).join('');
+}
+
+function updateScopeChrome(flights) {
+  const mission = activeMission();
+  const accent = activeMissionAccent();
+  const scopeLabel = mission ? `Mission ${mission.ordinal}` : 'All missions';
+  const scopeTitle = mission?.title || 'All missions';
+  const scopeMeta = mission
+    ? `${scopeTitle} | ${formatNumber(flights.length)} flights visible`
+    : `${formatNumber(flights.length)} visible flights across ${formatNumber(state.board.missions.length)} missions`;
+  if (el.mapScope) {
+    el.mapScope.textContent = scopeLabel;
+    el.mapScope.dataset.tone = mission ? 'mission' : 'all';
+    el.mapScope.style.setProperty('--mission-accent', accent);
+  }
+  if (el.mapScopeMeta) {
+    el.mapScopeMeta.textContent = scopeMeta;
+  }
+  if (el.mapOverlay) {
+    el.mapOverlay.style.setProperty('--mission-accent', accent);
+  }
+  if (el.mapOverlayTitle) {
+    el.mapOverlayTitle.textContent = scopeTitle;
+  }
+  if (el.mapOverlayMeta) {
+    el.mapOverlayMeta.textContent = mission
+      ? `${formatNumber(flights.length)} visible flights for this lane`
+      : `${formatNumber(flights.length)} visible flights across the full mission board`;
+  }
+  el.toolbar.textContent = scopeMeta;
 }
 
 function renderList() {
   const flights = visibleFlights();
   if (!flights.some((flight) => flight.id === state.selected)) state.selected = flights[0]?.id || '';
-  el.toolbar.textContent = `${activeMission()?.title || 'All missions'} | ${formatNumber(flights.length)} flights visible`;
+  updateScopeChrome(flights);
   el.listMeta.textContent = flights.length ? `${formatNumber(flights.length)} flights in the current board view` : 'No flights match the current search and mission filters.';
   el.list.innerHTML = flights.length ? flights.map((flight) => {
-    const badges = (flight.matchedMissionOrdinals || []).map((ordinal) => `<span class=\"mission-flight-badge\" style=\"--mission-accent:${COLORS[(ordinal - 1) % COLORS.length]}\">M${ordinal}</span>`).join('');
+    const badges = (flight.matchedMissionOrdinals || []).map((ordinalValue) => `<span class="mission-flight-badge" style="--mission-accent:${COLORS[(ordinalValue - 1) % COLORS.length]}">M${ordinalValue}</span>`).join('');
     const aircraft = [flight.manufacturer, flight.modelName].filter(Boolean).join(' ') || flight.typeCode || 'Unknown aircraft';
-    const metrics = [Number.isFinite(flight.speed) ? `${Math.round(flight.speed)} kt` : 'Speed n/a', Number.isFinite(flight.altitude) ? `${formatNumber(Math.round(flight.altitude))} ft` : 'Altitude n/a', Number.isFinite(flight.distanceKm) ? `${formatNumber(Math.round(flight.distanceKm))} km` : '', ageLabel(flight.lastSeenAt)].filter(Boolean).join(' | ');
+    const metrics = [
+      { value: Number.isFinite(flight.speed) ? `${Math.round(flight.speed)} kt` : 'Speed n/a', neutral: !Number.isFinite(flight.speed) },
+      { value: Number.isFinite(flight.altitude) ? `${formatNumber(Math.round(flight.altitude))} ft` : 'Altitude n/a', neutral: !Number.isFinite(flight.altitude) },
+      { value: Number.isFinite(flight.distanceKm) ? `${formatNumber(Math.round(flight.distanceKm))} km` : 'Route n/a', neutral: !Number.isFinite(flight.distanceKm) },
+      { value: ageLabel(flight.lastSeenAt), neutral: false },
+    ];
     return `
-      <article class=\"mission-flight-row${flight.id === state.selected ? ' is-selected' : ''}\" data-flight-id=\"${escapeHtml(flight.id)}\">
-        <button class=\"mission-flight-focus\" type=\"button\" data-flight=\"${escapeHtml(flight.id)}\" aria-pressed=\"${flight.id === state.selected ? 'true' : 'false'}\">
-          <div class=\"mission-flight-topline\">
-            <div class=\"mission-flight-title-wrap\"><h3>${escapeHtml(flight.callsign)}</h3><p>${escapeHtml(aircraft)}</p></div>
-            <div class=\"mission-flight-badges\">${badges}</div>
+      <article class="mission-flight-row${flight.id === state.selected ? ' is-selected' : ''}" data-flight-id="${escapeHtml(flight.id)}">
+        <button class="mission-flight-focus" type="button" data-flight="${escapeHtml(flight.id)}" aria-pressed="${flight.id === state.selected ? 'true' : 'false'}">
+          <div class="mission-flight-topline">
+            <div class="mission-flight-title-wrap">
+              <h3>${escapeHtml(flight.callsign)}</h3>
+              <p>${escapeHtml(aircraft)}</p>
+            </div>
+            <div class="mission-flight-badges">${badges}</div>
           </div>
-          <div class=\"mission-flight-route\"><span>${escapeHtml(flight.displayRouteLabel)}</span><span>${escapeHtml(flight.registration || flight.typeCode || 'No registration')}</span></div>
-          <p class=\"mission-flight-metrics\">${escapeHtml(metrics)}</p>
+          <div class="mission-flight-route">
+            <span>${escapeHtml(flight.displayRouteLabel)}</span>
+            <span>${escapeHtml(flight.registration || flight.typeCode || 'Registration n/a')}</span>
+          </div>
+          <div class="mission-flight-meta-grid">
+            ${metrics.map((metric) => `<span class="mission-flight-metric${metric.neutral ? ' mission-flight-metric--neutral' : ''}">${escapeHtml(metric.value)}</span>`).join('')}
+          </div>
         </button>
-        <div class=\"mission-flight-actions\"><a class=\"mission-flight-link\" href=\"${escapeHtml(flight.fr24Url || '#')}\" target=\"_blank\" rel=\"noopener noreferrer\">Open in FR24</a></div>
+        <div class="mission-flight-actions"><a class="mission-flight-link" href="${escapeHtml(flight.fr24Url || '#')}" target="_blank" rel="noopener noreferrer">Open in FR24</a></div>
       </article>`;
-  }).join('') : '<div class=\"mission-empty-state\">No live matches right now. Try another mission or clear the search.</div>';
+  }).join('') : '<div class="mission-empty-state">No live matches right now. Try another mission or clear the search.</div>';
 }
 
 function render() {
-  renderHero();
+  renderHeader();
   renderBanner();
   renderSelector();
   renderIntel();
@@ -384,8 +452,13 @@ async function load(silent = false) {
     const live = await fetchDailyMissionsSnapshotData();
     state.board = normalizeBoard(live.payload, live.source);
     state.source = live.source;
-    state.active = state.board.missionMap.has(missionFromUrl()) ? missionFromUrl() : (missionFromUrl() === 'all' ? 'all' : (state.active || state.board.missions[0]?.key || 'all'));
-    if (!silent) state.message = live.source?.fallbackUsed ? 'Local daily-missions fixture was unavailable, so Skyviz fell back to the shared live board.' : '';
+    const requestedMission = missionFromUrl();
+    state.active = state.board.missionMap.has(requestedMission)
+      ? requestedMission
+      : (requestedMission === 'all' ? 'all' : (state.active === 'all' || state.board.missionMap.has(state.active) ? state.active : 'all'));
+    if (!silent) {
+      state.message = live.source?.fallbackUsed ? 'Local daily-missions fixture was unavailable, so Skyviz fell back to the shared live board.' : '';
+    }
     state.seconds = Math.max(0, Math.ceil(((Date.parse(state.board.generatedAt || 0) + ((Number(state.board.publishIntervalSeconds) || 300) * 1000)) - Date.now()) / 1000));
     render();
   })().finally(() => {
@@ -404,12 +477,25 @@ async function copyValue(value, label) {
     state.message = `Unable to copy ${label}.`;
   }
   renderBanner();
-  window.setTimeout(() => { if (state.message === `Copied ${label}.`) { state.message = ''; renderBanner(); } }, 2500);
+  window.setTimeout(() => {
+    if (state.message === `Copied ${label}.`) {
+      state.message = '';
+      renderBanner();
+    }
+  }, 2500);
 }
 
 el.refreshButton?.addEventListener('click', () => load());
-el.search?.addEventListener('input', () => { state.query = sanitizeText(el.search.value); renderList(); renderMap(); });
-el.sort?.addEventListener('change', () => { state.sort = sanitizeText(el.sort.value) || 'freshest'; renderList(); renderMap(); });
+el.search?.addEventListener('input', () => {
+  state.query = sanitizeText(el.search.value);
+  renderList();
+  renderMap();
+});
+el.sort?.addEventListener('change', () => {
+  state.sort = sanitizeText(el.sort.value) || 'freshest';
+  renderList();
+  renderMap();
+});
 el.selector?.addEventListener('click', (event) => {
   const button = event.target instanceof Element ? event.target.closest('button[data-mission]') : null;
   if (!button) return;
@@ -433,10 +519,13 @@ el.list?.addEventListener('click', (event) => {
 state.timer = window.setInterval(() => {
   if (!state.board) return;
   state.seconds = Math.max(0, state.seconds - 1);
-  renderHero();
+  renderHeader();
   renderBanner();
   if (state.seconds <= 0 && !state.loadPromise) {
-    load(true).catch((error) => { state.message = error instanceof Error ? error.message : 'Unable to refresh the mission board.'; renderBanner(); });
+    load(true).catch((error) => {
+      state.message = error instanceof Error ? error.message : 'Unable to refresh the mission board.';
+      renderBanner();
+    });
   }
 }, 1000);
 
