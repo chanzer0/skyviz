@@ -3,18 +3,21 @@
 }
 
 .daily-missions-app {
-  display: block;
+  display: grid;
+  gap: 0.74rem;
+  min-height: calc(100dvh - 1rem);
+  height: calc(100dvh - 1rem);
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
 }
 
+.daily-missions-topbar,
 .daily-missions-workspace {
-  --daily-missions-board-height: clamp(500px, 38vw, 620px);
   display: grid;
-  gap: 0.88rem;
-  align-items: start;
-  grid-template-columns: minmax(0, 2.05fr) minmax(340px, 0.95fr);
 }
 
 .daily-missions-map-panel,
+.daily-missions-topbar,
 .daily-missions-rail {
   border: 1px solid rgba(18, 44, 70, 0.16);
   border-radius: 22px;
@@ -24,16 +27,150 @@
   box-shadow: var(--shadow-soft);
 }
 
+.daily-missions-topbar {
+  position: relative;
+  gap: 0.84rem;
+  padding: 0.88rem 0.96rem 0.94rem;
+  overflow: hidden;
+  border-color: rgba(12, 49, 78, 0.24);
+  background:
+    radial-gradient(circle at top left, rgba(22, 131, 146, 0.28), transparent 30%),
+    radial-gradient(circle at 86% 12%, rgba(244, 200, 141, 0.18), transparent 22%),
+    linear-gradient(135deg, rgba(10, 34, 56, 0.98), rgba(18, 60, 91, 0.95));
+  box-shadow: 0 24px 54px rgba(7, 24, 39, 0.18);
+}
+
+.daily-missions-topbar::before {
+  content: '';
+  position: absolute;
+  inset: -40% auto -40% 64%;
+  width: 32%;
+  border-radius: 50%;
+  background: conic-gradient(from 180deg, rgba(173, 255, 230, 0), rgba(173, 255, 230, 0.28), rgba(173, 255, 230, 0));
+  opacity: 0.44;
+  transform-origin: center;
+  animation: daily-radar-sweep 8s linear infinite;
+  pointer-events: none;
+}
+
+.daily-missions-topbar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(210, 235, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(210, 235, 255, 0.08) 1px, transparent 1px);
+  background-size: 20px 20px;
+  mask-image: radial-gradient(circle at 76% 30%, rgba(0, 0, 0, 0.96), transparent 70%);
+}
+
+.daily-missions-topbar > * {
+  position: relative;
+  z-index: 1;
+}
+
+.daily-missions-topbar-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(320px, 1fr) auto;
+  gap: 0.8rem;
+  align-items: start;
+}
+
+.daily-missions-topbar-brand {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.daily-missions-topbar-copy {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.daily-missions-topbar #mission-desktop-title {
+  margin: 0;
+  font-family: 'DM Serif Display', serif;
+  letter-spacing: -0.03em;
+  font-size: 1.96rem;
+  line-height: 0.9;
+  color: #f6fbff;
+}
+
+.daily-missions-topbar #mission-desktop-summary {
+  font-size: 0.82rem;
+  color: rgba(235, 246, 255, 0.82);
+  max-width: 38rem;
+}
+
+.daily-missions-topbar-meta {
+  display: grid;
+  gap: 0.38rem;
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+}
+
+.daily-missions-topbar .eyebrow {
+  margin-bottom: 0;
+  color: rgba(226, 240, 255, 0.68);
+}
+
+.daily-missions-topbar .daily-missions-home-link {
+  color: rgba(235, 246, 255, 0.84);
+}
+
+.daily-missions-topbar .daily-missions-home-link:hover,
+.daily-missions-topbar .daily-missions-home-link:focus-visible {
+  color: #fff;
+}
+
+.daily-missions-topbar .daily-missions-meta-card {
+  background: rgba(242, 248, 255, 0.1);
+  border-color: rgba(188, 221, 248, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.daily-missions-topbar .daily-missions-meta-label,
+.daily-missions-topbar .daily-missions-section-label,
+.daily-missions-topbar .daily-missions-section-meta {
+  color: rgba(225, 239, 255, 0.74);
+}
+
+.daily-missions-topbar .daily-missions-meta-value {
+  color: #f6fbff;
+}
+
+.daily-missions-topbar-scopes {
+  display: grid;
+  gap: 0.44rem;
+}
+
+.daily-missions-topbar-scopes .daily-missions-section-head {
+  align-items: center;
+}
+
+.daily-missions-topbar-scopes .daily-missions-section-meta {
+  color: rgba(235, 246, 255, 0.82);
+}
+
+.daily-missions-workspace {
+  grid-template-columns: minmax(0, 2.12fr) minmax(360px, 0.94fr);
+  gap: 0.74rem;
+  align-items: stretch;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .daily-missions-map-panel {
   position: relative;
-  padding: 0.7rem;
-  height: var(--daily-missions-board-height);
-  min-height: var(--daily-missions-board-height);
+  padding: 0.62rem;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .daily-missions-map-shell {
   position: relative;
   height: 100%;
+  min-height: 0;
 }
 
 .daily-missions-map {
@@ -86,22 +223,22 @@
 }
 
 .daily-missions-rail {
-  position: sticky;
-  top: 0.75rem;
+  position: relative;
   display: flex;
   flex-direction: column;
   padding: 0;
-  max-height: var(--daily-missions-board-height);
-  min-height: var(--daily-missions-board-height);
+  min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 
 .daily-missions-rail-inner {
   display: grid;
-  gap: 0.76rem;
-  padding: 0.82rem;
+  gap: 0.68rem;
+  padding: 0.76rem;
   overflow-y: auto;
   min-height: 0;
+  scrollbar-gutter: stable;
 }
 
 .daily-missions-rail-section {
@@ -171,6 +308,12 @@
   font-size: 0.9rem;
 }
 
+.daily-missions-toolbar-controls {
+  display: grid;
+  gap: 0.48rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .daily-missions-primary-action,
 .mission-copy-button,
 .mission-flight-link {
@@ -196,6 +339,14 @@
   background: linear-gradient(135deg, #f4c88d, #ffebc6);
 }
 
+.daily-missions-topbar .daily-missions-primary-action {
+  width: auto;
+  min-width: 10.5rem;
+  min-height: 2.35rem;
+  align-self: center;
+  box-shadow: 0 16px 30px rgba(5, 18, 30, 0.24);
+}
+
 .daily-missions-meta-grid {
   display: grid;
   gap: 0.48rem;
@@ -204,8 +355,8 @@
 
 .daily-missions-meta-card {
   display: grid;
-  gap: 0.14rem;
-  padding: 0.62rem 0.68rem;
+  gap: 0.1rem;
+  padding: 0.54rem 0.62rem;
   border: 1px solid rgba(20, 45, 70, 0.12);
   border-radius: 14px;
   background: rgba(245, 249, 252, 0.94);
@@ -247,28 +398,30 @@
   gap: 0.55rem;
 }
 
-.daily-missions-toolbar-controls {
-  display: grid;
-  gap: 0.48rem;
-}
-
 .daily-missions-control-field {
   min-width: 0;
 }
 
 .daily-missions-selector {
   display: grid;
-  gap: 0.46rem;
-  grid-template-columns: 1fr;
+  gap: 0.42rem;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(212px, 1fr);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.daily-missions-selector::-webkit-scrollbar {
+  display: none;
 }
 
 .mission-selector-card {
   display: grid;
-  gap: 0.28rem;
+  gap: 0.22rem;
   min-height: 0;
   border: 1px solid rgba(20, 45, 70, 0.14);
   border-radius: 16px;
-  padding: 0.72rem 0.76rem;
+  padding: 0.62rem 0.68rem;
   font: inherit;
   text-align: left;
   color: var(--ink-950);
@@ -295,13 +448,46 @@
 }
 
 .mission-selector-card-title {
-  font-size: 0.98rem;
-  line-height: 1.24;
+  font-size: 0.9rem;
+  line-height: 1.18;
 }
 
 .mission-selector-card-meta {
   color: rgba(18, 33, 53, 0.68);
-  font-size: 0.82rem;
+  font-size: 0.76rem;
+}
+
+.daily-missions-topbar .mission-selector-card {
+  border-color: rgba(188, 221, 248, 0.18);
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.08), transparent 42%),
+    rgba(244, 249, 255, 0.08);
+  color: #f6fbff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.daily-missions-topbar .mission-selector-card:hover,
+.daily-missions-topbar .mission-selector-card:focus-visible {
+  border-color: rgba(244, 200, 141, 0.52);
+  box-shadow: 0 14px 28px rgba(6, 18, 30, 0.22);
+}
+
+.daily-missions-topbar .mission-selector-card.is-active {
+  border-color: rgba(245, 198, 143, 0.8);
+  background:
+    radial-gradient(circle at top right, rgba(244, 200, 141, 0.24), transparent 46%),
+    linear-gradient(145deg, rgba(242, 248, 255, 0.18), rgba(244, 249, 255, 0.1));
+  box-shadow: 0 16px 34px rgba(5, 18, 30, 0.24);
+}
+
+.daily-missions-topbar .mission-selector-card-index,
+.daily-missions-topbar .mission-selector-card--all .mission-selector-card-index {
+  background: rgba(244, 249, 255, 0.14);
+  color: rgba(244, 249, 255, 0.9);
+}
+
+.daily-missions-topbar .mission-selector-card-meta {
+  color: rgba(235, 246, 255, 0.78);
 }
 
 .daily-missions-selected-flight {
@@ -446,11 +632,12 @@
 
 .mission-intel-card {
   display: grid;
-  gap: 0.54rem;
-  padding: 0.72rem;
+  gap: 0.46rem;
+  padding: 0.64rem;
   border: 1px solid rgba(20, 45, 70, 0.12);
-  border-radius: 16px;
-  background: rgba(249, 252, 247, 0.92);
+  border-radius: 15px;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(248, 252, 247, 0.92));
 }
 
 .mission-intel-head,
@@ -463,13 +650,13 @@
 
 .mission-finder-list {
   display: grid;
-  gap: 0.44rem;
+  gap: 0.38rem;
 }
 
 .mission-finder-block {
   display: grid;
-  gap: 0.44rem;
-  padding: 0.62rem;
+  gap: 0.38rem;
+  padding: 0.56rem;
   border: 1px solid rgba(20, 45, 70, 0.12);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.96);
@@ -478,10 +665,10 @@
 .mission-finder-code {
   display: block;
   border-radius: 12px;
-  padding: 0.64rem;
+  padding: 0.56rem;
   overflow-x: auto;
   white-space: nowrap;
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   background: rgba(20, 45, 70, 0.08);
 }
 
@@ -551,13 +738,28 @@
 
 @media (max-width: 1180px) {
   .daily-missions-workspace {
-    --daily-missions-board-height: auto;
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .daily-missions-app {
+    display: block;
+    min-height: 0;
+    height: auto;
+    overflow: visible;
+  }
+
+  .daily-missions-topbar {
+    display: none;
+  }
+
+  .daily-missions-toolbar-controls {
     grid-template-columns: 1fr;
   }
 
   .daily-missions-map-panel {
-    height: auto;
     min-height: 62vh;
+    overflow: visible;
   }
 
   .daily-missions-map {
@@ -566,8 +768,16 @@
 
   .daily-missions-rail {
     position: static;
+    height: auto;
     max-height: none;
     min-height: 0;
+  }
+}
+
+@media (min-width: 1181px) {
+  .daily-missions-rail-top,
+  .daily-missions-rail-meta {
+    display: none;
   }
 }
 
@@ -618,14 +828,7 @@
   }
 
   .daily-missions-selector {
-    grid-auto-flow: column;
     grid-auto-columns: minmax(228px, 72vw);
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .daily-missions-selector::-webkit-scrollbar {
-    display: none;
   }
 
   .daily-missions-selected-actions,

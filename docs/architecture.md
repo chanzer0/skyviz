@@ -40,7 +40,7 @@
 ## Data flow
 
 1. A user opens the static site from GitHub Pages.
-2. The user can open either always-available daily game directly from the landing view without uploading a Skycards export, or load the standalone `/daily-missions/` board directly.
+2. The user can open either always-available daily game or the standalone `/daily-missions/` board directly from the landing view without uploading a Skycards export.
 3. For `Navdle`, the browser loads the generated airport manifest and derived daily-game dataset from `site/data/airports/`, restores the current UTC day's guesses from browser `localStorage`, and picks the airport of the day deterministically from the generated pool.
 4. For `Cardle`, the browser loads the committed Skycards reference snapshots, derives a guessable aircraft-model pool from `models.json`, restores the current UTC day's guesses from browser `localStorage`, and picks the model of the day deterministically from that reference pool.
 5. The user can alternatively upload a Skycards export JSON file or use the landing-page `View Example Dashboard` button to load a built-in sample deck.
@@ -63,7 +63,7 @@
   - aircraft detail media candidates resolved from optimized Skycards CDN GLB assets
   - completionist-mode flight matches built by comparing the shared delayed snapshot from the production Cloudflare source selected in `site/data/runtime-config.json` (or the local `site/data/live/` fixture path on localhost) against the current user's missing airport unlocks and missing aircraft models entirely in-browser after discarding live rows without usable registrations, with compact `Missing airport` / `New card` target toggles enabled by default, a separate live sort control for busiest airport/card groups vs latest sightings, and completionist summary/pill counts tracking unique airport and card targets instead of duplicate flight rows
 11. The loaded UI transitions to a tabbed dashboard (`Navdle`, `Cardle`, `Map`, and `Deck`) without sending upload data to any server. The two daily tabs remain available even when no collection upload is active.
-12. Separately, the standalone `/daily-missions/` route reads the shared daily-missions manifest directly in-browser, resolves the current snapshot, opens in `All missions` mode by default, gives the map the dominant viewport with a constrained desktop aspect ratio, and keeps the dense right rail (meta, filters, highlighted flight, finder values, and live matches) synchronized as the browser refreshes the board on the published cadence.
+12. Separately, the standalone `/daily-missions/` route reads the shared daily-missions manifest directly in-browser, resolves the current snapshot, opens in `All missions` mode by default, gives the map the dominant viewport inside a browser-height-bounded desktop workspace, lifts the mission filters into a compact command header above the map, and keeps the dense right rail (finder values first, then controls, highlighted flight, and live matches) synchronized as the browser refreshes the board on the published cadence.
 
 ## Completionist live snapshot contract
 

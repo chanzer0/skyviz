@@ -344,7 +344,7 @@ code {
   z-index: 1;
   display: grid;
   gap: 0.78rem;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .landing-daily-game-card {
@@ -364,6 +364,13 @@ code {
   background:
     radial-gradient(circle at top right, rgba(244, 200, 141, 0.18), transparent 38%),
     rgba(255, 248, 240, 0.1);
+}
+
+.landing-daily-game-card.is-missions {
+  background:
+    radial-gradient(circle at 78% 20%, rgba(173, 255, 230, 0.18), transparent 26%),
+    radial-gradient(circle at 14% 86%, rgba(22, 131, 146, 0.16), transparent 32%),
+    rgba(239, 248, 252, 0.1);
 }
 
 .landing-daily-game-kicker {
@@ -463,6 +470,10 @@ code {
   transform: translateY(-2px);
   box-shadow: 0 20px 36px rgba(5, 18, 30, 0.3);
   border-color: rgba(255, 232, 194, 0.9);
+}
+
+.daily-launch-button--mission {
+  min-width: 100%;
 }
 
 .eyebrow {
@@ -846,16 +857,69 @@ code {
   align-items: center;
   justify-content: space-between;
   gap: 0.7rem;
+  flex-wrap: wrap;
 }
 
 .dashboard-tabs {
   display: inline-flex;
+  flex: 1 1 auto;
   gap: 0.35rem;
   padding: 0.3rem;
   border-radius: 999px;
   border: 1px solid var(--line-strong);
   background: rgba(251, 253, 248, 0.86);
   box-shadow: var(--shadow-soft);
+}
+
+.dashboard-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+
+.dashboard-mission-link {
+  display: grid;
+  gap: 0.02rem;
+  min-width: 12.4rem;
+  padding: 0.52rem 0.88rem 0.56rem;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 63, 112, 0.18);
+  background:
+    radial-gradient(circle at top right, rgba(22, 131, 146, 0.14), transparent 38%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.98), rgba(244, 250, 255, 0.92));
+  box-shadow: var(--shadow-soft);
+  text-decoration: none;
+  transition: transform 170ms ease, border-color 170ms ease, box-shadow 170ms ease, background 170ms ease;
+}
+
+.dashboard-mission-link:hover,
+.dashboard-mission-link:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(15, 63, 112, 0.34);
+  box-shadow: 0 14px 34px rgba(15, 43, 64, 0.14);
+}
+
+.dashboard-mission-link-kicker {
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(15, 63, 112, 0.58);
+}
+
+.dashboard-mission-link-title {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.02rem;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  color: var(--ink-950);
+}
+
+.dashboard-mission-link-meta {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: rgba(18, 33, 53, 0.68);
 }
 
 .dashboard-tab-button {
@@ -7179,6 +7243,20 @@ button.registration-summary-chip {
 
   .dashboard-tabs {
     flex-wrap: wrap;
+  }
+
+  .dashboard-tabs-tools {
+    align-items: stretch;
+  }
+
+  .dashboard-header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .dashboard-mission-link {
+    min-width: 0;
+    flex: 1 1 auto;
   }
 
   .data-tools-trigger {

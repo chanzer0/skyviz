@@ -3,30 +3,30 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Skyviz | Navdle and Cardle Daily Aviation Games</title>
+    <title>Skyviz | Daily Missions, Navdle, and Cardle</title>
     <meta
       name="description"
-      content="Play Navdle and Cardle, two free daily aviation games from Skyviz, and explore the browser-only map and aircraft dashboard built from collection exports."
+      content="Open the live Daily Missions board, play Navdle and Cardle, and explore the browser-only Skyviz map and aircraft dashboard built from collection exports."
     >
     <meta name="robots" content="index,follow,max-image-preview:large">
     <link rel="canonical" href="https://chanzer0.github.io/skyviz/">
     <meta property="og:type" content="website">
-    <meta property="og:title" content="Skyviz | Navdle and Cardle Daily Aviation Games">
-    <meta property="og:description" content="Play Navdle and Cardle, two free daily aviation games from Skyviz, and explore the browser-only map and aircraft dashboard.">
+    <meta property="og:title" content="Skyviz | Daily Missions, Navdle, and Cardle">
+    <meta property="og:description" content="Open the live Daily Missions board, play Navdle and Cardle, and explore the browser-only Skyviz dashboard.">
     <meta property="og:url" content="https://chanzer0.github.io/skyviz/">
     <meta property="og:site_name" content="Skyviz">
     <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="Skyviz | Navdle and Cardle Daily Aviation Games">
-    <meta name="twitter:description" content="Play Navdle and Cardle, two free daily aviation games from Skyviz, and explore the browser-only map and aircraft dashboard.">
+    <meta name="twitter:title" content="Skyviz | Daily Missions, Navdle, and Cardle">
+    <meta name="twitter:description" content="Open the live Daily Missions board, play Navdle and Cardle, and explore the browser-only Skyviz dashboard.">
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "WebSite",
         "name": "Skyviz",
-        "alternateName": "Navdle and Cardle",
+        "alternateName": "Daily Missions, Navdle and Cardle",
         "url": "https://chanzer0.github.io/skyviz/",
-        "description": "Play Navdle and Cardle, two free daily aviation games, and explore a browser-only aviation dashboard for collection exports.",
-        "keywords": "daily airport game, daily aircraft game, daily aviation game, airport guessing game, aircraft guessing game, aviation game, Navdle, Cardle"
+        "description": "Open the live Daily Missions board, play Navdle and Cardle, and explore a browser-only aviation dashboard for collection exports.",
+        "keywords": "daily missions, live mission board, daily airport game, daily aircraft game, daily aviation game, airport guessing game, aircraft guessing game, aviation game, Navdle, Cardle"
       }
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -42,7 +42,7 @@
       crossorigin=""
     >
     <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
-    <link rel="stylesheet" href="./styles.css?v=20260324-daily-missions-1">
+    <link rel="stylesheet" href="./styles.css?v=20260324-daily-missions-2">
   </head>
   <body>
     <a class="skip-link" href="#dashboard">Skip to dashboard</a>
@@ -73,9 +73,9 @@
 
             <section class="landing-daily-feature" aria-labelledby="daily-feature-title">
               <div class="landing-daily-copy">
-                <p class="landing-step-kicker">Daily games</p>
-                <h2 id="daily-feature-title" class="landing-daily-title">Daily games</h2>
-                <p class="landing-daily-summary">Two quick aviation dailies. No upload required.</p>
+                <p class="landing-step-kicker">Daily aviation</p>
+                <h2 id="daily-feature-title" class="landing-daily-title">Daily aviation</h2>
+                <p class="landing-daily-summary">Play the two dailies or open the live mission board. No upload required.</p>
               </div>
               <div class="landing-daily-grid">
                 <article class="landing-daily-game-card is-navdle">
@@ -107,6 +107,25 @@
                   <a id="cardle-launch" class="daily-launch-button" href="#cardle">Play Cardle</a>
                   <p class="landing-daily-credit">
                     Uses the committed model catalog plus live origin hotspots.
+                  </p>
+                </article>
+                <article class="landing-daily-game-card is-missions">
+                  <p class="landing-daily-game-kicker">Live board</p>
+                  <h3 class="landing-daily-game-title">Daily Missions</h3>
+                  <p class="landing-daily-game-summary">
+                    Open the live mission board with a world map, mission filters, and copy-ready FR24 finder values.
+                  </p>
+                  <div class="landing-daily-stats">
+                    <span class="landing-daily-chip">Map first</span>
+                    <span class="landing-daily-chip">Live filters</span>
+                    <span class="landing-daily-chip is-quiet">New tab</span>
+                  </div>
+                  <p class="landing-daily-teaser">
+                    Best when you want to hunt mission traffic without leaving your current Skyviz session behind.
+                  </p>
+                  <a class="daily-launch-button daily-launch-button--mission" href="./daily-missions/" target="_blank" rel="noopener noreferrer">Open Daily Missions</a>
+                  <p class="landing-daily-credit">
+                    Opens the standalone mission board in a separate tab so your current workflow stays put.
                   </p>
                 </article>
               </div>
@@ -219,27 +238,39 @@
                 Deck
               </button>
             </nav>
-            <div class="data-tools">
-              <button
-                id="data-tools-trigger"
-                class="data-tools-trigger"
-                type="button"
-                aria-haspopup="dialog"
-                aria-expanded="false"
-                aria-controls="data-tools-menu"
-                title="Dashboard settings"
+            <div class="dashboard-header-actions">
+              <a
+                id="dashboard-daily-missions-link"
+                class="dashboard-mission-link"
+                href="./daily-missions/"
+                target="_blank"
+                rel="noopener noreferrer"
               >
-                <span aria-hidden="true">&#9881;</span>
-                <span class="sr-only">Dashboard settings</span>
-              </button>
-              <div
-                id="data-tools-menu"
-                class="data-tools-menu"
-                role="dialog"
-                aria-modal="false"
-                aria-labelledby="data-tools-title"
-                hidden
-              >
+                <span class="dashboard-mission-link-kicker">Live board</span>
+                <span class="dashboard-mission-link-title">Daily Missions</span>
+                <span class="dashboard-mission-link-meta">Opens in new tab</span>
+              </a>
+              <div class="data-tools">
+                <button
+                  id="data-tools-trigger"
+                  class="data-tools-trigger"
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-expanded="false"
+                  aria-controls="data-tools-menu"
+                  title="Dashboard settings"
+                >
+                  <span aria-hidden="true">&#9881;</span>
+                  <span class="sr-only">Dashboard settings</span>
+                </button>
+                <div
+                  id="data-tools-menu"
+                  class="data-tools-menu"
+                  role="dialog"
+                  aria-modal="false"
+                  aria-labelledby="data-tools-title"
+                  hidden
+                >
                 <div class="data-tools-menu-head">
                   <p class="data-tools-menu-kicker">Dashboard settings</p>
                   <h2 id="data-tools-title" class="data-tools-menu-title">Collection controls</h2>
@@ -300,6 +331,7 @@
                     Clear current + saved data
                   </button>
                 </section>
+                </div>
               </div>
             </div>
           </div>

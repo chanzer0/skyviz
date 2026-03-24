@@ -3,15 +3,22 @@ import { escapeHtml, formatCompact, formatNumber, sanitizeText } from './format.
 
 const $ = (selector) => document.querySelector(selector);
 const el = {
+  selectors: [...document.querySelectorAll('[data-mission-selector]')],
   title: $('#mission-board-title'),
   summary: $('#mission-board-summary'),
+  desktopTitle: $('#mission-desktop-title'),
+  desktopSummary: $('#mission-desktop-summary'),
   updated: $('#mission-updated-value'),
   refresh: $('#mission-refresh-value'),
   flights: $('#mission-flights-value'),
   source: $('#mission-source-value'),
+  desktopUpdated: $('#mission-desktop-updated'),
+  desktopRefresh: $('#mission-desktop-refresh'),
+  desktopFlights: $('#mission-desktop-flights'),
+  desktopSource: $('#mission-desktop-source'),
   banner: $('#mission-banner'),
-  selector: $('#mission-selector'),
   toolbar: $('#mission-toolbar-summary'),
+  desktopToolbar: $('#mission-desktop-toolbar'),
   search: $('#mission-search'),
   sort: $('#mission-sort'),
   intel: $('#mission-intel'),
@@ -19,6 +26,7 @@ const el = {
   listMeta: $('#mission-list-meta'),
   list: $('#mission-flight-list'),
   refreshButton: $('#mission-refresh-button'),
+  desktopRefreshButton: $('#mission-desktop-refresh-button'),
   map: $('#mission-map'),
   mapEmpty: $('#mission-map-empty'),
 };
@@ -296,15 +304,38 @@ function renderRailHeader() {
   const requestedDate = dateFromUrl();
   const source = sanitizeText(state.source?.label) || 'Shared mission board';
   el.title.textContent = 'Daily Missions';
-  el.summary.textContent = [
+  if (el.desktopTitle) {
+    el.desktopTitle.textContent = 'Daily Missions';
+  }
+  const summary = [
     `${friendlyDate(state.board.missionDate)} board`,
     source,
     requestedDate && requestedDate !== state.board.missionDate ? `showing ${state.board.missionDate}` : '',
   ].filter(Boolean).join(' | ');
-  el.updated.textContent = timeLabel(state.board.generatedAt);
-  el.refresh.textContent = countdownLabel(state.seconds);
-  el.flights.textContent = formatNumber(state.board.rowCount || 0);
-  el.source.textContent = sanitizeText(state.source?.role) ? `${source} | ${sanitizeText(state.source.role)}` : source;
+  el.summary.textContent = summary;
+  if (el.desktopSummary) {
+    el.desktopSummary.textContent = summary;
+  }
+  const updated = timeLabel(state.board.generatedAt);
+  const refresh = countdownLabel(state.seconds);
+  const flights = formatNumber(state.board.rowCount || 0);
+  const sourceText = sanitizeText(state.source?.role) ? `${source} | ${sanitizeText(state.source.role)}` : source;
+  el.updated.textContent = updated;
+  el.refresh.textContent = refresh;
+  el.flights.textContent = flights;
+  el.source.textContent = sourceText;
+  if (el.desktopUpdated) {
+    el.desktopUpdated.textContent = updated;
+  }
+  if (el.desktopRefresh) {
+    el.desktopRefresh.textContent = refresh;
+  }
+  if (el.desktopFlights) {
+    el.desktopFlights.textContent = flights;
+  }
+  if (el.desktopSource) {
+    el.desktopSource.textContent = sourceText;
+  }
   document.title = `${friendlyDate(state.board.missionDate)} Daily Missions | Skyviz`;
 }
 
@@ -318,14 +349,13 @@ function renderBanner() {
 
 function renderSelector() {
   const totalMissionMatches = (state.board.missions || []).reduce((sum, mission) => sum + mission.matchCount, 0);
-  const allCard = `
+  const html = [
+    `
     <button class="mission-selector-card mission-selector-card--all${state.active === 'all' ? ' is-active' : ''}" type="button" data-mission="all" aria-pressed="${state.active === 'all' ? 'true' : 'false'}">
       <span class="mission-selector-card-index">All missions</span>
       <strong class="mission-selector-card-title">Whole mission board</strong>
       <span class="mission-selector-card-meta">${formatCompact(totalMissionMatches)} mission matches across ${formatNumber(state.board.rowCount || 0)} flights</span>
-    </button>`;
-  el.selector.innerHTML = [
-    allCard,
+    </button>`,
     ...state.board.missions.map((mission) => `
       <button class="mission-selector-card${mission.key === state.active ? ' is-active' : ''}" type="button" data-mission="${escapeHtml(mission.key)}" aria-pressed="${mission.key === state.active ? 'true' : 'false'}">
         <span class="mission-selector-card-index" style="--mission-accent:${COLORS[(mission.ordinal - 1) % COLORS.length]}">Mission ${mission.ordinal}</span>
@@ -333,6 +363,9 @@ function renderSelector() {
         <span class="mission-selector-card-meta">${mission.truncated ? `${formatNumber(mission.displayedMatchCount)} shown of ${formatCompact(mission.matchCount)}` : `${formatNumber(mission.matchCount)} live matches`}</span>
       </button>`),
   ].join('');
+  el.selectors.forEach((selectorRoot) => {
+    selectorRoot.innerHTML = html;
+  });
 }
 
 function updateScopeChrome(flights) {
@@ -341,6 +374,9 @@ function updateScopeChrome(flights) {
     ? `${formatNumber(flights.length)} flights visible`
     : `${formatNumber(flights.length)} visible across ${formatNumber(state.board.missions.length)} missions`;
   el.toolbar.textContent = mission ? `${mission.title} | ${formatNumber(flights.length)} visible` : scopeMeta;
+  if (el.desktopToolbar) {
+    el.desktopToolbar.textContent = el.toolbar.textContent;
+  }
   el.listMeta.textContent = `${formatNumber(flights.length)} visible`;
 }
 
@@ -507,6 +543,7 @@ async function copyValue(value, label) {
 }
 
 el.refreshButton?.addEventListener('click', () => load());
+el.desktopRefreshButton?.addEventListener('click', () => load());
 el.search?.addEventListener('input', () => {
   state.query = sanitizeText(el.search.value);
   state.focusSelection = false;
@@ -521,13 +558,15 @@ el.sort?.addEventListener('change', () => {
   renderSelectedFlight();
   renderMap();
 });
-el.selector?.addEventListener('click', (event) => {
-  const button = event.target instanceof Element ? event.target.closest('button[data-mission]') : null;
-  if (!button) return;
-  state.active = sanitizeText(button.getAttribute('data-mission')) || 'all';
-  state.selected = '';
-  state.focusSelection = false;
-  render();
+el.selectors.forEach((selectorRoot) => {
+  selectorRoot.addEventListener('click', (event) => {
+    const button = event.target instanceof Element ? event.target.closest('button[data-mission]') : null;
+    if (!button) return;
+    state.active = sanitizeText(button.getAttribute('data-mission')) || 'all';
+    state.selected = '';
+    state.focusSelection = false;
+    render();
+  });
 });
 el.intel?.addEventListener('click', async (event) => {
   const button = event.target instanceof Element ? event.target.closest('button[data-copy]') : null;

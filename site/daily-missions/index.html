@@ -6,7 +6,7 @@
     <title>Daily Missions | Skyviz</title>
     <meta
       name="description"
-      content="Open the live Skyviz daily mission board with a dedicated map, mission toggles, copyable FR24 finder values, and synchronized flight listings."
+      content="Open the live Skyviz daily mission board with a map-first layout, compact mission filters, copyable FR24 finder values, and synchronized flight listings."
     >
     <meta name="robots" content="index,follow,max-image-preview:large">
     <link rel="canonical" href="https://chanzer0.github.io/skyviz/daily-missions/">
@@ -41,13 +41,40 @@
       crossorigin=""
     >
     <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
-    <link rel="stylesheet" href="../styles.css?v=20260324-daily-missions-1">
-    <link rel="stylesheet" href="./styles.css?v=20260324-daily-missions-6">
+    <link rel="stylesheet" href="../styles.css?v=20260324-daily-missions-2">
+    <link rel="stylesheet" href="./styles.css?v=20260324-daily-missions-7">
   </head>
   <body class="daily-missions-page-body">
     <a class="skip-link" href="#daily-missions-main">Skip to mission board</a>
     <div class="page-shell daily-missions-shell" id="page-top">
       <main id="daily-missions-main" class="daily-missions-app">
+        <section class="panel daily-missions-topbar" aria-labelledby="mission-desktop-title">
+          <div class="daily-missions-topbar-main">
+            <div class="daily-missions-topbar-brand">
+              <a class="daily-missions-home-link" href="../">Back to Skyviz</a>
+              <div class="daily-missions-topbar-copy">
+                <p class="eyebrow">Skyviz Live</p>
+                <h1 id="mission-desktop-title">Daily Missions</h1>
+                <p id="mission-desktop-summary" class="daily-missions-summary">Loading the current mission board...</p>
+              </div>
+            </div>
+            <div class="daily-missions-topbar-meta" aria-live="polite">
+              <article class="daily-missions-meta-card"><span class="daily-missions-meta-label">Updated</span><strong id="mission-desktop-updated" class="daily-missions-meta-value">--</strong></article>
+              <article class="daily-missions-meta-card"><span class="daily-missions-meta-label">Next refresh</span><strong id="mission-desktop-refresh" class="daily-missions-meta-value">--</strong></article>
+              <article class="daily-missions-meta-card"><span class="daily-missions-meta-label">Flights</span><strong id="mission-desktop-flights" class="daily-missions-meta-value">--</strong></article>
+              <article class="daily-missions-meta-card"><span class="daily-missions-meta-label">Feed</span><strong id="mission-desktop-source" class="daily-missions-meta-value">--</strong></article>
+            </div>
+            <button id="mission-desktop-refresh-button" class="daily-missions-primary-action" type="button">Refresh now</button>
+          </div>
+          <div class="daily-missions-topbar-scopes" aria-labelledby="mission-desktop-scope-heading">
+            <div class="daily-missions-section-head">
+              <span class="daily-missions-section-label" id="mission-desktop-scope-heading">Mission filters</span>
+              <span id="mission-desktop-toolbar" class="daily-missions-section-meta">Loading current scope...</span>
+            </div>
+            <div id="mission-desktop-selector" class="daily-missions-selector daily-missions-selector--topbar" data-mission-selector role="list"></div>
+          </div>
+        </section>
+
         <section class="daily-missions-workspace" aria-label="Daily mission workspace">
           <article class="panel daily-missions-map-panel" aria-labelledby="mission-map-heading">
             <h1 id="mission-map-heading" class="daily-missions-sr-only">Daily Missions map</h1>
@@ -67,9 +94,14 @@
                   <p id="mission-board-summary" class="daily-missions-summary">Loading the current mission board...</p>
                 </div>
                 <button id="mission-refresh-button" class="daily-missions-primary-action" type="button">Refresh now</button>
+                <div class="daily-missions-section-head">
+                  <span class="daily-missions-section-label">Mission filters</span>
+                  <span id="mission-toolbar-summary" class="daily-missions-section-meta">Loading current scope...</span>
+                </div>
+                <div id="mission-mobile-selector" class="daily-missions-selector daily-missions-selector--rail" data-mission-selector role="list"></div>
               </section>
 
-              <section class="daily-missions-rail-section" aria-live="polite">
+              <section class="daily-missions-rail-section daily-missions-rail-meta" aria-live="polite">
                 <div class="daily-missions-meta-grid">
                   <article class="daily-missions-meta-card"><span class="daily-missions-meta-label">Updated</span><strong id="mission-updated-value" class="daily-missions-meta-value">--</strong></article>
                   <article class="daily-missions-meta-card"><span class="daily-missions-meta-label">Next refresh</span><strong id="mission-refresh-value" class="daily-missions-meta-value">--</strong></article>
@@ -79,10 +111,17 @@
                 <p id="mission-banner" class="daily-missions-banner" hidden></p>
               </section>
 
+              <section class="daily-missions-rail-section" aria-labelledby="mission-intel-heading">
+                <div class="daily-missions-section-head">
+                  <span class="daily-missions-section-label" id="mission-intel-heading">Finder values</span>
+                </div>
+                <div id="mission-intel" class="daily-missions-intel"></div>
+              </section>
+
               <section class="daily-missions-rail-section daily-missions-controls-section" aria-label="Mission board controls">
                 <div class="daily-missions-section-head">
                   <span class="daily-missions-section-label">Board filters</span>
-                  <span id="mission-toolbar-summary" class="daily-missions-section-meta">Loading current scope...</span>
+                  <span id="mission-list-meta" class="daily-missions-section-meta">Loading flights...</span>
                 </div>
                 <div class="daily-missions-toolbar-controls">
                   <label class="control-field daily-missions-control-field" for="mission-search">
@@ -110,26 +149,11 @@
                 <div id="mission-selected-flight" class="daily-missions-selected-flight"></div>
               </section>
 
-              <section class="daily-missions-rail-section" aria-labelledby="mission-selector-heading">
-                <div class="daily-missions-section-head">
-                  <span class="daily-missions-section-label" id="mission-selector-heading">Mission filters</span>
-                </div>
-                <div id="mission-selector" class="daily-missions-selector" role="list"></div>
-              </section>
-
               <section class="daily-missions-rail-section" aria-labelledby="mission-flight-list-heading">
                 <div class="daily-missions-section-head">
                   <span class="daily-missions-section-label" id="mission-flight-list-heading">Live matches</span>
-                  <span id="mission-list-meta" class="daily-missions-section-meta">Loading flights...</span>
                 </div>
                 <div id="mission-flight-list" class="daily-missions-flight-list"></div>
-              </section>
-
-              <section class="daily-missions-rail-section" aria-labelledby="mission-intel-heading">
-                <div class="daily-missions-section-head">
-                  <span class="daily-missions-section-label" id="mission-intel-heading">Finder values</span>
-                </div>
-                <div id="mission-intel" class="daily-missions-intel"></div>
               </section>
             </div>
           </aside>
@@ -172,6 +196,6 @@
       src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"
       crossorigin=""
     ></script>
-    <script type="module" src="../src/daily-missions-main.js?v=20260324-daily-missions-6"></script>
+    <script type="module" src="../src/daily-missions-main.js?v=20260324-daily-missions-7"></script>
   </body>
 </html>
