@@ -5764,6 +5764,10 @@ code {
   gap: 0.35rem;
 }
 
+.region-code-group.is-aircraft-copy-group {
+  gap: 0.5rem;
+}
+
 .region-code-group-head {
   display: flex;
   align-items: center;
@@ -5837,6 +5841,75 @@ code {
   margin: 0;
   color: rgba(18, 33, 53, 0.62);
   font-size: 0.77rem;
+}
+
+.aircraft-copy-group-note {
+  margin: 0;
+  color: rgba(18, 33, 53, 0.68);
+  font-size: 0.79rem;
+  line-height: 1.42;
+}
+
+.aircraft-copy-group-note.is-subtle {
+  color: rgba(18, 33, 53, 0.58);
+}
+
+.aircraft-copy-section-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.aircraft-copy-section {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.72rem;
+  border-radius: 14px;
+  border: 1px solid rgba(20, 45, 70, 0.14);
+  background: rgba(247, 250, 255, 0.95);
+}
+
+.aircraft-copy-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.aircraft-copy-section-title {
+  margin: 0;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-700);
+}
+
+.aircraft-copy-section-meta {
+  margin: 0.16rem 0 0;
+  color: rgba(18, 33, 53, 0.62);
+  font-size: 0.76rem;
+}
+
+.aircraft-copy-section-field {
+  width: 100%;
+  min-height: 4.8rem;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid rgba(20, 45, 70, 0.16);
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--ink-900);
+  padding: 0.68rem 0.74rem;
+  font-family: "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  resize: vertical;
+  cursor: text;
+}
+
+.aircraft-copy-section-field:focus-visible {
+  outline: 2px solid rgba(15, 63, 112, 0.3);
+  outline-offset: 1px;
 }
 
 .bar-row-head {

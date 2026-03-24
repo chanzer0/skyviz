@@ -267,6 +267,7 @@ const COMPLETIONIST_INVALID_REGISTRATION_VALUES = new Set([
   'UNKNOWN',
 ]);
 const REGION_CODE_PREVIEW_LIMIT = 56;
+const AIRCRAFT_FOCUS_COPY_CHUNK_SIZE = 99;
 const REGISTRATION_MODAL_PAGE_SIZE = 120;
 const MODEL_REGISTRATION_MODAL_PAGE_SIZE = 120;
 const COMPASS_LABELS = Object.freeze(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']);
@@ -8519,6 +8520,70 @@ function mapAircraftEntriesToLines(entries) {
   return entries.map((entry) => formatAircraftModelEntryLine(entry)).filter(Boolean);
 }
 
+function mapAircraftEntriesToCodes(entries) {
+  return entries.map((entry) => normalizeAircraftModelCode(entry?.code)).filter(Boolean);
+}
+
+function chunkItems(items, chunkSize) {
+  if (!Array.isArray(items) || !items.length || !Number.isInteger(chunkSize) || chunkSize < 1) {
+    return [];
+  }
+  const chunks = [];
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+  return chunks;
+}
+
+function renderAircraftFocusCopySections(dimension, key, payload) {
+  if (!payload.codes.length) {
+    return `
+      <p class="region-code-empty">No missing ICAO codes are available for FR24 copy in this group.</p>
+      ${payload.omittedCount > 0
+        ? `<p class="aircraft-copy-group-note is-subtle">${formatNumber(payload.omittedCount)} missing ${payload.omittedCount === 1 ? 'model was' : 'models were'} omitted because no ICAO code is available.</p>`
+        : ''}
+    `;
+  }
+  const sectionLabel = payload.chunks.length === 1 ? 'section' : 'sections';
+  return `
+    <p class="aircraft-copy-group-note">
+      ${formatNumber(payload.codes.length)} ICAO codes ready for FR24 copy across ${formatNumber(payload.chunks.length)} ${sectionLabel} of up to ${formatNumber(AIRCRAFT_FOCUS_COPY_CHUNK_SIZE)}.
+    </p>
+    <div class="aircraft-copy-section-list">
+      ${payload.chunks.map((chunk) => `
+        <section class="aircraft-copy-section">
+          <div class="aircraft-copy-section-head">
+            <div>
+              <p class="aircraft-copy-section-title">Section ${formatNumber(chunk.index)}</p>
+              <p class="aircraft-copy-section-meta">${formatNumber(chunk.codes.length)} ICAO ${chunk.codes.length === 1 ? 'code' : 'codes'}</p>
+            </div>
+            <button
+              type="button"
+              class="region-action-button"
+              data-action="copy-aircraft-focus-chunk"
+              data-focus-dimension="${escapeHtml(dimension)}"
+              data-focus-key="${escapeHtml(key)}"
+              data-chunk-index="${chunk.index - 1}"
+            >
+              Copy section ${formatNumber(chunk.index)}
+            </button>
+          </div>
+          <textarea
+            class="aircraft-copy-section-field"
+            readonly
+            rows="4"
+            spellcheck="false"
+            aria-label="Missing ICAO codes section ${formatNumber(chunk.index)}"
+          >${escapeHtml(chunk.text)}</textarea>
+        </section>
+      `).join('')}
+    </div>
+    ${payload.omittedCount > 0
+      ? `<p class="aircraft-copy-group-note is-subtle">${formatNumber(payload.omittedCount)} missing ${payload.omittedCount === 1 ? 'model was' : 'models were'} omitted because no ICAO code is available.</p>`
+      : ''}
+  `;
+}
+
 function ensureAircraftFocusDetailIndex(model) {
   if (state.aircraft.focusDetailIndexModel === model && state.aircraft.focusDetailIndex) {
     return state.aircraft.focusDetailIndex;
@@ -8641,28 +8706,32 @@ function getAircraftFocusDetail(model, dimension, key) {
   };
 }
 
-function renderAircraftFocusCodeGroup(dimension, key, scope, entries) {
-  const actionLabel = scope === 'missing' ? 'missing' : 'completed';
-  const emptyMessage = scope === 'missing'
+function renderAircraftFocusCodeGroup(model, dimension, key, scope) {
+  const payload = buildAircraftFocusCodesPayload(model, dimension, key, scope);
+  const isMissing = scope === 'missing';
+  const actionLabel = isMissing ? 'missing' : 'completed';
+  const emptyMessage = isMissing
     ? 'No missing models in this group.'
     : 'No completed models in this group yet.';
-  const lines = mapAircraftEntriesToLines(entries);
+  const actionCount = isMissing ? payload.codes.length : payload.lines.length;
   return `
-    <section class="region-code-group">
+    <section class="region-code-group${isMissing ? ' is-aircraft-copy-group' : ''}">
       <div class="region-code-group-head">
-        <p class="region-code-group-title">${scope === 'missing' ? 'Missing' : 'Completed'} models (${formatNumber(lines.length)})</p>
+        <p class="region-code-group-title">${isMissing ? 'Missing' : 'Completed'} models (${formatNumber(payload.totalEntries)})</p>
         <div class="region-code-actions">
-          <button
-            type="button"
-            class="region-action-button"
-            data-action="copy-aircraft-focus-codes"
-            data-focus-dimension="${escapeHtml(dimension)}"
-            data-focus-key="${escapeHtml(key)}"
-            data-code-scope="${escapeHtml(scope)}"
-            ${lines.length ? '' : 'disabled'}
-          >
-            Copy ${actionLabel}
-          </button>
+          ${isMissing ? '' : `
+            <button
+              type="button"
+              class="region-action-button"
+              data-action="copy-aircraft-focus-codes"
+              data-focus-dimension="${escapeHtml(dimension)}"
+              data-focus-key="${escapeHtml(key)}"
+              data-code-scope="${escapeHtml(scope)}"
+              ${actionCount ? '' : 'disabled'}
+            >
+              Copy ${actionLabel}
+            </button>
+          `}
           <button
             type="button"
             class="region-action-button"
@@ -8670,13 +8739,13 @@ function renderAircraftFocusCodeGroup(dimension, key, scope, entries) {
             data-focus-dimension="${escapeHtml(dimension)}"
             data-focus-key="${escapeHtml(key)}"
             data-code-scope="${escapeHtml(scope)}"
-            ${lines.length ? '' : 'disabled'}
+            ${actionCount ? '' : 'disabled'}
           >
             Export ${actionLabel}
           </button>
         </div>
       </div>
-      ${renderRegionCodeList(lines, emptyMessage)}
+      ${isMissing ? renderAircraftFocusCopySections(dimension, key, payload) : renderRegionCodeList(payload.lines, emptyMessage)}
     </section>
   `;
 }
@@ -8692,8 +8761,8 @@ function renderAircraftFocusDetail(model, dimension, key) {
   return `
     <div class="completion-region-detail">
       <p class="completion-region-summary">${escapeHtml(summary)}</p>
-      ${renderAircraftFocusCodeGroup(dimension, key, 'missing', detail.missingEntries)}
-      ${renderAircraftFocusCodeGroup(dimension, key, 'completed', detail.capturedEntries)}
+      ${renderAircraftFocusCodeGroup(model, dimension, key, 'missing')}
+      ${renderAircraftFocusCodeGroup(model, dimension, key, 'completed')}
     </div>
   `;
 }
@@ -8702,11 +8771,21 @@ function buildAircraftFocusCodesPayload(model, dimension, key, scope) {
   const detail = getAircraftFocusDetail(model, dimension, key);
   const entries = scope === 'completed' ? detail.capturedEntries : detail.missingEntries;
   const lines = mapAircraftEntriesToLines(entries);
+  const codes = mapAircraftEntriesToCodes(entries);
+  const chunks = chunkItems(codes, AIRCRAFT_FOCUS_COPY_CHUNK_SIZE).map((chunk, index) => ({
+    index: index + 1,
+    codes: chunk,
+    text: chunk.join(','),
+  }));
   const dimensionLabel = dimension === 'type' ? 'type' : dimension === 'category' ? 'category' : 'tier';
   const groupLabel = getAircraftFocusLabel(model, dimension, key);
   const scopeLabel = scope === 'completed' ? 'completed' : 'missing';
   return {
+    totalEntries: entries.length,
     lines,
+    codes,
+    chunks,
+    omittedCount: entries.length - codes.length,
     dimensionLabel,
     groupLabel,
     scopeLabel,
@@ -8715,6 +8794,12 @@ function buildAircraftFocusCodesPayload(model, dimension, key, scope) {
 
 async function copyAircraftFocusCodes(model, dimension, key, scope) {
   const payload = buildAircraftFocusCodesPayload(model, dimension, key, scope);
+  if (scope === 'missing') {
+    setBanner(`Missing ICAO codes for ${payload.groupLabel} are split into FR24 copy sections below. Use a section copy button instead.`, 'info', {
+      autoDismissMs: 5000,
+    });
+    return;
+  }
   if (!payload.lines.length) {
     setBanner(`No ${payload.scopeLabel} models are available for ${payload.groupLabel}.`, 'warning');
     return;
@@ -8733,22 +8818,75 @@ async function copyAircraftFocusCodes(model, dimension, key, scope) {
   }
 }
 
-function exportAircraftFocusCodes(model, dimension, key, scope) {
-  const payload = buildAircraftFocusCodesPayload(model, dimension, key, scope);
-  if (!payload.lines.length) {
-    setBanner(`No ${payload.scopeLabel} models are available for ${payload.groupLabel}.`, 'warning');
+async function copyAircraftFocusCodeChunk(model, dimension, key, chunkIndex) {
+  const payload = buildAircraftFocusCodesPayload(model, dimension, key, 'missing');
+  const chunk = payload.chunks[chunkIndex];
+  if (!chunk) {
+    setBanner(`No missing ICAO section is available for ${payload.groupLabel}.`, 'warning');
     return;
   }
-  const content = [
-    `Skyviz ${payload.scopeLabel} aircraft models`,
-    `Dimension: ${payload.dimensionLabel}`,
-    `Group: ${payload.groupLabel}`,
-    `Model count: ${payload.lines.length}`,
-    '',
-    ...payload.lines,
-  ].join('\n');
+  try {
+    if (!navigator.clipboard?.writeText) {
+      throw new Error('Clipboard API unavailable');
+    }
+    await navigator.clipboard.writeText(chunk.text);
+    setBanner(
+      `Copied ${formatNumber(chunk.codes.length)} missing ICAO ${chunk.codes.length === 1 ? 'code' : 'codes'} for ${payload.groupLabel} (section ${formatNumber(chunk.index)} of ${formatNumber(payload.chunks.length)}).`,
+      'success',
+      { autoDismissMs: 5000 },
+    );
+  } catch {
+    setBanner('Clipboard copy failed in this browser context. Select the section text manually or use Export missing instead.', 'warning');
+  }
+}
+
+function exportAircraftFocusCodes(model, dimension, key, scope) {
+  const payload = buildAircraftFocusCodesPayload(model, dimension, key, scope);
+  const exportCount = scope === 'missing' ? payload.codes.length : payload.lines.length;
+  if (!exportCount) {
+    const emptyLabel = scope === 'missing' ? 'missing ICAO codes' : `${payload.scopeLabel} models`;
+    setBanner(`No ${emptyLabel} are available for ${payload.groupLabel}.`, 'warning');
+    return;
+  }
+  let content = '';
+  if (scope === 'missing') {
+    const chunkLines = [];
+    for (const chunk of payload.chunks) {
+      chunkLines.push(`Section ${chunk.index} (${chunk.codes.length} ICAO ${chunk.codes.length === 1 ? 'code' : 'codes'})`);
+      chunkLines.push(chunk.text);
+      chunkLines.push('');
+    }
+    if (chunkLines.length && chunkLines[chunkLines.length - 1] === '') {
+      chunkLines.pop();
+    }
+    content = [
+      'Skyviz missing aircraft ICAO codes',
+      `Dimension: ${payload.dimensionLabel}`,
+      `Group: ${payload.groupLabel}`,
+      `Copy format: raw CSV ICAO values, ${AIRCRAFT_FOCUS_COPY_CHUNK_SIZE} per section`,
+      `Copyable ICAO count: ${payload.codes.length}`,
+      ...(payload.omittedCount > 0 ? [`Omitted missing models without ICAO: ${payload.omittedCount}`] : []),
+      '',
+      ...chunkLines,
+    ].join('\n');
+  } else {
+    content = [
+      `Skyviz ${payload.scopeLabel} aircraft models`,
+      `Dimension: ${payload.dimensionLabel}`,
+      `Group: ${payload.groupLabel}`,
+      `Model count: ${payload.lines.length}`,
+      '',
+      ...payload.lines,
+    ].join('\n');
+  }
   const fileName = `skyviz-aircraft-${payload.scopeLabel}-${payload.dimensionLabel}-${toFileSafeToken(payload.groupLabel)}.txt`;
   triggerTextDownload(fileName, content);
+  if (scope === 'missing') {
+    setBanner(`Exported ${formatNumber(payload.codes.length)} missing ICAO codes for ${payload.groupLabel}.`, 'success', {
+      autoDismissMs: 5000,
+    });
+    return;
+  }
   setBanner(`Exported ${formatNumber(payload.lines.length)} ${payload.scopeLabel} models for ${payload.groupLabel}.`, 'success', {
     autoDismissMs: 5000,
   });
@@ -10645,6 +10783,14 @@ function wireAircraftControls() {
     if (action === 'copy-aircraft-focus-codes') {
       const scope = button.dataset.codeScope === 'completed' ? 'completed' : 'missing';
       void copyAircraftFocusCodes(state.model, dimension, key, scope);
+      return;
+    }
+    if (action === 'copy-aircraft-focus-chunk') {
+      const chunkIndex = Number.parseInt(button.dataset.chunkIndex || '', 10);
+      if (!Number.isInteger(chunkIndex) || chunkIndex < 0) {
+        return;
+      }
+      void copyAircraftFocusCodeChunk(state.model, dimension, key, chunkIndex);
       return;
     }
     if (action === 'export-aircraft-focus-codes') {
