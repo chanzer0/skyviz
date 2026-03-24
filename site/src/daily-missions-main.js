@@ -21,10 +21,6 @@ const el = {
   refreshButton: $('#mission-refresh-button'),
   map: $('#mission-map'),
   mapEmpty: $('#mission-map-empty'),
-  mapScope: $('#mission-map-scope'),
-  mapOverlay: $('#mission-map-overlay'),
-  mapOverlayTitle: $('#mission-map-overlay-title'),
-  mapOverlayMeta: $('#mission-map-overlay-meta'),
 };
 
 const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
@@ -171,11 +167,6 @@ function visibleFlights() {
     if (state.sort === 'callsign') return left.callsign.localeCompare(right.callsign) || sortValue(left, right, 'lastSeenAt');
     return sortValue(left, right, 'lastSeenAt') || left.callsign.localeCompare(right.callsign);
   });
-}
-
-function activeMissionAccent() {
-  const mission = activeMission();
-  return mission ? COLORS[(mission.ordinal - 1) % COLORS.length] : MULTI;
 }
 
 function ensureMap() {
@@ -346,28 +337,11 @@ function renderSelector() {
 
 function updateScopeChrome(flights) {
   const mission = activeMission();
-  const accent = activeMissionAccent();
-  const scopeLabel = mission ? `Mission ${mission.ordinal}` : 'All missions';
-  const scopeTitle = mission?.title || 'All live missions';
   const scopeMeta = mission
     ? `${formatNumber(flights.length)} flights visible`
     : `${formatNumber(flights.length)} visible across ${formatNumber(state.board.missions.length)} missions`;
   el.toolbar.textContent = mission ? `${mission.title} | ${formatNumber(flights.length)} visible` : scopeMeta;
   el.listMeta.textContent = `${formatNumber(flights.length)} visible`;
-  if (el.mapScope) {
-    el.mapScope.textContent = scopeLabel;
-    el.mapScope.dataset.tone = mission ? 'mission' : 'all';
-    el.mapScope.style.setProperty('--mission-accent', accent);
-  }
-  if (el.mapOverlay) {
-    el.mapOverlay.style.setProperty('--mission-accent', accent);
-  }
-  if (el.mapOverlayTitle) {
-    el.mapOverlayTitle.textContent = scopeTitle;
-  }
-  if (el.mapOverlayMeta) {
-    el.mapOverlayMeta.textContent = scopeMeta;
-  }
 }
 
 function selectedFlight() {
