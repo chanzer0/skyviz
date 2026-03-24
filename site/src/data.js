@@ -554,7 +554,6 @@ function resolveLiveDatasetPath(path, manifestUrl = resolveSiteAssetUrl('data/li
   if (
     normalizedPath.startsWith('http://')
       || normalizedPath.startsWith('https://')
-      || normalizedPath.startsWith('/')
   ) {
     return normalizedPath;
   }
@@ -564,6 +563,9 @@ function resolveLiveDatasetPath(path, manifestUrl = resolveSiteAssetUrl('data/li
     } catch (_error) {
       // Fall through to legacy path resolution.
     }
+  }
+  if (normalizedPath.startsWith('/')) {
+    return normalizedPath;
   }
   if (normalizedPath.startsWith('./data/live/')) {
     return resolveSiteAssetUrl(normalizedPath.slice(2));
