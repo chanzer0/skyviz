@@ -8,7 +8,7 @@ import {
   loadReferenceData,
   loadReferenceManifest,
   parseUserCollection,
-} from './data.js?v=20260323-cloudflare-live-1';
+} from './data.js?v=20260323-cloudflare-live-2';
 import {
   DAILY_GAME_NAME,
   buildAirportGuessComparison,
@@ -241,6 +241,13 @@ const COMPLETIONIST_DEFAULT_BROWSER_REFRESH_SECONDS = 60;
 const COMPLETIONIST_DEFAULT_SNAPSHOT_SECONDS = 300;
 const COMPLETIONIST_DEFAULT_STALE_SECONDS = 900;
 const COMPLETIONIST_SEARCH_DEBOUNCE_MS = 140;
+const COMPLETIONIST_SOURCE_ROLE_LABELS = Object.freeze({
+  active: 'active source',
+  shadow: 'shadow source',
+  legacy: 'legacy source',
+  local: 'local fixture',
+  override: 'manual override',
+});
 const COMPLETIONIST_TARGET_FILTER_VALUES = Object.freeze(['airport', 'card']);
 const COMPLETIONIST_SORT_VALUES = new Set(['airport-traffic', 'card-traffic', 'latest']);
 const COMPLETIONIST_INVALID_REGISTRATION_VALUES = new Set([
@@ -415,6 +422,7 @@ const state = {
       enabled: false,
       loading: false,
       error: '',
+      source: null,
       manifest: null,
       snapshot: null,
       matches: [],
@@ -5319,6 +5327,7 @@ function resetCompletionistState({ preserveSnapshot = false } = {}) {
   state.map.completionist.markerRefreshQueued = false;
   state.map.completionist.listRenderSignature = '';
   if (!preserveSnapshot) {
+    state.map.completionist.source = null;
     state.map.completionist.manifest = null;
     state.map.completionist.snapshot = null;
   }
@@ -6736,6 +6745,10 @@ function buildCompletionistMetaText(visibleCounts, searchCounts, totalCounts) {
   if (hiddenSummary) {
     parts.push(hiddenSummary);
   }
+  const sourceSummary = buildCompletionistSourceSummaryText();
+  if (sourceSummary) {
+    parts.push(sourceSummary);
+  }
   return parts.join(' ');
 }
 
@@ -7035,8 +7048,27 @@ function buildCompletionistStatusMessage(generatedAtMillis, snapshotAgeMillis, i
   return `${parts.join('. ')}.`;
 }
 
+function buildCompletionistSourceSummaryText() {
+  const source = state.map.completionist.source;
+  const label = sanitizeText(source?.label) || sanitizeText(source?.key);
+  if (!label) {
+    return '';
+  }
+  if (source?.selection === 'manifest-override') {
+    return `Source: ${label} (${COMPLETIONIST_SOURCE_ROLE_LABELS.override}).`;
+  }
+  if (source?.selection === 'source-override') {
+    const roleLabel = COMPLETIONIST_SOURCE_ROLE_LABELS[source?.role] || 'selected override';
+    return `Source: ${label} (${roleLabel}).`;
+  }
+  const roleLabel = COMPLETIONIST_SOURCE_ROLE_LABELS[source?.role] || '';
+  return roleLabel ? `Source: ${label} (${roleLabel}).` : `Source: ${label}.`;
+}
+
 function buildCompletionistListRenderSignature(matches) {
   return [
+    state.map.completionist.source?.key || '',
+    state.map.completionist.source?.selection || '',
     state.map.completionist.manifest?.generatedAt || '',
     getCompletionistActiveFilterValues().join('|'),
     normalizeCompletionistSortValue(),
@@ -7281,6 +7313,7 @@ async function refreshCompletionistSnapshot() {
     if (state.map.completionist.requestToken !== requestToken) {
       return;
     }
+    state.map.completionist.source = liveData.source || null;
     state.map.completionist.manifest = liveData.manifest;
     state.map.completionist.snapshot = liveData.payload;
     state.map.completionist.matches = buildCompletionistMatches(state.model, state.references, liveData.rows);

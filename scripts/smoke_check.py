@@ -107,14 +107,51 @@ def check_runtime_config() -> None:
     config_path = REPO_ROOT / 'site' / 'data' / 'runtime-config.json'
     config = _load_json(config_path)
     completionist = config.get('completionist') if isinstance(config, dict) else None
-    manifest_url = ''
     if isinstance(completionist, dict):
+        sources = completionist.get('sources')
+        active_source = str(completionist.get('activeSource') or '').strip()
+        shadow_source = str(completionist.get('shadowSource') or '').strip()
+        if isinstance(sources, dict) and sources:
+            if not active_source:
+                raise SystemExit('smoke_check: runtime-config missing completionist activeSource')
+            active_config = sources.get(active_source)
+            if not isinstance(active_config, dict):
+                raise SystemExit('smoke_check: runtime-config activeSource is not defined in completionist.sources')
+            active_manifest_url = str(active_config.get('manifestUrl') or '').strip()
+            if not active_manifest_url:
+                raise SystemExit('smoke_check: runtime-config activeSource missing manifestUrl')
+            if shadow_source:
+                shadow_config = sources.get(shadow_source)
+                if not isinstance(shadow_config, dict):
+                    raise SystemExit('smoke_check: runtime-config shadowSource is not defined in completionist.sources')
+                shadow_manifest_url = str(shadow_config.get('manifestUrl') or '').strip()
+                if not shadow_manifest_url:
+                    raise SystemExit('smoke_check: runtime-config shadowSource missing manifestUrl')
+                print(
+                    'runtime config:',
+                    f'active_source={active_source}',
+                    f'active_manifest_url={active_manifest_url}',
+                    f'shadow_source={shadow_source}',
+                    f"shadow_manifest_url={shadow_manifest_url}",
+                )
+                return
+            print(
+                'runtime config:',
+                f'active_source={active_source}',
+                f'active_manifest_url={active_manifest_url}',
+            )
+            return
         manifest_url = str(completionist.get('manifestUrl') or '').strip()
-    elif isinstance(config, dict):
+        if not manifest_url:
+            raise SystemExit('smoke_check: runtime-config missing completionist manifestUrl')
+        print('runtime config:', f'manifest_url={manifest_url}')
+        return
+    if isinstance(config, dict):
         manifest_url = str(config.get('completionistManifestUrl') or '').strip()
-    if not manifest_url:
-        raise SystemExit('smoke_check: runtime-config missing completionist manifestUrl')
-    print('runtime config:', f'manifest_url={manifest_url}')
+        if manifest_url:
+            print('runtime config:', f'manifest_url={manifest_url}')
+            return
+    raise SystemExit('smoke_check: runtime-config missing completionist manifestUrl')
 
 
 def check_cloudflare_worker_config() -> None:

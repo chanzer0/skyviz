@@ -11,7 +11,7 @@
 - Continent lookup map in `site/src/continents.js`.
 - SVG and HTML chart helpers in `site/src/charts.js`.
 - Generated OurAirports snapshots and daily-game dataset in `site/data/airports/`.
-- Production completionist runtime configuration in `site/data/runtime-config.json`.
+- Production completionist runtime source selection in `site/data/runtime-config.json`.
 - Local/offline completionist fixture artifacts in `site/data/live/`.
 - Built-in example collection deck in `site/data/example/try_now_user.json`.
 - Local-only SQLite explorer in `site/tools/aircraft-db-explorer.html` for inspecting `aircraft_data.db` in-browser.
@@ -31,7 +31,7 @@
 - Resolved-lookup merge pipeline in `scripts/build_resolved_aircraft_lookup.py`.
 - Offline repo validation in `scripts/repo_hygiene_check.py` and `scripts/smoke_check.py`.
 - GitHub Pages deployment in `.github/workflows/deploy-pages.yml`.
-- Cloudflare completionist worker runtime in `workers/completionist-live/`.
+- Legacy Skyviz-owned completionist worker runtime in `workers/completionist-live/`.
 
 ## Data flow
 
@@ -57,14 +57,18 @@
   - aircraft image candidates resolved as tier-aware CDN URLs using `*_md.png` first, then `cyber` tier + model metadata alias fallback (`imageOverride`, `images[]`)
   - aircraft detail modal metadata slices for engine profile, performance, airframe geometry, military status, and seasonal span
   - aircraft detail media candidates resolved from optimized Skycards CDN GLB assets
-  - completionist-mode flight matches built by comparing the shared delayed snapshot from the production Cloudflare manifest endpoint (or the local `site/data/live/` fixture path on localhost) against the current user's missing airport unlocks and missing aircraft models entirely in-browser after discarding live rows without usable registrations, with compact `Missing airport` / `New card` target toggles enabled by default, a separate live sort control for busiest airport/card groups vs latest sightings, and completionist summary/pill counts tracking unique airport and card targets instead of duplicate flight rows
+  - completionist-mode flight matches built by comparing the shared delayed snapshot from the production Cloudflare source selected in `site/data/runtime-config.json` (or the local `site/data/live/` fixture path on localhost) against the current user's missing airport unlocks and missing aircraft models entirely in-browser after discarding live rows without usable registrations, with compact `Missing airport` / `New card` target toggles enabled by default, a separate live sort control for busiest airport/card groups vs latest sightings, and completionist summary/pill counts tracking unique airport and card targets instead of duplicate flight rows
 11. The loaded UI transitions to a tabbed dashboard (`Navdle`, `Cardle`, `Map`, and `Deck`) without sending upload data to any server. The two daily tabs remain available even when no collection upload is active.
 
 ## Completionist live snapshot contract
 
 Completionist mode does not fetch its upstream live-flight feed directly from the browser.
 
-- production refreshes run on Cloudflare through `workers/completionist-live/`
+- production completionist reads are selected from `site/data/runtime-config.json`, which now keeps both an `activeSource` and a `shadowSource`
+- the current active source still points at the Skyviz-owned `workers/completionist-live/` pipeline during shadow-mode burn-in
+- the shadow source points at the fr24-derived completionist manifest produced by `fr24-discord-bot`
+- the browser still reads only one manifest at a time; shadow parity is handled by explicit runtime-config selection or repo scripts, not by dual-fetching in the main UI
+- the Skyviz-owned `workers/completionist-live/` pipeline remains available only as the legacy shadow producer until fr24 cutover is approved
 - a Worker `Cron Trigger` fires every `5` minutes and starts one `Workflow` run for that schedule slot
 - the workflow seeds world tiles onto a `Queue`; queue consumers fetch the upstream live-flight feed by bounds, normalize rows, and write per-tile artifacts to `R2`
 - a `Durable Object` coordinator owns tile leases, retry-safe counters, split decisions, budget exhaustion, and single-writer publish readiness
@@ -72,9 +76,10 @@ Completionist mode does not fetch its upstream live-flight feed directly from th
 - finalized rows are merged and deduped by `flightId` before publish because adjacent tiles overlap and aircraft move while the sweep is in flight
 - published artifacts are written to versioned `R2` keys, and the stable manifest key is updated last so the browser's `manifest -> snapshot` fetch stays consistent
 - per-tile `R2` artifacts are deleted after a successful publish, and versioned run artifacts are pruned on a short retention window so the bucket does not accumulate unnecessary storage bloat
-- the browser resolves the production manifest URL from `site/data/runtime-config.json`
-- when served from `localhost`, `127.0.0.1`, or `file:`, the browser ignores the production endpoint and prefers `site/data/live/completionist-manifest.json`
+- the browser resolves the production manifest URL from the runtime-config `activeSource`, unless query-string overrides force `completionistSource=active`, `completionistSource=shadow`, or one explicit `completionistManifestUrl`
+- when served from `localhost`, `127.0.0.1`, or `file:`, the browser ignores the production endpoint and prefers `site/data/live/completionist-manifest.json` unless one of those explicit completionist query-string overrides is present
 - `scripts/refresh_completionist_snapshot.py` still runs the same adaptive tiled sweep locally and writes `site/data/live/completionist-manifest.json` plus `site/data/live/completionist-snapshot.json` for preview and offline validation
+- `scripts/compare_completionist_sources.py` compares the runtime-config active and shadow sources for parity before cutover
 - the repository requires `python scripts/check_cloudflare_account.py` before any Cloudflare write operation; that guardrail verifies Wrangler auth is on `seansailer28@gmail.com` / `172da47da00e3b33810d2e9c73c9a0b9`
 - the snapshot payload keeps only the fields needed for matching and map rendering: flight id, aircraft hex, coordinates, heading, altitude, speed, type code, registration, seen time, origin, destination, flight number, and callsign
 - snapshot metadata keeps only the browser-facing refresh contract: generated time, row count, field order, and refresh cadence
@@ -143,7 +148,7 @@ The browser does not parse the raw CSVs directly during normal gameplay. It load
 - `site/src/continents.js`: country-to-continent mapping used for airport continent progress.
 - `site/src/charts.js`: stacked ribbons, bars, scatter plots, and geo-style plots.
 - `site/data/airports/`: generated OurAirports CSV snapshots plus the derived airport daily manifest and dataset.
-- `site/data/runtime-config.json`: production completionist manifest endpoint configuration.
+- `site/data/runtime-config.json`: production completionist source selection and manifest endpoints.
 - `site/data/live/`: local completionist fixture snapshot and manifest.
 - `scripts/serve_local_preview.py`: serves `site/` plus the repo-root `skycards_user.json` fixture for localhost validation.
 - `site/tools/aircraft-db-explorer.html`: local SQLite database explorer UI.

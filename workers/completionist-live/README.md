@@ -1,6 +1,6 @@
 # Completionist Live Worker
 
-Cloudflare owns the production completionist refresh path for Skyviz.
+Cloudflare owns the legacy Skyviz completionist refresh path that is now kept only for shadow-mode parity during the fr24 shared-data cutover.
 
 ## Account lock
 
@@ -39,7 +39,7 @@ npx wrangler queues create skyviz-completionist-tile-dlq --config wrangler.provi
 npx wrangler deploy
 ```
 
-After deploy, keep [`runtime-config.json`](/D:/Repositories/skyviz/site/data/runtime-config.json) pointed at the worker's stable manifest route:
+During shadow mode, keep [`runtime-config.json`](/D:/Repositories/skyviz/site/data/runtime-config.json) pointed at the worker's stable manifest route through the `skyvizLegacy` source entry:
 
 - `/live/completionist-manifest.json`
 
@@ -49,6 +49,6 @@ The runtime deletes per-tile staging artifacts after a successful publish and pr
 
 ## Local development
 
-- Production completionist reads use Cloudflare through [`runtime-config.json`](/D:/Repositories/skyviz/site/data/runtime-config.json).
+- Production completionist reads use the currently selected source in [`runtime-config.json`](/D:/Repositories/skyviz/site/data/runtime-config.json); this worker is the `skyvizLegacy` source during the fr24 migration.
 - Local preview on `localhost` or `file:` always prefers `site/data/live/completionist-manifest.json`.
 - `scripts/refresh_completionist_snapshot.py` remains the local fixture generator for that path.

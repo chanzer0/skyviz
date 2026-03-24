@@ -9,7 +9,7 @@ Skyviz is a static GitHub Pages dashboard for Skycards collection exports plus t
 - No server-side upload handling.
 - User collection data stays in the browser by default, with optional user-controlled browser-storage persistence on the same device.
 - Reference enrichment comes from static snapshots in `site/data/reference/` generated from the Skycards API.
-- Completionist mode uses a shared delayed flight snapshot served from Cloudflare in production, with `site/data/live/` kept as the local fixture path; matching against a user's collection still happens only in that user's browser.
+- Completionist mode uses a shared delayed flight snapshot served from Cloudflare in production, with `site/data/runtime-config.json` selecting the active and shadow sources, `site/data/live/` kept as the local fixture path, and matching against a user's collection still happening only in that user's browser.
 
 ## Repository shape
 
@@ -21,10 +21,10 @@ Skyviz is a static GitHub Pages dashboard for Skycards collection exports plus t
 - `cdn_index.json`: CDN route index for `https://cdn.skycards.oldapes.com/assets` (keys map to deeper URL segments/files; useful for diagnosing missing model images).
 - `site/data/airports/`: generated OurAirports CSV snapshots plus the derived airport-daily manifest and game dataset.
 - `site/data/reference/`: generated reference snapshots (ignored in git by default and produced in CI/Pages build).
-- `site/data/runtime-config.json`: production completionist manifest endpoint used by the browser.
+- `site/data/runtime-config.json`: production completionist source selection plus active/shadow manifest endpoints used by the browser.
 - `site/data/live/`: local completionist fixture artifacts for preview and offline validation.
 - `scripts/serve_local_preview.py`: repo-aware local preview server that serves `site/` plus the repo-root `skycards_user.json` fixture.
-- `workers/completionist-live/`: Cloudflare-native completionist cron, workflow, queue, coordinator, and live read endpoint.
+- `workers/completionist-live/`: legacy Skyviz-owned Cloudflare completionist producer kept for shadow-mode parity during the fr24 shared-data cutover.
 - `scripts/check_cloudflare_account.py`: Cloudflare account-lock preflight for Wrangler write operations.
 - `site/tools/aircraft-db-explorer.html`: local-only SQLite explorer for inspecting `aircraft_data.db` in-browser.
 - `site/tools/inferred-mapping-reviewer.html`: local-only reviewer for medium/ambiguous inferred type mappings.
@@ -46,7 +46,7 @@ python scripts/refresh_completionist_snapshot.py
 
 The completionist refresh script now does an adaptive global bounds sweep against the upstream live-flight feed rather than a single global request, so a full local run may take longer than the other refresh commands.
 
-Local preview automatically prefers the generated `site/data/live/` fixture path even when production is configured to read the Cloudflare endpoint from `site/data/runtime-config.json`.
+Local preview automatically prefers the generated `site/data/live/` fixture path even when production is configured to read a Cloudflare endpoint from `site/data/runtime-config.json`.
 
 ```bash
 python scripts/serve_local_preview.py
@@ -55,6 +55,12 @@ python scripts/serve_local_preview.py
 Then open `http://localhost:4173`.
 
 For real-data browser validation, open `http://localhost:4173/?devLoad=skycards_user` or upload the repo-root `skycards_user.json` once the preview is running. The localhost-only `devLoad` flow fetches that repo-root fixture directly into the browser, which keeps Playwright and manual testing on the same real collection data. Do not use `View Example Dashboard` when validating real collection or completionist behavior; keep it only for the lightweight sample-deck flow.
+
+For completionist shadow-mode validation, the browser also accepts:
+
+- `?completionistSource=active` to force the runtime-config active Cloudflare source
+- `?completionistSource=shadow` to force the runtime-config shadow Cloudflare source
+- `?completionistManifestUrl=<absolute-url>` to force one explicit manifest URL
 
 ## Local DB explorer
 
@@ -233,7 +239,12 @@ Push and manual Pages builds refresh the static shell's slower-moving generated 
 
 ## Cloudflare completionist data plane
 
-Production completionist reads come from the manifest URL committed in `site/data/runtime-config.json`. That endpoint is served by `workers/completionist-live/`, which owns the `Cron Trigger -> Workflow -> Queue -> Durable Object -> R2` pipeline.
+Production completionist reads come from the active source configured in `site/data/runtime-config.json`. During the fr24 shared-data rollout, Skyviz keeps two Cloudflare producer definitions:
+
+- `skyvizLegacy`: the current Skyviz-owned `workers/completionist-live/` pipeline
+- `fr24Shared`: the fr24-derived completionist manifest published by `fr24-discord-bot`
+
+The browser reads only one active manifest at a time, but the runtime config keeps both active and shadow sources explicit so parity checks and eventual cutover do not require code changes.
 
 All Cloudflare write operations in this repository must target:
 
@@ -246,7 +257,7 @@ Verify that before any `wrangler` write command:
 python scripts/check_cloudflare_account.py
 ```
 
-Provision and deploy the completionist runtime with:
+Provision and deploy the legacy Skyviz completionist runtime with:
 
 ```bash
 python scripts/check_cloudflare_account.py
@@ -260,5 +271,11 @@ npx wrangler deploy
 The worker keeps the stable manifest URL short-lived and publishes versioned snapshots under immutable run keys in `R2`. Browsers fetch the stable manifest first, then resolve the versioned snapshot from that manifest.
 
 Per-tile staging artifacts are deleted after publish, and older versioned run artifacts are pruned on a short retention window so the bucket does not accumulate unnecessary storage bloat.
+
+Before flipping `activeSource` to `fr24Shared`, compare the runtime-config active and shadow sources with:
+
+```bash
+python scripts/compare_completionist_sources.py
+```
 
 This repository ignores generated files under `site/data/reference/*`, `site/data/airports/*.csv` / `site/data/airports/daily-game.json` / `site/data/airports/manifest.json`, and `site/data/live/*.json` in git. CI and Pages workflows generate fresh reference and airport artifacts before validation/deploy. Cardle continues to run from the committed reference snapshots; its hotspot hint depends on live browser access to the Skycards multipoint endpoint at play time, while completionist mode reads the delayed snapshot from Cloudflare in production and from local fixtures during preview.

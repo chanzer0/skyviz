@@ -25,11 +25,11 @@ This file routes context. Durable knowledge lives in `docs/`.
 - `site/src/main.js`: boot flow, uploads, state transitions, and rendering orchestration.
 - `site/src/data.js`: validation, enrichment, and dashboard view-model creation.
 - `site/src/charts.js`: SVG and HTML visualization helpers.
-- `site/data/runtime-config.json`: production completionist manifest endpoint configuration.
+- `site/data/runtime-config.json`: production completionist source selection (`activeSource` / `shadowSource`) and manifest endpoints.
 - `scripts/refresh_reference_data.py`: fetches `models` and `airports` from the Skycards API.
 - `scripts/check_cloudflare_account.py`: verifies Wrangler auth and the locked Cloudflare account before write operations.
 - `.github/workflows/deploy-pages.yml`: full GitHub Pages deploy for the static shell and generated reference artifacts.
-- `workers/completionist-live/`: Cloudflare-native completionist cron, workflow, queue, coordinator, and live read path.
+- `workers/completionist-live/`: legacy Skyviz-owned completionist producer kept for shadow-mode parity during the fr24 shared-data cutover.
 - `site/data/reference/`: committed Skycards reference snapshots used by the static app.
 
 ## Non-Negotiable Rules

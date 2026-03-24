@@ -16,10 +16,10 @@ This directory is the system of record for durable repository knowledge.
 - `docs/agentic-workflows.md`: repository operating model for agents.
 - `docs/golden-principles.md`: cross-cutting rules that should survive individual tasks.
 - `docs/repo-hygiene.md`: cleanup triggers and workflow drift controls.
-- `site/data/runtime-config.json`: production completionist manifest endpoint configuration.
+- `site/data/runtime-config.json`: production completionist source selection plus active/shadow manifest endpoints.
 - `site/data/live/`: local/offline completionist fixture artifacts.
 - `scripts/serve_local_preview.py`: repo-aware localhost preview server for real-data browser validation with `skycards_user.json`.
-- `workers/completionist-live/`: Cloudflare completionist cron, workflow, queue, and live read path.
+- `workers/completionist-live/`: legacy Skyviz-owned completionist producer kept for shadow-mode parity during the fr24 shared-data cutover.
 - `scripts/check_cloudflare_account.py`: account-lock verification before Cloudflare write operations.
 - `docs/decisions/`: cross-cutting design history.
 - `docs/plans/`: active and completed work plans worth keeping.

@@ -18,7 +18,8 @@ Use this skill for normal product and maintenance work in this repository. It ke
 5. Before any Cloudflare write operation, run `python scripts/check_cloudflare_account.py` and confirm Wrangler is on `seansailer28@gmail.com` / `172da47da00e3b33810d2e9c73c9a0b9`.
 6. Make the smallest coherent change that keeps browser-local processing and GitHub Pages deployment intact unless the task explicitly changes those constraints.
 7. Update docs, scripts, and workflow artifacts in the same pass when behavior changes.
-8. Run the offline checks. For visual bug work, reproduce in Playwright before edits and confirm in Playwright after edits; for local real-data browser validation, start `python scripts/serve_local_preview.py` and use the repo-root `skycards_user.json` fixture (`?devLoad=skycards_user` or manual upload), never the built-in example deck; report when browser validation was not possible.
+8. For completionist source changes, keep `site/data/runtime-config.json` explicit about `activeSource` vs `shadowSource`, and prefer `python scripts/compare_completionist_sources.py` before flipping production reads.
+9. Run the offline checks. For visual bug work, reproduce in Playwright before edits and confirm in Playwright after edits; for local real-data browser validation, start `python scripts/serve_local_preview.py` and use the repo-root `skycards_user.json` fixture (`?devLoad=skycards_user` or manual upload), never the built-in example deck; report when browser validation was not possible.
 
 ## Default rules
 

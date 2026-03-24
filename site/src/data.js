@@ -146,6 +146,7 @@ const runtimeConfigState = {
   promise: null,
 };
 const SITE_BASE_URL = new URL('../', import.meta.url);
+const COMPLETIONIST_LOCAL_SOURCE_KEY = 'local';
 
 function resolveSiteAssetUrl(path) {
   return new URL(path, SITE_BASE_URL).toString();
@@ -282,7 +283,8 @@ export async function loadAirportGameData() {
 }
 
 export async function fetchCompletionistSnapshotData() {
-  const manifestUrl = await resolveCompletionistManifestUrl();
+  const source = await resolveCompletionistManifestSource();
+  const manifestUrl = source.manifestUrl;
   const manifest = await fetchJson(manifestUrl);
   const snapshotPath = resolveLiveDatasetPath(
     manifest?.snapshotPath || './completionist-snapshot.json',
@@ -299,6 +301,10 @@ export async function fetchCompletionistSnapshotData() {
     payload,
     fields,
     rows,
+    source: {
+      ...source,
+      snapshotUrl: snapshotPath,
+    },
   };
 }
 
@@ -321,6 +327,17 @@ function getCompletionistManifestOverride() {
   }
 }
 
+function getCompletionistSourceOverride() {
+  if (typeof window !== 'object' || !(window.location instanceof Location)) {
+    return '';
+  }
+  try {
+    return sanitizeText(new URL(window.location.href).searchParams.get('completionistSource'));
+  } catch (_error) {
+    return '';
+  }
+}
+
 function shouldPreferLocalCompletionistManifest() {
   if (typeof window !== 'object' || !(window.location instanceof Location)) {
     return false;
@@ -332,19 +349,145 @@ function shouldPreferLocalCompletionistManifest() {
   );
 }
 
-async function resolveCompletionistManifestUrl() {
+function normalizeCompletionistSourceKey(value) {
+  return sanitizeText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '');
+}
+
+function normalizeCompletionistSourceRole(value) {
+  const normalized = sanitizeText(value).toLowerCase();
+  return normalized === 'active' || normalized === 'shadow' || normalized === 'legacy'
+    ? normalized
+    : '';
+}
+
+function buildLocalCompletionistSource() {
+  return {
+    key: COMPLETIONIST_LOCAL_SOURCE_KEY,
+    label: 'Local fixture',
+    manifestUrl: resolveSiteAssetUrl('data/live/completionist-manifest.json'),
+    role: 'local',
+    selection: 'local-preview',
+  };
+}
+
+function normalizeCompletionistRuntimeConfig(runtimeConfig) {
+  const completionist = runtimeConfig?.completionist;
+  const sources = new Map();
+  const rawSources = completionist?.sources;
+  if (rawSources && typeof rawSources === 'object' && !Array.isArray(rawSources)) {
+    Object.entries(rawSources).forEach(([rawKey, rawSource]) => {
+      if (!rawSource || typeof rawSource !== 'object' || Array.isArray(rawSource)) {
+        return;
+      }
+      const key = normalizeCompletionistSourceKey(rawKey);
+      const manifestUrl = sanitizeText(rawSource.manifestUrl);
+      if (!key || !manifestUrl) {
+        return;
+      }
+      sources.set(key, {
+        key,
+        label: sanitizeText(rawSource.label) || rawKey,
+        manifestUrl,
+        role: normalizeCompletionistSourceRole(rawSource.role),
+      });
+    });
+  }
+  return {
+    sources,
+    activeSourceKey: normalizeCompletionistSourceKey(completionist?.activeSource),
+    shadowSourceKey: normalizeCompletionistSourceKey(completionist?.shadowSource),
+  };
+}
+
+function resolveCompletionistSourceAlias(rawKey, runtimeConfig) {
+  const normalizedKey = normalizeCompletionistSourceKey(rawKey);
+  if (!normalizedKey) {
+    return '';
+  }
+  if (normalizedKey === 'local' || normalizedKey === 'fixture' || normalizedKey === 'preview') {
+    return COMPLETIONIST_LOCAL_SOURCE_KEY;
+  }
+  if (normalizedKey === 'active') {
+    return runtimeConfig.activeSourceKey;
+  }
+  if (normalizedKey === 'shadow') {
+    return runtimeConfig.shadowSourceKey;
+  }
+  return normalizedKey;
+}
+
+function resolveConfiguredCompletionistSource(runtimeConfig, rawKey) {
+  const resolvedKey = resolveCompletionistSourceAlias(rawKey, runtimeConfig);
+  if (!resolvedKey) {
+    return null;
+  }
+  if (resolvedKey === COMPLETIONIST_LOCAL_SOURCE_KEY) {
+    return buildLocalCompletionistSource();
+  }
+  const source = runtimeConfig.sources.get(resolvedKey);
+  if (!source) {
+    return null;
+  }
+  const role = source.role
+    || (resolvedKey === runtimeConfig.shadowSourceKey ? 'shadow' : '')
+    || (resolvedKey === runtimeConfig.activeSourceKey ? 'active' : '');
+  return {
+    ...source,
+    role,
+  };
+}
+
+async function resolveCompletionistManifestSource() {
   const override = getCompletionistManifestOverride();
   if (override) {
-    return override;
-  }
-  if (shouldPreferLocalCompletionistManifest()) {
-    return resolveSiteAssetUrl('data/live/completionist-manifest.json');
+    return {
+      key: 'manifest-override',
+      label: 'Manual manifest override',
+      manifestUrl: override,
+      role: 'override',
+      selection: 'manifest-override',
+    };
   }
   const runtimeConfig = await loadRuntimeConfig();
+  const normalizedRuntimeConfig = normalizeCompletionistRuntimeConfig(runtimeConfig);
+  const sourceOverride = resolveConfiguredCompletionistSource(
+    normalizedRuntimeConfig,
+    getCompletionistSourceOverride(),
+  );
+  if (sourceOverride) {
+    return {
+      ...sourceOverride,
+      selection: 'source-override',
+    };
+  }
+  if (shouldPreferLocalCompletionistManifest()) {
+    return buildLocalCompletionistSource();
+  }
+  const activeSource = resolveConfiguredCompletionistSource(
+    normalizedRuntimeConfig,
+    normalizedRuntimeConfig.activeSourceKey,
+  );
+  if (activeSource) {
+    return {
+      ...activeSource,
+      selection: 'runtime-active',
+    };
+  }
   const configuredPath = sanitizeText(
     runtimeConfig?.completionist?.manifestUrl || runtimeConfig?.completionistManifestUrl,
   );
-  return configuredPath || resolveSiteAssetUrl('data/live/completionist-manifest.json');
+  if (configuredPath) {
+    return {
+      key: 'legacy-manifest',
+      label: 'Configured completionist manifest',
+      manifestUrl: configuredPath,
+      role: 'legacy',
+      selection: 'runtime-legacy',
+    };
+  }
+  return buildLocalCompletionistSource();
 }
 
 function getManifestDatasetPath(manifest, datasetKey, fallbackPath = null) {
