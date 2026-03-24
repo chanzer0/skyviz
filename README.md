@@ -109,7 +109,7 @@ Load `output/inferred_aircraft_type_mappings.json`, review rows, and export deci
 16. Dashboard cards use responsive layouts and collapse to single-column full-width flows on mobile viewports.
 17. Local-save restore notices appear as dismissible overlay toasts with a 10-second countdown.
 18. A structured footer is always available with quick links, privacy reminders, browser-local processing context, the OurAirports daily-game attribution link, and the Cardle hotspot-hint disclosure that live model-origin coordinates are fetched only after the reveal unlocks.
-19. The standalone `/daily-missions/` page now opens in `All missions` mode with a denser mission-command header, a map-first workspace, a right-rail mission/finder panel on larger screens, and a mobile layout that keeps the mission rail sticky while preserving a clear map -> finder -> live matches flow.
+19. The standalone `/daily-missions/` page now opens in `All missions` mode with no standalone hero, a dominant map-first workspace, a dense right rail for refresh/meta/search/mission filters/highlighted flight/finder values on larger screens, and a mobile flow that shows the map first and defers the rail until after the initial viewport.
 
 ## Validation
 

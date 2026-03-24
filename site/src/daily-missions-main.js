@@ -15,13 +15,13 @@ const el = {
   search: $('#mission-search'),
   sort: $('#mission-sort'),
   intel: $('#mission-intel'),
+  selectedFlight: $('#mission-selected-flight'),
   listMeta: $('#mission-list-meta'),
   list: $('#mission-flight-list'),
   refreshButton: $('#mission-refresh-button'),
   map: $('#mission-map'),
   mapEmpty: $('#mission-map-empty'),
   mapScope: $('#mission-map-scope'),
-  mapScopeMeta: $('#mission-map-scope-meta'),
   mapOverlay: $('#mission-map-overlay'),
   mapOverlayTitle: $('#mission-map-overlay-title'),
   mapOverlayMeta: $('#mission-map-overlay-meta'),
@@ -32,7 +32,7 @@ const TILE_ATTRIBUTION = '&copy; OpenStreetMap contributors &copy; CARTO';
 const COLORS = ['#0f3f70', '#168392', '#ec7f35'];
 const MULTI = '#7e9e4d';
 const MAP_CLUSTER_THRESHOLD = 80;
-const VIEW = { center: [18, 0], zoom: 2 };
+const VIEW = { center: [20, 0], zoom: 1.75 };
 const state = {
   board: null,
   source: null,
@@ -40,6 +40,7 @@ const state = {
   query: '',
   sort: 'freshest',
   selected: '',
+  focusSelection: false,
   seconds: 60,
   timer: null,
   map: null,
@@ -94,8 +95,8 @@ const countdownLabel = (seconds) => {
 
 const missionFromUrl = () => sanitizeText(new URL(window.location.href).searchParams.get('mission'));
 const dateFromUrl = () => sanitizeText(new URL(window.location.href).searchParams.get('date'));
-const sortValue = (left, right, key) => (Number(right[key]) || -Infinity) - (Number(left[key]) || -Infinity);
 const normalizeText = (value) => sanitizeText(value).toLowerCase();
+const sortValue = (left, right, key) => (Number(right[key]) || -Infinity) - (Number(left[key]) || -Infinity);
 
 function normalizeBoard(payload, source) {
   const missions = (payload?.missions || []).map((mission, index) => ({
@@ -158,11 +159,6 @@ function activeMission() {
   return state.active === 'all' ? null : state.board?.missionMap?.get(state.active);
 }
 
-function activeMissionAccent() {
-  const mission = activeMission();
-  return mission ? COLORS[(mission.ordinal - 1) % COLORS.length] : MULTI;
-}
-
 function visibleFlights() {
   const tokens = normalizeText(state.query).split(/\s+/).filter(Boolean);
   const flights = (state.board?.flights || []).filter((flight) => state.active === 'all' || flight.matchedMissionKeys.includes(state.active));
@@ -177,9 +173,19 @@ function visibleFlights() {
   });
 }
 
+function activeMissionAccent() {
+  const mission = activeMission();
+  return mission ? COLORS[(mission.ordinal - 1) % COLORS.length] : MULTI;
+}
+
 function ensureMap() {
   if (state.map || !window.L || !el.map) return state.map;
-  state.map = window.L.map(el.map, { center: VIEW.center, zoom: VIEW.zoom, preferCanvas: true });
+  state.map = window.L.map(el.map, {
+    center: VIEW.center,
+    zoom: VIEW.zoom,
+    zoomSnap: 0.25,
+    preferCanvas: true,
+  });
   window.L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: 18 }).addTo(state.map);
   return state.map;
 }
@@ -252,6 +258,8 @@ function renderMap() {
     marker.bindPopup(`<strong>${escapeHtml(flight.callsign)}</strong><br>${escapeHtml(flight.displayRouteLabel)}<br><a href="${escapeHtml(flight.fr24Url || '#')}" target="_blank" rel="noopener noreferrer">Open in FR24</a>`);
     marker.on('click', () => {
       state.selected = flight.id;
+      state.focusSelection = true;
+      renderSelectedFlight();
       renderList();
       renderMap();
     });
@@ -269,7 +277,7 @@ function renderMap() {
     : window.L.layerGroup(markers);
   markers.forEach((marker) => state.layer.addLayer(marker));
   state.layer.addTo(map);
-  if (state.selected && state.markers.has(state.selected)) {
+  if (state.focusSelection && state.selected && state.markers.has(state.selected)) {
     const marker = state.markers.get(state.selected);
     const focusSelectedMarker = () => {
       map.setView(marker.getLatLng(), Math.max(map.getZoom(), 5));
@@ -282,6 +290,10 @@ function renderMap() {
     focusSelectedMarker();
     return;
   }
+  if (state.active === 'all') {
+    map.setView(VIEW.center, VIEW.zoom);
+    return;
+  }
   if (flights.length === 1) {
     map.setView([flights[0].lat, flights[0].lon], 6);
     return;
@@ -289,19 +301,17 @@ function renderMap() {
   map.fitBounds(window.L.latLngBounds(flights.map((flight) => [flight.lat, flight.lon])).pad(0.16), { animate: false, maxZoom: 7 });
 }
 
-function renderHeader() {
-  const stale = Date.now() - Date.parse(state.board.generatedAt || 0) > (Number(state.board.staleAfterSeconds) || 900) * 1000;
+function renderRailHeader() {
   const requestedDate = dateFromUrl();
   const source = sanitizeText(state.source?.label) || 'Shared mission board';
-  const summary = [
-    'All missions first, then pin one lane for exact FR24 finder values.',
-    `Source: ${source}.`,
-    requestedDate && requestedDate !== state.board.missionDate ? `Requested ${requestedDate}; showing ${state.board.missionDate}.` : '',
-  ].filter(Boolean).join(' ');
-  el.title.textContent = `${friendlyDate(state.board.missionDate)} Daily Missions`;
-  el.summary.textContent = summary;
+  el.title.textContent = 'Daily Missions';
+  el.summary.textContent = [
+    `${friendlyDate(state.board.missionDate)} board`,
+    source,
+    requestedDate && requestedDate !== state.board.missionDate ? `showing ${state.board.missionDate}` : '',
+  ].filter(Boolean).join(' | ');
   el.updated.textContent = timeLabel(state.board.generatedAt);
-  el.refresh.textContent = stale ? `Stale | ${countdownLabel(state.seconds)}` : countdownLabel(state.seconds);
+  el.refresh.textContent = countdownLabel(state.seconds);
   el.flights.textContent = formatNumber(state.board.rowCount || 0);
   el.source.textContent = sanitizeText(state.source?.role) ? `${source} | ${sanitizeText(state.source.role)}` : source;
   document.title = `${friendlyDate(state.board.missionDate)} Daily Missions | Skyviz`;
@@ -309,7 +319,7 @@ function renderHeader() {
 
 function renderBanner() {
   const stale = Date.now() - Date.parse(state.board?.generatedAt || 0) > (Number(state.board?.staleAfterSeconds) || 900) * 1000;
-  const copy = state.message || (stale ? 'Mission feed is stale. You can keep exploring the latest published board while Skyviz waits for a fresh snapshot.' : '');
+  const copy = state.message || (stale ? 'Mission feed is stale.' : '');
   el.banner.hidden = !copy;
   el.banner.textContent = copy;
   el.banner.dataset.tone = stale ? 'warning' : 'quiet';
@@ -320,8 +330,8 @@ function renderSelector() {
   const allCard = `
     <button class="mission-selector-card mission-selector-card--all${state.active === 'all' ? ' is-active' : ''}" type="button" data-mission="all" aria-pressed="${state.active === 'all' ? 'true' : 'false'}">
       <span class="mission-selector-card-index">All missions</span>
-      <strong class="mission-selector-card-title">Show the entire live mission board</strong>
-      <span class="mission-selector-card-meta">${formatCompact(totalMissionMatches)} mission matches across ${formatNumber(state.board.rowCount || 0)} published flights</span>
+      <strong class="mission-selector-card-title">Whole mission board</strong>
+      <span class="mission-selector-card-meta">${formatCompact(totalMissionMatches)} mission matches across ${formatNumber(state.board.rowCount || 0)} flights</span>
     </button>`;
   el.selector.innerHTML = [
     allCard,
@@ -334,13 +344,116 @@ function renderSelector() {
   ].join('');
 }
 
+function updateScopeChrome(flights) {
+  const mission = activeMission();
+  const accent = activeMissionAccent();
+  const scopeLabel = mission ? `Mission ${mission.ordinal}` : 'All missions';
+  const scopeTitle = mission?.title || 'All live missions';
+  const scopeMeta = mission
+    ? `${formatNumber(flights.length)} flights visible`
+    : `${formatNumber(flights.length)} visible across ${formatNumber(state.board.missions.length)} missions`;
+  el.toolbar.textContent = mission ? `${mission.title} | ${formatNumber(flights.length)} visible` : scopeMeta;
+  el.listMeta.textContent = `${formatNumber(flights.length)} visible`;
+  if (el.mapScope) {
+    el.mapScope.textContent = scopeLabel;
+    el.mapScope.dataset.tone = mission ? 'mission' : 'all';
+    el.mapScope.style.setProperty('--mission-accent', accent);
+  }
+  if (el.mapOverlay) {
+    el.mapOverlay.style.setProperty('--mission-accent', accent);
+  }
+  if (el.mapOverlayTitle) {
+    el.mapOverlayTitle.textContent = scopeTitle;
+  }
+  if (el.mapOverlayMeta) {
+    el.mapOverlayMeta.textContent = scopeMeta;
+  }
+}
+
+function selectedFlight() {
+  return visibleFlights().find((flight) => flight.id === state.selected) || null;
+}
+
+function renderSelectedFlight() {
+  const flight = selectedFlight();
+  if (!flight) {
+    el.selectedFlight.innerHTML = `
+      <div class="daily-missions-selected-empty">
+        <span class="daily-missions-selected-kicker">Highlighted flight</span>
+        <strong>No visible flight selected</strong>
+        <p class="daily-missions-summary">Pick a flight from the map or the live matches list.</p>
+      </div>`;
+    return;
+  }
+  const aircraft = [flight.manufacturer, flight.modelName].filter(Boolean).join(' ') || flight.typeCode || 'Unknown aircraft';
+  const missionBadges = (flight.matchedMissionOrdinals || []).map((ordinalValue) => `<span class="mission-flight-badge" style="--mission-accent:${COLORS[(ordinalValue - 1) % COLORS.length]}">M${ordinalValue}</span>`).join('');
+  const metrics = [
+    { value: Number.isFinite(flight.speed) ? `${Math.round(flight.speed)} kt` : 'Speed n/a', neutral: !Number.isFinite(flight.speed) },
+    { value: Number.isFinite(flight.altitude) ? `${formatNumber(Math.round(flight.altitude))} ft` : 'Altitude n/a', neutral: !Number.isFinite(flight.altitude) },
+    { value: Number.isFinite(flight.distanceKm) ? `${formatNumber(Math.round(flight.distanceKm))} km` : 'Route n/a', neutral: !Number.isFinite(flight.distanceKm) },
+    { value: ageLabel(flight.lastSeenAt), neutral: false },
+  ];
+  el.selectedFlight.innerHTML = `
+    <article class="daily-missions-selected-card">
+      <div class="daily-missions-selected-head">
+        <div class="daily-missions-selected-copy">
+          <span class="daily-missions-selected-kicker">Highlighted flight</span>
+          <h3 class="daily-missions-selected-title">${escapeHtml(flight.callsign)}</h3>
+          <p class="daily-missions-selected-support">${escapeHtml(aircraft)}</p>
+        </div>
+        <div class="mission-flight-badges">${missionBadges}</div>
+      </div>
+      <p class="daily-missions-selected-route">${escapeHtml(flight.displayRouteLabel)}</p>
+      <p class="daily-missions-selected-support">${escapeHtml(flight.registration || flight.typeCode || 'Registration n/a')}</p>
+      <div class="daily-missions-selected-metrics">
+        ${metrics.map((metric) => `<span class="daily-missions-metric-pill${metric.neutral ? ' daily-missions-metric-pill--neutral' : ''}">${escapeHtml(metric.value)}</span>`).join('')}
+      </div>
+      <div class="daily-missions-selected-actions">
+        <a class="mission-flight-link" href="${escapeHtml(flight.fr24Url || '#')}" target="_blank" rel="noopener noreferrer">Open in FR24</a>
+      </div>
+    </article>`;
+}
+
+function renderList() {
+  const flights = visibleFlights();
+  if (!flights.some((flight) => flight.id === state.selected)) {
+    state.selected = flights[0]?.id || '';
+  }
+  updateScopeChrome(flights);
+  el.list.innerHTML = flights.length ? flights.map((flight) => {
+    const badges = (flight.matchedMissionOrdinals || []).map((ordinalValue) => `<span class="mission-flight-badge" style="--mission-accent:${COLORS[(ordinalValue - 1) % COLORS.length]}">M${ordinalValue}</span>`).join('');
+    const aircraft = [flight.manufacturer, flight.modelName].filter(Boolean).join(' ') || flight.typeCode || 'Unknown aircraft';
+    const metrics = [
+      { value: Number.isFinite(flight.speed) ? `${Math.round(flight.speed)} kt` : 'Speed n/a', neutral: !Number.isFinite(flight.speed) },
+      { value: Number.isFinite(flight.altitude) ? `${formatNumber(Math.round(flight.altitude))} ft` : 'Altitude n/a', neutral: !Number.isFinite(flight.altitude) },
+      { value: ageLabel(flight.lastSeenAt), neutral: false },
+    ];
+    return `
+      <article class="mission-flight-row${flight.id === state.selected ? ' is-selected' : ''}" data-flight-id="${escapeHtml(flight.id)}">
+        <button class="mission-flight-focus" type="button" data-flight="${escapeHtml(flight.id)}" aria-pressed="${flight.id === state.selected ? 'true' : 'false'}">
+          <div class="mission-flight-head">
+            <div class="mission-flight-title-wrap">
+              <h3 class="mission-flight-title">${escapeHtml(flight.callsign)}</h3>
+              <p class="mission-flight-support">${escapeHtml(aircraft)}</p>
+            </div>
+            <div class="mission-flight-badges">${badges}</div>
+          </div>
+          <p class="mission-flight-route">${escapeHtml(flight.displayRouteLabel)} | ${escapeHtml(flight.registration || flight.typeCode || 'Registration n/a')}</p>
+          <div class="mission-flight-metrics">
+            ${metrics.map((metric) => `<span class="daily-missions-metric-pill${metric.neutral ? ' daily-missions-metric-pill--neutral' : ''}">${escapeHtml(metric.value)}</span>`).join('')}
+          </div>
+        </button>
+      </article>`;
+  }).join('') : '<div class="daily-missions-empty-state">No live matches right now. Try another mission or clear the search.</div>';
+}
+
 function renderIntel() {
   const missions = state.active === 'all' ? state.board.missions : [activeMission()].filter(Boolean);
   el.intel.innerHTML = missions.map((mission) => `
-    <section class="mission-intel-card${state.active === 'all' ? ' is-compact' : ''}">
+    <section class="mission-intel-card">
       <div class="mission-intel-head">
         <div>
-          <p class="eyebrow">Mission ${mission.ordinal}</p>
+          <span class="mission-finder-kicker">Mission ${mission.ordinal}</span>
           <h3>${escapeHtml(mission.title)}</h3>
         </div>
         <span class="mission-status-pill" style="--mission-accent:${COLORS[(mission.ordinal - 1) % COLORS.length]}">${mission.truncated ? `${formatNumber(mission.displayedMatchCount)} shown` : `${formatNumber(mission.matchCount)} live`}</span>
@@ -350,8 +463,8 @@ function renderIntel() {
           <article class="mission-finder-block">
             <div class="mission-finder-head">
               <div>
-                <p class="mission-finder-kicker">Mission ${mission.ordinal}</p>
-                <h4>${escapeHtml(section.label)}</h4>
+                <span class="mission-finder-kicker">${escapeHtml(section.label)}</span>
+                <h4>${escapeHtml(mission.title)}</h4>
               </div>
               <button class="mission-copy-button" type="button" data-copy="${escapeHtml(section.copyText)}" data-label="${escapeHtml(`${mission.title} ${section.label}`)}">Copy</button>
             </div>
@@ -359,84 +472,18 @@ function renderIntel() {
           </article>`).join('')}
       </div>
       ${(mission.finder.notes || []).length
-        ? `<ul class="mission-note-list">${mission.finder.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul>`
-        : '<p class="mission-muted-copy">Paste the copied values into the matching FR24 finder field.</p>'}
+        ? `<p class="mission-intel-note">${escapeHtml(mission.finder.notes.join(' '))}</p>`
+        : '<p class="mission-intel-note">Paste the copied value into the matching FR24 finder field.</p>'}
     </section>`).join('');
 }
 
-function updateScopeChrome(flights) {
-  const mission = activeMission();
-  const accent = activeMissionAccent();
-  const scopeLabel = mission ? `Mission ${mission.ordinal}` : 'All missions';
-  const scopeTitle = mission?.title || 'All missions';
-  const scopeMeta = mission
-    ? `${scopeTitle} | ${formatNumber(flights.length)} flights visible`
-    : `${formatNumber(flights.length)} visible flights across ${formatNumber(state.board.missions.length)} missions`;
-  if (el.mapScope) {
-    el.mapScope.textContent = scopeLabel;
-    el.mapScope.dataset.tone = mission ? 'mission' : 'all';
-    el.mapScope.style.setProperty('--mission-accent', accent);
-  }
-  if (el.mapScopeMeta) {
-    el.mapScopeMeta.textContent = scopeMeta;
-  }
-  if (el.mapOverlay) {
-    el.mapOverlay.style.setProperty('--mission-accent', accent);
-  }
-  if (el.mapOverlayTitle) {
-    el.mapOverlayTitle.textContent = scopeTitle;
-  }
-  if (el.mapOverlayMeta) {
-    el.mapOverlayMeta.textContent = mission
-      ? `${formatNumber(flights.length)} visible flights for this lane`
-      : `${formatNumber(flights.length)} visible flights across the full mission board`;
-  }
-  el.toolbar.textContent = scopeMeta;
-}
-
-function renderList() {
-  const flights = visibleFlights();
-  if (!flights.some((flight) => flight.id === state.selected)) state.selected = flights[0]?.id || '';
-  updateScopeChrome(flights);
-  el.listMeta.textContent = flights.length ? `${formatNumber(flights.length)} flights in the current board view` : 'No flights match the current search and mission filters.';
-  el.list.innerHTML = flights.length ? flights.map((flight) => {
-    const badges = (flight.matchedMissionOrdinals || []).map((ordinalValue) => `<span class="mission-flight-badge" style="--mission-accent:${COLORS[(ordinalValue - 1) % COLORS.length]}">M${ordinalValue}</span>`).join('');
-    const aircraft = [flight.manufacturer, flight.modelName].filter(Boolean).join(' ') || flight.typeCode || 'Unknown aircraft';
-    const metrics = [
-      { value: Number.isFinite(flight.speed) ? `${Math.round(flight.speed)} kt` : 'Speed n/a', neutral: !Number.isFinite(flight.speed) },
-      { value: Number.isFinite(flight.altitude) ? `${formatNumber(Math.round(flight.altitude))} ft` : 'Altitude n/a', neutral: !Number.isFinite(flight.altitude) },
-      { value: Number.isFinite(flight.distanceKm) ? `${formatNumber(Math.round(flight.distanceKm))} km` : 'Route n/a', neutral: !Number.isFinite(flight.distanceKm) },
-      { value: ageLabel(flight.lastSeenAt), neutral: false },
-    ];
-    return `
-      <article class="mission-flight-row${flight.id === state.selected ? ' is-selected' : ''}" data-flight-id="${escapeHtml(flight.id)}">
-        <button class="mission-flight-focus" type="button" data-flight="${escapeHtml(flight.id)}" aria-pressed="${flight.id === state.selected ? 'true' : 'false'}">
-          <div class="mission-flight-topline">
-            <div class="mission-flight-title-wrap">
-              <h3>${escapeHtml(flight.callsign)}</h3>
-              <p>${escapeHtml(aircraft)}</p>
-            </div>
-            <div class="mission-flight-badges">${badges}</div>
-          </div>
-          <div class="mission-flight-route">
-            <span>${escapeHtml(flight.displayRouteLabel)}</span>
-            <span>${escapeHtml(flight.registration || flight.typeCode || 'Registration n/a')}</span>
-          </div>
-          <div class="mission-flight-meta-grid">
-            ${metrics.map((metric) => `<span class="mission-flight-metric${metric.neutral ? ' mission-flight-metric--neutral' : ''}">${escapeHtml(metric.value)}</span>`).join('')}
-          </div>
-        </button>
-        <div class="mission-flight-actions"><a class="mission-flight-link" href="${escapeHtml(flight.fr24Url || '#')}" target="_blank" rel="noopener noreferrer">Open in FR24</a></div>
-      </article>`;
-  }).join('') : '<div class="mission-empty-state">No live matches right now. Try another mission or clear the search.</div>';
-}
-
 function render() {
-  renderHeader();
+  renderRailHeader();
   renderBanner();
   renderSelector();
-  renderIntel();
   renderList();
+  renderSelectedFlight();
+  renderIntel();
   renderMap();
   const url = new URL(window.location.href);
   url.searchParams.set('date', state.board.missionDate || '');
@@ -488,12 +535,16 @@ async function copyValue(value, label) {
 el.refreshButton?.addEventListener('click', () => load());
 el.search?.addEventListener('input', () => {
   state.query = sanitizeText(el.search.value);
+  state.focusSelection = false;
   renderList();
+  renderSelectedFlight();
   renderMap();
 });
 el.sort?.addEventListener('change', () => {
   state.sort = sanitizeText(el.sort.value) || 'freshest';
+  state.focusSelection = false;
   renderList();
+  renderSelectedFlight();
   renderMap();
 });
 el.selector?.addEventListener('click', (event) => {
@@ -501,6 +552,7 @@ el.selector?.addEventListener('click', (event) => {
   if (!button) return;
   state.active = sanitizeText(button.getAttribute('data-mission')) || 'all';
   state.selected = '';
+  state.focusSelection = false;
   render();
 });
 el.intel?.addEventListener('click', async (event) => {
@@ -512,6 +564,8 @@ el.list?.addEventListener('click', (event) => {
   const button = event.target instanceof Element ? event.target.closest('button[data-flight]') : null;
   if (!button) return;
   state.selected = sanitizeText(button.getAttribute('data-flight'));
+  state.focusSelection = true;
+  renderSelectedFlight();
   renderList();
   renderMap();
 });
@@ -519,7 +573,7 @@ el.list?.addEventListener('click', (event) => {
 state.timer = window.setInterval(() => {
   if (!state.board) return;
   state.seconds = Math.max(0, state.seconds - 1);
-  renderHeader();
+  renderRailHeader();
   renderBanner();
   if (state.seconds <= 0 && !state.loadPromise) {
     load(true).catch((error) => {
