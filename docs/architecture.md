@@ -28,6 +28,7 @@
 - OurAirports refresh/build tooling for the daily airport game in `scripts/refresh_airport_game_data.py`.
 - Completionist local fixture refresh tooling in `scripts/refresh_completionist_snapshot.py`.
 - Repo-aware localhost preview server in `scripts/serve_local_preview.py`.
+- Local-only Skycards export fixture refresh tooling in `scripts/export_skycards_user.py`.
 - Cloudflare account preflight tooling in `scripts/check_cloudflare_account.py`.
 - Model registration-count refresh tooling in `scripts/refresh_model_registration_counts.py`.
 - Aircraft `aircraftId` lookup builder in `scripts/build_aircraft_lookup_from_db.py` (from local `aircraft_data.db`).
@@ -45,11 +46,12 @@
 4. For `Cardle`, the browser loads the committed Skycards reference snapshots, derives a guessable aircraft-model pool from `models.json`, restores the current UTC day's guesses from browser `localStorage`, and picks the model of the day deterministically from that reference pool.
 5. The user can alternatively upload a Skycards export JSON file or use the landing-page `View Example Dashboard` button to load a built-in sample deck.
 6. During localhost preview started through `scripts/serve_local_preview.py`, the browser can also auto-load the repo-root `skycards_user.json` fixture with `?devLoad=skycards_user`; that path exists only for local real-data validation and should be used instead of the example deck when testing live/completionist behavior.
-7. Optional: if the user enables local persistence, the active uploaded export is cached in browser storage on that device (IndexedDB first, with legacy `localStorage` migration) and can be restored on next visit.
-8. The browser validates the payload shape and loads static reference snapshots (`models.json`, `airports.json`, and any optional datasets listed in `manifest.json`).
-9. Aircraft cards are enriched by `card.modelId -> models.rows[].id`.
-10. Airport unlocks are enriched by `unlockedAirportIds[] -> airports.rows[].id`.
-11. The app computes tab-specific view models in memory:
+7. Maintainers can refresh that repo-root fixture locally with `scripts/export_skycards_user.py`, which reads credentials from the gitignored `.env.skycards.local` file, calls the Skycards login endpoint, and writes the full `response.userData` payload only to local ignored files.
+8. Optional: if the user enables local persistence, the active uploaded export is cached in browser storage on that device (IndexedDB first, with legacy `localStorage` migration) and can be restored on next visit.
+9. The browser validates the payload shape and loads static reference snapshots (`models.json`, `airports.json`, and any optional datasets listed in `manifest.json`).
+10. Aircraft cards are enriched by `card.modelId -> models.rows[].id`.
+11. Airport unlocks are enriched by `unlockedAirportIds[] -> airports.rows[].id`.
+12. The app computes tab-specific view models in memory:
   - one airport-daily game state machine for `Navdle`, with hero-search state, guesses-left tracking, guess history, a pinned best-so-far comparison tracker, per-category comparison tiles, viewport-aware clue explainers, a progressive multi-hint queue, a UTC weekly `wildcard` / `hub` / `regional` cadence, streak statistics, emoji share-grid generation with a direct `#navdle` link for both solved and revealed boards, and legacy `#tab-daily` hash compatibility
 - one aircraft-daily game state machine for `Cardle`, with hero-search state, a tighter shared Navdle-style guesses-left strip, eight-guess tracking, a pinned best-so-far comparison intel card with redacted manufacturer/name clues, catchable-registration tracking in place of height, image-forward history rows with denser stat tiles, a wider registration-origin visual stage, on-surface overlay status chips instead of separate stage headers/notes, eight-stat higher-lower comparison feedback, staged hotspot/model reveals, Navdle-style solved-state celebration and share-action treatment, live share-grid generation with a direct `#cardle` link, and a runtime fetch for registration-origin hotspots after the map hint unlocks
   - airport capture progress across all committed reference airports
@@ -154,6 +156,7 @@ The browser does not parse the raw CSVs directly during normal gameplay. It load
 - Reference snapshots are committed artifacts so the site works without a runtime API dependency.
 - Completionist mode reads a delayed shared flight snapshot from Cloudflare in production, or from local fixtures during preview, but it still matches that snapshot against the user's collection locally in-browser.
 - Localhost preview may expose the repo-root `skycards_user.json` fixture through `scripts/serve_local_preview.py` so browser automation can validate real collection behavior without falling back to the built-in example deck.
+- `scripts/export_skycards_user.py` is a maintainer-only local workflow tool; it reads the gitignored `.env.skycards.local` config, writes only ignored local files, and is not part of the deployed GitHub Pages runtime.
 - Cardle's hotspot hint is the only direct browser fetch to an external gameplay API, and it happens only after the in-game unlock threshold is reached.
 - There is no authentication, persistence layer, or custom backend.
 
@@ -172,6 +175,7 @@ The browser does not parse the raw CSVs directly during normal gameplay. It load
 - `site/data/runtime-config.json`: production completionist source selection and manifest endpoints.
 - `site/data/live/`: local completionist fixture snapshot and manifest.
 - `scripts/serve_local_preview.py`: serves `site/` plus the repo-root `skycards_user.json` fixture for localhost validation.
+- `scripts/export_skycards_user.py`: refreshes the repo-root `skycards_user.json` fixture and a local archive by writing the full `response.userData` payload from the Skycards login endpoint.
 - `site/tools/aircraft-db-explorer.html`: local SQLite database explorer UI.
 - `site/tools/inferred-mapping-reviewer.html`: local review UI for inferred mapping decisions.
 - `site/data/reference/`: committed reference snapshots and manifest.

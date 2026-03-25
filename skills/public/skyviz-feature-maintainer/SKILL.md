@@ -19,7 +19,7 @@ Use this skill for normal product and maintenance work in this repository. It ke
 6. Make the smallest coherent change that keeps browser-local processing and GitHub Pages deployment intact unless the task explicitly changes those constraints.
 7. Update docs, scripts, and workflow artifacts in the same pass when behavior changes.
 8. For completionist source changes, keep `site/data/runtime-config.json` explicit about `activeSource` vs `shadowSource`, and prefer `python scripts/compare_completionist_sources.py` before flipping production reads.
-9. Run the offline checks. For visual bug work, reproduce in Playwright before edits and confirm in Playwright after edits; for local real-data browser validation, start `python scripts/serve_local_preview.py` and use the repo-root `skycards_user.json` fixture (`?devLoad=skycards_user` or manual upload), never the built-in example deck; report when browser validation was not possible.
+9. Run the offline checks. For visual bug work, reproduce in Playwright before edits and confirm in Playwright after edits; for local real-data browser validation, refresh the repo-root fixture with `python scripts/export_skycards_user.py` if it is missing or stale, then start `python scripts/serve_local_preview.py` and use `?devLoad=skycards_user` or manual upload, never the built-in example deck; report when browser validation was not possible.
 
 ## Default rules
 
@@ -35,6 +35,7 @@ Use this skill for normal product and maintenance work in this repository. It ke
 - Default offline check: `python scripts/smoke_check.py`
 - Optional completionist-fixture-only check: `python scripts/smoke_check.py --mode completionist-only`
 - Repo workflow check: `python scripts/repo_hygiene_check.py`
+- Private fixture refresh: `python scripts/export_skycards_user.py`
 - Preview server for browser validation: `python scripts/serve_local_preview.py`
 - Visual bug check: reproduce with Playwright before edits and confirm with Playwright after edits.
 - For real-data browser validation, use the repo-root `skycards_user.json` fixture (`http://localhost:4173/?devLoad=skycards_user` or manual upload) and do not use the built-in example deck unless the task explicitly targets the sample flow.

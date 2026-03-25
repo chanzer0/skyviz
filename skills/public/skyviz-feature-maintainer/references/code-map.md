@@ -18,6 +18,7 @@ Read `docs/index.md` first when you need the current system-of-record doc map.
 - `site/data/runtime-config.json`: production completionist manifest endpoint used by the browser.
 - `site/data/live/`: local fixture completionist snapshot artifacts for preview and offline validation.
 - `scripts/serve_local_preview.py`: localhost preview server that serves `site/` plus the repo-root `skycards_user.json` fixture.
+- `scripts/export_skycards_user.py`: local-only Skycards export helper that refreshes the repo-root `skycards_user.json` fixture from the full `response.userData` payload.
 - `scripts/refresh_reference_data.py`: official reference refresh path.
 - `scripts/refresh_airport_game_data.py`: official OurAirports refresh/build path for the Navdle airport game.
 - `scripts/refresh_completionist_snapshot.py`: local delayed live-flight fixture generator for completionist mode.

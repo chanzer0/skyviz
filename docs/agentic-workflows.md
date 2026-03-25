@@ -26,6 +26,7 @@ This repository is meant to be maintained by agents and humans using the same re
 - Re-run the same Playwright flow after edits to confirm the fix.
 - Start local browser validation with `python scripts/serve_local_preview.py`.
 - When a real collection is needed for UI validation, use the repo-root `skycards_user.json` fixture (`http://localhost:4173/?devLoad=skycards_user` or manual upload) and do not use the built-in example deck.
+- If that repo-root fixture is missing or stale, refresh it locally with `python scripts/export_skycards_user.py` using the gitignored `.env.skycards.local` file instead of pasting credentials into chat or shell history.
 - Capture Playwright evidence (snapshot and/or screenshot) when possible.
 - If Playwright cannot run, state that limitation explicitly and do not claim browser confirmation.
 

@@ -45,9 +45,12 @@ def main() -> int:
     server = ThreadingHTTPServer((args.host, args.port), LocalPreviewRequestHandler)
     server.daemon_threads = True
     host_label = 'localhost' if args.host in {'127.0.0.1', '0.0.0.0'} else args.host
+    fixture_path = REPO_ROOT / 'skycards_user.json'
     print(f'Local preview: http://{host_label}:{args.port}/')
     print(f'Real-data preview: http://{host_label}:{args.port}/?devLoad=skycards_user')
-    print(f'Repo-root fixture: {REPO_ROOT / "skycards_user.json"}')
+    print(f'Repo-root fixture: {fixture_path}')
+    if not fixture_path.exists():
+        print('Fixture missing. Refresh it locally with: python scripts/export_skycards_user.py --export-now')
     try:
         server.serve_forever()
     except KeyboardInterrupt:

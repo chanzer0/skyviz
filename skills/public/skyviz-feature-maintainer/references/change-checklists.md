@@ -6,6 +6,7 @@
 - Update `README.md` if usage or local preview expectations changed.
 - Run `python scripts/smoke_check.py`.
 - When real browser data matters, start `python scripts/serve_local_preview.py` and validate with the repo-root `skycards_user.json` fixture (`?devLoad=skycards_user` or manual upload). Do not use the built-in example deck.
+- If that fixture is missing or stale, refresh it locally with `python scripts/export_skycards_user.py` before the browser pass.
 - For visual bug fixes, reproduce the bug with Playwright before edits and confirm the fix with Playwright after edits.
 - Use a browser pass when the environment supports it.
 

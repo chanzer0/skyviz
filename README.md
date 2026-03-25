@@ -27,6 +27,7 @@ Skyviz is a static GitHub Pages dashboard for Skycards collection exports plus t
 - `site/src/daily-missions-main.js`: dedicated browser runtime for the standalone daily-missions board.
 - `site/data/live/`: local completionist fixture artifacts for preview and offline validation.
 - `scripts/serve_local_preview.py`: repo-aware local preview server that serves `site/` plus the repo-root `skycards_user.json` fixture.
+- `scripts/export_skycards_user.py`: local-only TUI/CLI that refreshes the repo-root `skycards_user.json` fixture from the live Skycards login endpoint using a gitignored env file.
 - `workers/completionist-live/`: legacy Skyviz-owned Cloudflare completionist producer kept for shadow-mode parity during the fr24 shared-data cutover.
 - `scripts/check_cloudflare_account.py`: Cloudflare account-lock preflight for Wrangler write operations.
 - `site/tools/aircraft-db-explorer.html`: local-only SQLite explorer for inspecting `aircraft_data.db` in-browser.
@@ -58,6 +59,15 @@ python scripts/serve_local_preview.py
 Then open `http://localhost:4173`.
 
 For real-data browser validation, open `http://localhost:4173/?devLoad=skycards_user` or upload the repo-root `skycards_user.json` once the preview is running. The localhost-only `devLoad` flow fetches that repo-root fixture directly into the browser, which keeps Playwright and manual testing on the same real collection data. Do not use `View Example Dashboard` when validating real collection or completionist behavior; keep it only for the lightweight sample-deck flow.
+
+If that repo-root fixture is missing or stale, refresh it locally first:
+
+```bash
+cp .env.skycards.local.example .env.skycards.local
+python scripts/export_skycards_user.py
+```
+
+Set `SKYCARDS_EMAIL` and `SKYCARDS_PASSWORD` in `.env.skycards.local`. The exporter stays local-only: it reads that gitignored env file, writes the full `response.userData` object to the ignored repo-root `skycards_user.json` fixture, and also stores timestamped archive copies under `output/skycards-user-exports/`.
 
 For completionist shadow-mode validation, the browser also accepts:
 
@@ -119,6 +129,7 @@ python scripts/smoke_check.py
 ```
 
 `smoke_check.py` validates the repo-root `skycards_user.json` real-data fixture when it is available locally, but GitHub Actions and other CI environments skip that private-fixture assertion when the file is not present.
+Use `python scripts/export_skycards_user.py --export-now` when you need to refresh that private fixture locally.
 
 ## Refreshing Skycards reference data
 

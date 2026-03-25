@@ -20,6 +20,7 @@ This directory is the system of record for durable repository knowledge.
 - `site/daily-missions/`: standalone daily mission board route and page-specific styles.
 - `site/data/live/`: local/offline completionist fixture artifacts.
 - `scripts/serve_local_preview.py`: repo-aware localhost preview server for real-data browser validation with `skycards_user.json`.
+- `scripts/export_skycards_user.py`: local-only fixture refresh tool that writes the full Skycards `userData` payload into the ignored repo-root `skycards_user.json`.
 - `workers/completionist-live/`: legacy Skyviz-owned completionist producer kept for shadow-mode parity during the fr24 shared-data cutover.
 - `scripts/check_cloudflare_account.py`: account-lock verification before Cloudflare write operations.
 - `docs/decisions/`: cross-cutting design history.
