@@ -10,6 +10,11 @@ import {
   parseUserCollection,
 } from './data.js?v=20260323-cloudflare-live-2';
 import {
+  buildFr24Lookup,
+  buildFr24WebUrl,
+  handleFr24LiveFlightAnchorClick,
+} from './fr24-links.js?v=20260326-fr24-app-link-1';
+import {
   DAILY_GAME_NAME,
   buildAirportGuessComparison,
   buildAirportHints,
@@ -6526,26 +6531,32 @@ function getSelectedCompletionistMatch() {
 }
 
 function buildCompletionistFlightFr24Url(match) {
-  if (!match || typeof match !== 'object') {
-    return 'https://www.flightradar24.com/';
+  return buildFr24WebUrl({
+    registration: normalizeCompletionistRegistration(match?.registration),
+    callsign: sanitizeText(match?.callsign),
+    flightNumber: sanitizeText(match?.flightNumber),
+    aircraftHex: sanitizeText(match?.aircraftHex),
+  });
+}
+
+function buildCompletionistFlightFr24LinkAttrs(match) {
+  const lookup = buildFr24Lookup({
+    registration: normalizeCompletionistRegistration(match?.registration),
+    callsign: sanitizeText(match?.callsign),
+    flightNumber: sanitizeText(match?.flightNumber),
+    aircraftHex: sanitizeText(match?.aircraftHex),
+  });
+  const webUrl = buildCompletionistFlightFr24Url(match);
+  const attrs = [
+    'data-fr24-link="live-flight"',
+    `href="${escapeHtml(webUrl)}"`,
+    'rel="noopener noreferrer"',
+  ];
+  if (lookup) {
+    attrs.push(`data-fr24-lookup-kind="${escapeHtml(lookup.kind)}"`);
+    attrs.push(`data-fr24-lookup-value="${escapeHtml(lookup.value)}"`);
   }
-  const registration = normalizeCompletionistRegistration(match.registration);
-  if (registration) {
-    return `https://www.flightradar24.com/${encodeURIComponent(registration.toUpperCase())}`;
-  }
-  const callsign = sanitizeText(match.callsign).toLowerCase().replace(/\s+/g, '');
-  if (callsign) {
-    return `https://www.flightradar24.com/${encodeURIComponent(callsign.toUpperCase())}`;
-  }
-  const flightNumber = sanitizeText(match.flightNumber).toLowerCase().replace(/\s+/g, '');
-  if (flightNumber) {
-    return `https://www.flightradar24.com/${encodeURIComponent(flightNumber.toUpperCase())}`;
-  }
-  const aircraftHex = sanitizeText(match.aircraftHex).toLowerCase().replace(/\s+/g, '');
-  if (aircraftHex) {
-    return `https://www.flightradar24.com/?icao=${encodeURIComponent(aircraftHex)}`;
-  }
-  return 'https://www.flightradar24.com/';
+  return attrs.join(' ');
 }
 
 function buildCompletionistReasonChips(match) {
@@ -7214,7 +7225,7 @@ function buildCompletionistPopup(match) {
       <p class="completionist-popup-registration">${escapeHtml(registrationSummary)}</p>
       ${buildCompletionistRouteGraphic(match, { compact: true })}
       <div class="completionist-popup-actions">
-        <a class="completionist-popup-link completionist-popup-action" href="${fr24Url}" target="_blank" rel="noopener noreferrer">Open in FR24</a>
+        <a class="completionist-popup-link completionist-popup-action" ${buildCompletionistFlightFr24LinkAttrs(match)}>Open in FR24</a>
         ${dismissButtons}
       </div>
     </div>
@@ -7264,7 +7275,7 @@ function renderCompletionistFlightList(matches) {
           ${buildCompletionistRouteGraphic(match)}
         </button>
         <div class="completionist-flight-actions">
-          <a class="completionist-flight-link" href="${fr24Url}" target="_blank" rel="noopener noreferrer">Open in FR24</a>
+          <a class="completionist-flight-link" ${buildCompletionistFlightFr24LinkAttrs(match)}>Open in FR24</a>
           ${dismissButtons}
         </div>
       </article>
@@ -9922,6 +9933,9 @@ function wireMapCompletionControls() {
     if (!(target instanceof Element)) {
       return;
     }
+    if (handleFr24LiveFlightAnchorClick(event, target.closest('a[data-fr24-link="live-flight"]'))) {
+      return;
+    }
     const dismissButton = target.closest('button[data-action="dismiss-completionist-target"][data-dismiss-kind][data-dismiss-key]');
     if (dismissButton) {
       if (handleCompletionistDismissButton(dismissButton)) {
@@ -10112,6 +10126,9 @@ function wireMapCompletionControls() {
     }
     const target = event.target;
     if (!(target instanceof Element)) {
+      return;
+    }
+    if (handleFr24LiveFlightAnchorClick(event, target.closest('a[data-fr24-link="live-flight"]'))) {
       return;
     }
     const dismissButton = target.closest('button[data-action="dismiss-completionist-target"][data-dismiss-kind][data-dismiss-key]');

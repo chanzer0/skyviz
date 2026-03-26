@@ -10,7 +10,7 @@ Skyviz is a static GitHub Pages dashboard for Skycards collection exports plus t
 - User collection data stays in the browser by default, with optional user-controlled browser-storage persistence on the same device.
 - Reference enrichment comes from static snapshots in `site/data/reference/` generated from the Skycards API.
 - Completionist mode uses a shared delayed flight snapshot served from Cloudflare in production, with `site/data/runtime-config.json` selecting the active and shadow sources, `site/data/live/` kept as the local fixture path, and matching against a user's collection still happening only in that user's browser.
-- Completionist and daily-mission flight links prefer FR24 live-map lookup paths keyed by registration or callsign instead of pinning one transient FR24 flight-id URL.
+- Completionist and daily-mission flight links prefer apex FR24 live-map lookup paths keyed by registration or callsign instead of pinning one transient FR24 flight-id URL, and mobile taps now try an FR24 app-open flow on the user gesture before falling back to the web map.
 - Daily missions uses a separate standalone page at `site/daily-missions/`, opens in `All missions` mode by default, and reads the canonical `derived/daily-missions` manifest published by `fr24-discord-bot`, with query-string support for `?date=YYYY-MM-DD`, `?mission=<mission-key>`, and `?dailyMissionsManifestUrl=<absolute-url>`.
 
 ## Repository shape
