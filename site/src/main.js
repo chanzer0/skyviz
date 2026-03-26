@@ -6531,15 +6531,15 @@ function buildCompletionistFlightFr24Url(match) {
   }
   const registration = normalizeCompletionistRegistration(match.registration);
   if (registration) {
-    return `https://www.flightradar24.com/${encodeURIComponent(registration.toUpperCase())}`;
+    return `https://www.flightradar24.com/${encodeURIComponent(registration)}`;
   }
   const callsign = sanitizeText(match.callsign).toLowerCase().replace(/\s+/g, '');
   if (callsign) {
-    return `https://www.flightradar24.com/${encodeURIComponent(callsign.toUpperCase())}`;
+    return `https://www.flightradar24.com/data/flights/${encodeURIComponent(callsign)}`;
   }
   const flightNumber = sanitizeText(match.flightNumber).toLowerCase().replace(/\s+/g, '');
   if (flightNumber) {
-    return `https://www.flightradar24.com/${encodeURIComponent(flightNumber.toUpperCase())}`;
+    return `https://www.flightradar24.com/data/flights/${encodeURIComponent(flightNumber)}`;
   }
   const aircraftHex = sanitizeText(match.aircraftHex).toLowerCase().replace(/\s+/g, '');
   if (aircraftHex) {
