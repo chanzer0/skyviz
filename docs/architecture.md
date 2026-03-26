@@ -102,7 +102,7 @@ The standalone `/daily-missions/` route consumes the canonical shared artifact p
 - during localhost preview, the browser tries `site/data/live/daily-missions-manifest.json` first and falls back to the shared live manifest when that optional fixture does not exist
 - the browser does not parse raw mission text or reconstruct matching logic; it renders the published mission metadata, finder sections, and denormalized matching flights directly
 - the manifest contract exposes the stable browser-facing fields: `artifactFamily`, `schemaVersion`, `generatedAt`, `missionDate`, `publishIntervalSeconds`, `staleAfterSeconds`, `missionCount`, `rowCount`, and `snapshotPath`
-- the snapshot contract exposes `missions[]` with mission titles/counts/finder sections and `flights[]` with live coordinates, `track`, route summary, speed, altitude, FR24 URL, and `matchedMissionKeys[]`
+- the snapshot contract exposes `missions[]` with mission titles/counts/finder sections and `flights[]` with live coordinates, `track`, route summary, speed, altitude, an FR24 live-map lookup URL when registration or callsign is available, and `matchedMissionKeys[]`
 - the standalone page defaults to `All missions`, supports pinning one mission lane at a time, and uses query-string state (`?date=` and `?mission=`) only as browser-side selection hints
 
 ## Reference data contract
