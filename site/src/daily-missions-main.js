@@ -7,11 +7,6 @@ import {
   normalizeAircraftRegistration,
   normalizeAircraftTypeCode,
 } from './aircraft-markers.js?v=20260325-aircraft-markers-1';
-import {
-  buildFr24Lookup,
-  buildFr24WebUrl,
-  handleFr24LiveFlightAnchorClick,
-} from './fr24-links.js?v=20260326-fr24-app-link-1';
 import { escapeHtml, formatCompact, formatNumber, sanitizeText } from './format.js?v=20260324-daily-missions-2';
 
 const $ = (selector) => document.querySelector(selector);
@@ -151,14 +146,6 @@ function normalizeBoard(payload, source) {
   const flights = (payload?.flights || []).map((flight) => {
     const matchedMissionKeys = [...new Set((flight?.matchedMissionKeys || []).map((value) => sanitizeText(value)).filter(Boolean))];
     const matchedMissionOrdinals = matchedMissionKeys.map((key) => orderByKey.get(key)).filter(Boolean);
-    const lookup = buildFr24Lookup({
-      kind: sanitizeText(flight.fr24LookupKind),
-      value: sanitizeText(flight.fr24LookupValue),
-      registration: normalizeAircraftRegistration(flight.registration),
-      callsign: sanitizeText(flight.callsign),
-      flightNumber: sanitizeText(flight.flightNumber),
-      aircraftHex: sanitizeText(flight.aircraftHex),
-    });
     return {
       ...flight,
       id: sanitizeText(flight.id),
@@ -168,9 +155,7 @@ function normalizeBoard(payload, source) {
       typeCode: normalizeAircraftTypeCode(flight.typeCode),
       manufacturer: sanitizeText(flight.manufacturer),
       modelName: sanitizeText(flight.modelName),
-      fr24LookupKind: lookup?.kind || null,
-      fr24LookupValue: lookup?.value || null,
-      fr24Url: sanitizeText(flight.fr24Url) || buildFr24WebUrl(lookup),
+      fr24Url: sanitizeText(flight.fr24Url),
       originIata: sanitizeText(flight.originIata).toUpperCase(),
       destinationIata: sanitizeText(flight.destinationIata).toUpperCase(),
       displayRouteLabel: sanitizeText(flight.displayRouteLabel) || 'Unknown route',
@@ -236,26 +221,6 @@ function buildFlightIdentitySummary(flight) {
     bits.push(`ICAO ${flight.typeCode}`);
   }
   return bits.join(' | ') || 'Registration n/a';
-}
-
-function buildMissionFlightFr24LinkAttrs(flight) {
-  const lookup = buildFr24Lookup({
-    kind: flight?.fr24LookupKind,
-    value: flight?.fr24LookupValue,
-    registration: flight?.registration,
-    callsign: flight?.callsign,
-    flightNumber: flight?.flightNumber,
-  });
-  const attrs = [
-    'data-fr24-link="live-flight"',
-    `href="${escapeHtml(flight?.fr24Url || buildFr24WebUrl(lookup))}"`,
-    'rel="noopener noreferrer"',
-  ];
-  if (lookup) {
-    attrs.push(`data-fr24-lookup-kind="${escapeHtml(lookup.kind)}"`);
-    attrs.push(`data-fr24-lookup-value="${escapeHtml(lookup.value)}"`);
-  }
-  return attrs.join(' ');
 }
 
 function buildMissionBadges(ordinals = []) {
@@ -445,13 +410,13 @@ function buildMapPopup(flight) {
     includeHeading: true,
     includeAge: true,
   }))}
-        </div>
-        <div class="mission-map-popup-actions">
-          <a class="mission-flight-link" ${buildMissionFlightFr24LinkAttrs(flight)}>Open in FR24</a>
-        </div>
       </div>
-    `;
-  }
+      <div class="mission-map-popup-actions">
+        <a class="mission-flight-link" href="${escapeHtml(flight.fr24Url || '#')}" target="_blank" rel="noopener noreferrer">Open in FR24</a>
+      </div>
+    </div>
+  `;
+}
 
 function ensureMap() {
   if (state.map || !window.L || !el.map) return state.map;
@@ -732,7 +697,7 @@ function renderSelectedFlight() {
         ${buildMetricPills(metrics)}
       </div>
       <div class="daily-missions-selected-actions">
-        <a class="mission-flight-link" ${buildMissionFlightFr24LinkAttrs(flight)}>Open in FR24</a>
+        <a class="mission-flight-link" href="${escapeHtml(flight.fr24Url || '#')}" target="_blank" rel="noopener noreferrer">Open in FR24</a>
       </div>
     </article>`;
 }
@@ -892,12 +857,6 @@ el.intel?.addEventListener('click', async (event) => {
   const button = event.target instanceof Element ? event.target.closest('button[data-copy]') : null;
   if (!button) return;
   await copyValue(button.getAttribute('data-copy'), button.getAttribute('data-label') || 'filter values');
-});
-document.addEventListener('click', (event) => {
-  if (!(event.target instanceof Element)) {
-    return;
-  }
-  handleFr24LiveFlightAnchorClick(event, event.target.closest('a[data-fr24-link="live-flight"]'));
 });
 el.list?.addEventListener('click', (event) => {
   const button = event.target instanceof Element ? event.target.closest('button[data-flight]') : null;
