@@ -1,4 +1,12 @@
 import { fetchDailyMissionsSnapshotData } from './data.js?v=20260324-daily-missions-3';
+import {
+  buildAircraftMarkerHtml,
+  buildLeafletAircraftMarkerIcon,
+  createAircraftMarkerAssetResolver,
+  getAircraftMarkerMetrics,
+  normalizeAircraftRegistration,
+  normalizeAircraftTypeCode,
+} from './aircraft-markers.js?v=20260325-aircraft-markers-1';
 import { escapeHtml, formatCompact, formatNumber, sanitizeText } from './format.js?v=20260324-daily-missions-2';
 
 const $ = (selector) => document.querySelector(selector);
@@ -21,6 +29,7 @@ const el = {
   desktopToolbar: $('#mission-desktop-toolbar'),
   search: $('#mission-search'),
   sort: $('#mission-sort'),
+  mapDetail: $('#mission-map-detail'),
   intel: $('#mission-intel'),
   selectedFlight: $('#mission-selected-flight'),
   listMeta: $('#mission-list-meta'),
@@ -43,16 +52,29 @@ const state = {
   active: 'all',
   query: '',
   sort: 'freshest',
+  mapDetail: 'popup',
   selected: '',
-  focusSelection: false,
+  openPopupFlightId: '',
+  pendingSelectionFocus: null,
+  pendingViewportMode: 'initial',
+  viewportInitialized: false,
   seconds: 60,
   timer: null,
   map: null,
   layer: null,
   markers: new Map(),
+  markerAssetStatusByTypeCode: new Map(),
+  markerRefreshQueued: false,
   message: '',
   loadPromise: null,
 };
+
+const missionMarkerAssetResolver = createAircraftMarkerAssetResolver({
+  assetStatusByTypeCode: state.markerAssetStatusByTypeCode,
+  onAssetStatusChange: () => {
+    queueMissionMarkerRefresh();
+  },
+});
 
 const ordinal = (day) => {
   if (day % 100 >= 11 && day % 100 <= 13) return 'th';
@@ -128,13 +150,18 @@ function normalizeBoard(payload, source) {
       ...flight,
       id: sanitizeText(flight.id),
       callsign: sanitizeText(flight.callsign) || sanitizeText(flight.flightNumber) || 'Unknown flight',
-      registration: sanitizeText(flight.registration),
-      typeCode: sanitizeText(flight.typeCode),
+      flightNumber: sanitizeText(flight.flightNumber),
+      registration: normalizeAircraftRegistration(flight.registration),
+      typeCode: normalizeAircraftTypeCode(flight.typeCode),
       manufacturer: sanitizeText(flight.manufacturer),
       modelName: sanitizeText(flight.modelName),
+      fr24Url: sanitizeText(flight.fr24Url),
+      originIata: sanitizeText(flight.originIata).toUpperCase(),
+      destinationIata: sanitizeText(flight.destinationIata).toUpperCase(),
       displayRouteLabel: sanitizeText(flight.displayRouteLabel) || 'Unknown route',
       lat: Number(flight.lat),
       lon: Number(flight.lon),
+      track: Number(flight.track),
       speed: Number(flight.speed),
       altitude: Number(flight.altitude),
       distanceKm: Number(flight.distanceKm),
@@ -177,6 +204,220 @@ function visibleFlights() {
   });
 }
 
+function missionColor(ordinalValue) {
+  return COLORS[(Math.max(1, Number(ordinalValue) || 1) - 1) % COLORS.length];
+}
+
+function buildAircraftSummary(flight) {
+  return [flight.manufacturer, flight.modelName].filter(Boolean).join(' ') || flight.typeCode || 'Unknown aircraft';
+}
+
+function buildFlightIdentitySummary(flight) {
+  const bits = [];
+  if (flight.registration) {
+    bits.push(`Reg ${flight.registration}`);
+  }
+  if (flight.typeCode) {
+    bits.push(`ICAO ${flight.typeCode}`);
+  }
+  return bits.join(' | ') || 'Registration n/a';
+}
+
+function buildMissionBadges(ordinals = []) {
+  return ordinals.map((ordinalValue) => `
+    <span class="mission-flight-badge" style="--mission-accent:${missionColor(ordinalValue)}">M${ordinalValue}</span>
+  `).join('');
+}
+
+function buildMetricPills(metrics = []) {
+  return metrics.map((metric) => `
+    <span class="daily-missions-metric-pill${metric.neutral ? ' daily-missions-metric-pill--neutral' : ''}">${escapeHtml(metric.value)}</span>
+  `).join('');
+}
+
+function buildFlightTelemetryMetrics(flight, options = {}) {
+  const metrics = [];
+  if (options.includeRegistration) {
+    metrics.push({
+      value: flight.registration ? `Reg ${flight.registration}` : 'Reg n/a',
+      neutral: !flight.registration,
+    });
+  }
+  if (options.includeTypeCode) {
+    metrics.push({
+      value: flight.typeCode ? `ICAO ${flight.typeCode}` : 'ICAO n/a',
+      neutral: !flight.typeCode,
+    });
+  }
+  if (options.includeSpeed !== false) {
+    metrics.push({
+      value: Number.isFinite(flight.speed) ? `${Math.round(flight.speed)} kt` : 'Speed n/a',
+      neutral: !Number.isFinite(flight.speed),
+    });
+  }
+  if (options.includeAltitude !== false) {
+    metrics.push({
+      value: Number.isFinite(flight.altitude) ? `${formatNumber(Math.round(flight.altitude))} ft` : 'Altitude n/a',
+      neutral: !Number.isFinite(flight.altitude),
+    });
+  }
+  if (options.includeHeading) {
+    metrics.push({
+      value: Number.isFinite(flight.track) ? `Heading ${Math.round(flight.track)} deg` : 'Heading n/a',
+      neutral: !Number.isFinite(flight.track),
+    });
+  }
+  if (options.includeDistance) {
+    metrics.push({
+      value: Number.isFinite(flight.distanceKm) ? `${formatNumber(Math.round(flight.distanceKm))} km` : 'Route n/a',
+      neutral: !Number.isFinite(flight.distanceKm),
+    });
+  }
+  if (options.includeAge !== false) {
+    metrics.push({ value: ageLabel(flight.lastSeenAt), neutral: false });
+  }
+  return metrics;
+}
+
+function missionMarkerAccentColor(flight) {
+  const ordinals = flight.matchedMissionOrdinals || [];
+  const activeOrdinal = activeMission()?.ordinal || ordinals[0] || 1;
+  return state.active === 'all' && ordinals.length > 1 ? MULTI : missionColor(activeOrdinal);
+}
+
+function buildMissionMarkerBadgeStack(flight) {
+  const ordinals = (flight.matchedMissionOrdinals || []).slice(0, 3);
+  if (!ordinals.length) {
+    return '';
+  }
+  return `
+    <div class="mission-aircraft-marker-badge-stack" aria-hidden="true">
+      ${ordinals.map((ordinalValue) => `
+        <span class="mission-aircraft-marker-badge" style="--mission-accent:${missionColor(ordinalValue)}">${escapeHtml(String(ordinalValue))}</span>
+      `).join('')}
+    </div>
+  `;
+}
+
+function buildSelectedMarkerCallout(flight) {
+  if (state.mapDetail !== 'selected' || flight.id !== state.selected) {
+    return '';
+  }
+  const title = [flight.registration, flight.typeCode].filter(Boolean).join(' | ') || buildAircraftSummary(flight);
+  const meta = [
+    Number.isFinite(flight.speed) ? `${Math.round(flight.speed)} kt` : 'Speed n/a',
+    Number.isFinite(flight.altitude) ? `${formatNumber(Math.round(flight.altitude))} ft` : 'Altitude n/a',
+  ].join(' | ');
+  return `
+    <div class="mission-aircraft-marker-callout" aria-hidden="true">
+      <strong class="mission-aircraft-marker-callout-title">${escapeHtml(title)}</strong>
+      <span class="mission-aircraft-marker-callout-meta">${escapeHtml(meta)}</span>
+    </div>
+  `;
+}
+
+function getMissionMarkerMetrics(isSelected = false) {
+  return getAircraftMarkerMetrics(state.map?.getZoom?.() || VIEW.zoom, {
+    isSelected,
+    baseSize: 20,
+    minZoom: 2,
+    maxZoom: 8,
+    fallbackZoom: 2,
+    zoomStep: 3,
+    selectedSizeBoost: 6,
+    minRingInset: 4,
+    ringInsetRatio: 0.18,
+    minFallbackInset: 4,
+    fallbackInsetRatio: 0.22,
+    minPopupOffset: 14,
+    popupOffsetRatio: 0.48,
+  });
+}
+
+function buildMissionMarkerHtml(flight, isSelected = false, metrics = getMissionMarkerMetrics(isSelected)) {
+  const markerUrl = missionMarkerAssetResolver.resolveMarkerUrl(flight.typeCode);
+  return buildAircraftMarkerHtml({
+    typeCode: flight.typeCode,
+    markerUrl,
+    fallbackLabel: (flight.typeCode || flight.registration || flight.callsign || 'FLT').slice(0, 3),
+    resolverId: missionMarkerAssetResolver.resolverId,
+    rotation: Number.isFinite(flight.track) ? Number(flight.track) : 0,
+    isSelected,
+    metrics,
+    rootClassName: 'mission-aircraft-marker',
+    imageClassName: 'mission-aircraft-marker-image',
+    fallbackClassName: 'mission-aircraft-marker-fallback',
+    overlayHtml: `${buildMissionMarkerBadgeStack(flight)}${buildSelectedMarkerCallout(flight)}`,
+    styleMap: {
+      '--mission-marker-accent': missionMarkerAccentColor(flight),
+    },
+  });
+}
+
+function markerIcon(flight) {
+  const isSelected = flight.id === state.selected;
+  const metrics = getMissionMarkerMetrics(isSelected);
+  return buildLeafletAircraftMarkerIcon({
+    leaflet: window.L,
+    metrics,
+    html: buildMissionMarkerHtml(flight, isSelected, metrics),
+    shellClassName: 'mission-aircraft-marker-shell',
+  });
+}
+
+function queueMissionMarkerRefresh() {
+  if (state.markerRefreshQueued) {
+    return;
+  }
+  state.markerRefreshQueued = true;
+  requestAnimationFrame(() => {
+    state.markerRefreshQueued = false;
+    updateMissionMarkerIcons();
+  });
+}
+
+function updateMissionMarkerIcons() {
+  if (!window.L || !state.markers.size) {
+    return;
+  }
+  const visibleFlightsById = new Map(visibleFlights().map((flight) => [flight.id, flight]));
+  state.markers.forEach((marker, flightId) => {
+    const flight = visibleFlightsById.get(flightId);
+    if (!flight) {
+      return;
+    }
+    marker.setIcon(markerIcon(flight));
+    marker.setZIndexOffset(flightId === state.selected ? 1200 : 0);
+  });
+}
+
+function buildMapPopup(flight) {
+  return `
+    <div class="mission-map-popup">
+      <div class="mission-map-popup-head">
+        <div class="mission-map-popup-copy">
+          <span class="daily-missions-selected-kicker">Live flight</span>
+          <strong class="mission-map-popup-title">${escapeHtml(flight.callsign)}</strong>
+          <p class="mission-map-popup-support">${escapeHtml(buildAircraftSummary(flight))}</p>
+        </div>
+        <div class="mission-flight-badges">${buildMissionBadges(flight.matchedMissionOrdinals || [])}</div>
+      </div>
+      <p class="mission-map-popup-route">${escapeHtml(flight.displayRouteLabel)}</p>
+      <div class="mission-map-popup-metrics">
+        ${buildMetricPills(buildFlightTelemetryMetrics(flight, {
+    includeRegistration: true,
+    includeTypeCode: true,
+    includeHeading: true,
+    includeAge: true,
+  }))}
+      </div>
+      <div class="mission-map-popup-actions">
+        <a class="mission-flight-link" href="${escapeHtml(flight.fr24Url || '#')}" target="_blank" rel="noopener noreferrer">Open in FR24</a>
+      </div>
+    </div>
+  `;
+}
+
 function ensureMap() {
   if (state.map || !window.L || !el.map) return state.map;
   state.map = window.L.map(el.map, {
@@ -186,20 +427,10 @@ function ensureMap() {
     preferCanvas: true,
   });
   window.L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: 18 }).addTo(state.map);
-  return state.map;
-}
-
-function markerIcon(flight) {
-  const ordinals = flight.matchedMissionOrdinals || [];
-  const activeOrdinal = activeMission()?.ordinal || ordinals[0] || 1;
-  const color = state.active === 'all' && ordinals.length > 1 ? MULTI : COLORS[(activeOrdinal - 1) % COLORS.length];
-  const label = state.active === 'all' ? `${ordinals.length > 1 ? ordinals.length : activeOrdinal}` : `${activeOrdinal}`;
-  return window.L.divIcon({
-    className: '',
-    html: `<div class="mission-map-marker${flight.id === state.selected ? ' is-selected' : ''}" style="--mission-marker-color:${color}"><span>${escapeHtml(label)}</span></div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
+  state.map.on('zoomend', () => {
+    updateMissionMarkerIcons();
   });
+  return state.map;
 }
 
 function clusterColor(markers) {
@@ -237,15 +468,29 @@ function renderMap() {
     el.mapEmpty.textContent = 'Leaflet failed to load.';
     return;
   }
+  const previouslyOpenPopupFlightId = state.openPopupFlightId;
+  map.closePopup();
   if (state.layer) map.removeLayer(state.layer);
   state.layer = null;
   state.markers = new Map();
   const flights = visibleFlights().filter((flight) => Number.isFinite(flight.lat) && Number.isFinite(flight.lon));
   const useClusters = flights.length >= MAP_CLUSTER_THRESHOLD && typeof window.L.markerClusterGroup === 'function';
+  const visibleFlightIds = new Set(flights.map((flight) => flight.id));
   el.mapEmpty.hidden = flights.length > 0;
   el.mapEmpty.textContent = flights.length ? '' : 'No live matches are visible for the current mission filter.';
+  if (visibleFlightIds.has(previouslyOpenPopupFlightId)) {
+    state.openPopupFlightId = previouslyOpenPopupFlightId;
+  }
+  if (!visibleFlightIds.has(state.openPopupFlightId)) {
+    state.openPopupFlightId = '';
+  }
   if (!flights.length) {
-    map.setView(VIEW.center, VIEW.zoom);
+    state.pendingSelectionFocus = null;
+    if (state.pendingViewportMode || !state.viewportInitialized) {
+      map.setView(VIEW.center, VIEW.zoom);
+      state.pendingViewportMode = '';
+      state.viewportInitialized = true;
+    }
     return;
   }
   const markers = flights.map((flight) => {
@@ -253,11 +498,28 @@ function renderMap() {
       icon: markerIcon(flight),
       title: flight.callsign,
       missionOrdinals: flight.matchedMissionOrdinals || [],
+      zIndexOffset: flight.id === state.selected ? 1200 : 0,
     });
-    marker.bindPopup(`<strong>${escapeHtml(flight.callsign)}</strong><br>${escapeHtml(flight.displayRouteLabel)}<br><a href="${escapeHtml(flight.fr24Url || '#')}" target="_blank" rel="noopener noreferrer">Open in FR24</a>`);
+    marker.bindPopup(buildMapPopup(flight), {
+      maxWidth: 340,
+      className: 'mission-map-popup-shell',
+      autoPan: false,
+    });
+    marker.on('popupopen', () => {
+      state.openPopupFlightId = flight.id;
+    });
+    marker.on('popupclose', () => {
+      if (state.openPopupFlightId === flight.id) {
+        state.openPopupFlightId = '';
+      }
+    });
     marker.on('click', () => {
       state.selected = flight.id;
-      state.focusSelection = true;
+      state.openPopupFlightId = flight.id;
+      state.pendingSelectionFocus = {
+        pan: false,
+        openPopup: true,
+      };
       renderSelectedFlight();
       renderList();
       renderMap();
@@ -276,28 +538,47 @@ function renderMap() {
     : window.L.layerGroup(markers);
   markers.forEach((marker) => state.layer.addLayer(marker));
   state.layer.addTo(map);
-  if (state.focusSelection && state.selected && state.markers.has(state.selected)) {
+  if (state.pendingSelectionFocus && state.selected && state.markers.has(state.selected)) {
     const marker = state.markers.get(state.selected);
+    const selectionFocus = state.pendingSelectionFocus;
     const focusSelectedMarker = () => {
-      map.setView(marker.getLatLng(), Math.max(map.getZoom(), 5));
-      marker.openPopup();
+      if (selectionFocus.pan !== false) {
+        map.setView(marker.getLatLng(), Math.max(map.getZoom(), 5));
+      }
+      if (selectionFocus.openPopup !== false) {
+        marker.openPopup();
+      }
     };
-    if (useClusters && typeof state.layer.zoomToShowLayer === 'function') {
+    state.pendingSelectionFocus = null;
+    state.pendingViewportMode = '';
+    state.viewportInitialized = true;
+    if (selectionFocus.pan !== false && useClusters && typeof state.layer.zoomToShowLayer === 'function') {
       state.layer.zoomToShowLayer(marker, focusSelectedMarker);
       return;
     }
     focusSelectedMarker();
     return;
   }
+  state.pendingSelectionFocus = null;
+  if (state.openPopupFlightId && state.markers.has(state.openPopupFlightId)) {
+    state.markers.get(state.openPopupFlightId).openPopup();
+  }
+  if (!state.pendingViewportMode) {
+    state.viewportInitialized = true;
+    return;
+  }
   if (state.active === 'all') {
     map.setView(VIEW.center, VIEW.zoom);
-    return;
-  }
-  if (flights.length === 1) {
+  } else if (flights.length === 1) {
     map.setView([flights[0].lat, flights[0].lon], 6);
-    return;
+  } else {
+    map.fitBounds(window.L.latLngBounds(flights.map((flight) => [flight.lat, flight.lon])).pad(0.16), {
+      animate: false,
+      maxZoom: 7,
+    });
   }
-  map.fitBounds(window.L.latLngBounds(flights.map((flight) => [flight.lat, flight.lon])).pad(0.16), { animate: false, maxZoom: 7 });
+  state.pendingViewportMode = '';
+  state.viewportInitialized = true;
 }
 
 function renderRailHeader() {
@@ -395,28 +676,25 @@ function renderSelectedFlight() {
       </div>`;
     return;
   }
-  const aircraft = [flight.manufacturer, flight.modelName].filter(Boolean).join(' ') || flight.typeCode || 'Unknown aircraft';
-  const missionBadges = (flight.matchedMissionOrdinals || []).map((ordinalValue) => `<span class="mission-flight-badge" style="--mission-accent:${COLORS[(ordinalValue - 1) % COLORS.length]}">M${ordinalValue}</span>`).join('');
-  const metrics = [
-    { value: Number.isFinite(flight.speed) ? `${Math.round(flight.speed)} kt` : 'Speed n/a', neutral: !Number.isFinite(flight.speed) },
-    { value: Number.isFinite(flight.altitude) ? `${formatNumber(Math.round(flight.altitude))} ft` : 'Altitude n/a', neutral: !Number.isFinite(flight.altitude) },
-    { value: Number.isFinite(flight.distanceKm) ? `${formatNumber(Math.round(flight.distanceKm))} km` : 'Route n/a', neutral: !Number.isFinite(flight.distanceKm) },
-    { value: ageLabel(flight.lastSeenAt), neutral: false },
-  ];
+  const metrics = buildFlightTelemetryMetrics(flight, {
+    includeHeading: true,
+    includeDistance: true,
+    includeAge: true,
+  });
   el.selectedFlight.innerHTML = `
     <article class="daily-missions-selected-card">
       <div class="daily-missions-selected-head">
         <div class="daily-missions-selected-copy">
           <span class="daily-missions-selected-kicker">Highlighted flight</span>
           <h3 class="daily-missions-selected-title">${escapeHtml(flight.callsign)}</h3>
-          <p class="daily-missions-selected-support">${escapeHtml(aircraft)}</p>
+          <p class="daily-missions-selected-support">${escapeHtml(buildAircraftSummary(flight))}</p>
         </div>
-        <div class="mission-flight-badges">${missionBadges}</div>
+        <div class="mission-flight-badges">${buildMissionBadges(flight.matchedMissionOrdinals || [])}</div>
       </div>
       <p class="daily-missions-selected-route">${escapeHtml(flight.displayRouteLabel)}</p>
-      <p class="daily-missions-selected-support">${escapeHtml(flight.registration || flight.typeCode || 'Registration n/a')}</p>
+      <p class="daily-missions-selected-support">${escapeHtml(buildFlightIdentitySummary(flight))}</p>
       <div class="daily-missions-selected-metrics">
-        ${metrics.map((metric) => `<span class="daily-missions-metric-pill${metric.neutral ? ' daily-missions-metric-pill--neutral' : ''}">${escapeHtml(metric.value)}</span>`).join('')}
+        ${buildMetricPills(metrics)}
       </div>
       <div class="daily-missions-selected-actions">
         <a class="mission-flight-link" href="${escapeHtml(flight.fr24Url || '#')}" target="_blank" rel="noopener noreferrer">Open in FR24</a>
@@ -431,26 +709,20 @@ function renderList() {
   }
   updateScopeChrome(flights);
   el.list.innerHTML = flights.length ? flights.map((flight) => {
-    const badges = (flight.matchedMissionOrdinals || []).map((ordinalValue) => `<span class="mission-flight-badge" style="--mission-accent:${COLORS[(ordinalValue - 1) % COLORS.length]}">M${ordinalValue}</span>`).join('');
-    const aircraft = [flight.manufacturer, flight.modelName].filter(Boolean).join(' ') || flight.typeCode || 'Unknown aircraft';
-    const metrics = [
-      { value: Number.isFinite(flight.speed) ? `${Math.round(flight.speed)} kt` : 'Speed n/a', neutral: !Number.isFinite(flight.speed) },
-      { value: Number.isFinite(flight.altitude) ? `${formatNumber(Math.round(flight.altitude))} ft` : 'Altitude n/a', neutral: !Number.isFinite(flight.altitude) },
-      { value: ageLabel(flight.lastSeenAt), neutral: false },
-    ];
+    const metrics = buildFlightTelemetryMetrics(flight, { includeAge: true });
     return `
       <article class="mission-flight-row${flight.id === state.selected ? ' is-selected' : ''}" data-flight-id="${escapeHtml(flight.id)}">
         <button class="mission-flight-focus" type="button" data-flight="${escapeHtml(flight.id)}" aria-pressed="${flight.id === state.selected ? 'true' : 'false'}">
           <div class="mission-flight-head">
             <div class="mission-flight-title-wrap">
               <h3 class="mission-flight-title">${escapeHtml(flight.callsign)}</h3>
-              <p class="mission-flight-support">${escapeHtml(aircraft)}</p>
+              <p class="mission-flight-support">${escapeHtml(buildAircraftSummary(flight))}</p>
             </div>
-            <div class="mission-flight-badges">${badges}</div>
+            <div class="mission-flight-badges">${buildMissionBadges(flight.matchedMissionOrdinals || [])}</div>
           </div>
-          <p class="mission-flight-route">${escapeHtml(flight.displayRouteLabel)} | ${escapeHtml(flight.registration || flight.typeCode || 'Registration n/a')}</p>
+          <p class="mission-flight-route">${escapeHtml(flight.displayRouteLabel)} | ${escapeHtml(buildFlightIdentitySummary(flight))}</p>
           <div class="mission-flight-metrics">
-            ${metrics.map((metric) => `<span class="daily-missions-metric-pill${metric.neutral ? ' daily-missions-metric-pill--neutral' : ''}">${escapeHtml(metric.value)}</span>`).join('')}
+            ${buildMetricPills(metrics)}
           </div>
         </button>
       </article>`;
@@ -488,6 +760,9 @@ function renderIntel() {
 }
 
 function render() {
+  if (el.mapDetail) {
+    el.mapDetail.value = state.mapDetail;
+  }
   renderRailHeader();
   renderBanner();
   renderSelector();
@@ -506,6 +781,7 @@ async function load(silent = false) {
     return state.loadPromise;
   }
   state.loadPromise = (async () => {
+    const hadBoard = Boolean(state.board);
     const live = await fetchDailyMissionsSnapshotData();
     state.board = normalizeBoard(live.payload, live.source);
     state.source = live.source;
@@ -513,6 +789,9 @@ async function load(silent = false) {
     state.active = state.board.missionMap.has(requestedMission)
       ? requestedMission
       : (requestedMission === 'all' ? 'all' : (state.active === 'all' || state.board.missionMap.has(state.active) ? state.active : 'all'));
+    if (!state.viewportInitialized || !hadBoard) {
+      state.pendingViewportMode = 'initial';
+    }
     if (!silent) {
       state.message = live.source?.fallbackUsed ? 'Local daily-missions fixture was unavailable, so Skyviz fell back to the shared live board.' : '';
     }
@@ -546,16 +825,20 @@ el.refreshButton?.addEventListener('click', () => load());
 el.desktopRefreshButton?.addEventListener('click', () => load());
 el.search?.addEventListener('input', () => {
   state.query = sanitizeText(el.search.value);
-  state.focusSelection = false;
+  state.pendingSelectionFocus = null;
   renderList();
   renderSelectedFlight();
   renderMap();
 });
 el.sort?.addEventListener('change', () => {
   state.sort = sanitizeText(el.sort.value) || 'freshest';
-  state.focusSelection = false;
+  state.pendingSelectionFocus = null;
   renderList();
   renderSelectedFlight();
+  renderMap();
+});
+el.mapDetail?.addEventListener('change', () => {
+  state.mapDetail = sanitizeText(el.mapDetail.value) === 'selected' ? 'selected' : 'popup';
   renderMap();
 });
 el.selectors.forEach((selectorRoot) => {
@@ -564,7 +847,9 @@ el.selectors.forEach((selectorRoot) => {
     if (!button) return;
     state.active = sanitizeText(button.getAttribute('data-mission')) || 'all';
     state.selected = '';
-    state.focusSelection = false;
+    state.openPopupFlightId = '';
+    state.pendingSelectionFocus = null;
+    state.pendingViewportMode = 'scope';
     render();
   });
 });
@@ -577,7 +862,11 @@ el.list?.addEventListener('click', (event) => {
   const button = event.target instanceof Element ? event.target.closest('button[data-flight]') : null;
   if (!button) return;
   state.selected = sanitizeText(button.getAttribute('data-flight'));
-  state.focusSelection = true;
+  state.openPopupFlightId = state.selected;
+  state.pendingSelectionFocus = {
+    pan: true,
+    openPopup: true,
+  };
   renderSelectedFlight();
   renderList();
   renderMap();

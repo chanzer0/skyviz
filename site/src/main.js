@@ -45,6 +45,14 @@ import {
   resolveCardleGuess,
   selectDailyCardModel,
 } from './cardle.js?v=20260321-completionist-2';
+import {
+  buildAircraftMarkerHtml,
+  buildLeafletAircraftMarkerIcon,
+  createAircraftMarkerAssetResolver,
+  getAircraftMarkerMetrics,
+  normalizeAircraftRegistration,
+  normalizeAircraftTypeCode,
+} from './aircraft-markers.js?v=20260325-aircraft-markers-1';
 import { escapeHtml, formatCompact, formatDateFromMillis, formatLabel, formatNumber, formatPercent, sanitizeText } from './format.js?v=20260321-completionist-2';
 
 const elements = {
@@ -236,7 +244,6 @@ const MAP_HIGHLIGHT_EXTRA_RADIUS = 1.8;
 const MAP_CODE_LABEL_MIN_ZOOM = 6;
 const MAP_CODE_LABEL_MAX_COUNT = 140;
 const MAP_DRILL_LEVELS = Object.freeze(['continent', 'country', 'us-state']);
-const COMPLETIONIST_MARKER_URL_TEMPLATE = 'https://www.skydex.info/img/markers/{icao}.png';
 const COMPLETIONIST_DEFAULT_BROWSER_REFRESH_SECONDS = 60;
 const COMPLETIONIST_DEFAULT_SNAPSHOT_SECONDS = 300;
 const COMPLETIONIST_DEFAULT_STALE_SECONDS = 900;
@@ -405,6 +412,7 @@ const state = {
     codeLabelLayer: null,
     markerEntries: [],
     highlightMarkerEntries: [],
+    viewportInitialized: false,
     regionPointIndex: null,
     regionPointIndexModel: null,
     selectedRegion: null,
@@ -546,6 +554,13 @@ const state = {
     pendingCardleInputFocus: false,
   },
 };
+
+const completionistMarkerAssetResolver = createAircraftMarkerAssetResolver({
+  assetStatusByTypeCode: state.map.completionist.markerAssetStatusByTypeCode,
+  onAssetStatusChange: () => {
+    queueCompletionistMarkerRefresh();
+  },
+});
 
 function toRadians(value) {
   const numericValue = Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -5835,11 +5850,11 @@ function setCompletionMeta(target, shownCount, totalCount, label) {
 }
 
 function normalizeCompletionistCode(value) {
-  return sanitizeText(value).toUpperCase();
+  return normalizeAircraftTypeCode(value);
 }
 
 function normalizeCompletionistRegistration(value) {
-  return sanitizeText(value).toUpperCase().replace(/\s+/g, '');
+  return normalizeAircraftRegistration(value);
 }
 
 function hasValidCompletionistRegistration(value) {
@@ -6510,14 +6525,6 @@ function getSelectedCompletionistMatch() {
   return getCompletionistViewState().selectedMatch;
 }
 
-function buildCompletionistMarkerUrl(typeCode) {
-  const cleanedTypeCode = normalizeCompletionistCode(typeCode);
-  if (!cleanedTypeCode) {
-    return '';
-  }
-  return COMPLETIONIST_MARKER_URL_TEMPLATE.replace('{icao}', encodeURIComponent(cleanedTypeCode));
-}
-
 function buildCompletionistFlightFr24Url(match) {
   if (!match || typeof match !== 'object') {
     return 'https://www.flightradar24.com/';
@@ -6618,19 +6625,20 @@ function buildCompletionistRouteName(airport, fallbackCode = '') {
 
 function buildCompletionistRouteAircraftIconHtml(match) {
   const cleanedTypeCode = normalizeCompletionistCode(match?.typeCode);
-  const markerUrl = resolveCompletionistMarkerUrl(cleanedTypeCode);
+  const markerUrl = completionistMarkerAssetResolver.resolveMarkerUrl(cleanedTypeCode);
   if (!markerUrl) {
     return '<span class="completionist-route-icon-fallback" aria-hidden="true">→</span>';
   }
   return `
     <img
       class="completionist-route-icon-image"
-      src="${markerUrl}"
+      src="${escapeHtml(markerUrl)}"
       alt=""
       loading="lazy"
+      data-resolver-id="${escapeHtml(completionistMarkerAssetResolver.resolverId)}"
       data-type-code="${escapeHtml(cleanedTypeCode)}"
       style="transform: rotate(90deg);"
-      onerror="window.__skyvizCompletionistMarkerError?.(this.dataset.typeCode); this.closest('.completionist-route-icon')?.classList.add('is-fallback'); this.remove()"
+      onerror="window.__skyvizAircraftMarkerError?.(this.dataset.resolverId, this.dataset.typeCode); this.closest('.completionist-route-icon')?.classList.add('is-fallback'); this.remove()"
     >
     <span class="completionist-route-icon-fallback" aria-hidden="true">→</span>
   `;
@@ -6778,16 +6786,20 @@ function buildCompletionistFilterChips(counts, disabled = false) {
 }
 
 function getCompletionistMarkerMetrics(isSelected = false) {
-  const zoom = Number(state.map.instance?.getZoom?.() || MAP_BASE_VIEW.zoom);
-  const safeZoom = Math.max(2, Math.min(8, zoom));
-  const baseSize = Math.round(16 + ((safeZoom - 2) * 3));
-  const markerSize = baseSize + (isSelected ? 4 : 0);
-  return {
-    markerSize,
-    markerRingInset: Math.max(4, Math.round(markerSize * 0.18)),
-    markerFallbackInset: Math.max(4, Math.round(markerSize * 0.2)),
-    popupOffset: Math.max(12, Math.round(markerSize * 0.45)),
-  };
+  return getAircraftMarkerMetrics(state.map.instance?.getZoom?.() || MAP_BASE_VIEW.zoom, {
+    isSelected,
+    baseSize: 16,
+    minZoom: 2,
+    maxZoom: 8,
+    zoomStep: 3,
+    selectedSizeBoost: 4,
+    minRingInset: 4,
+    ringInsetRatio: 0.18,
+    minFallbackInset: 4,
+    fallbackInsetRatio: 0.2,
+    minPopupOffset: 12,
+    popupOffsetRatio: 0.45,
+  });
 }
 
 function queueCompletionistMarkerRefresh() {
@@ -6803,73 +6815,36 @@ function queueCompletionistMarkerRefresh() {
   });
 }
 
-function markCompletionistMarkerAssetMissing(typeCode) {
-  const cleanedTypeCode = normalizeCompletionistCode(typeCode);
-  if (!cleanedTypeCode) {
-    return;
-  }
-  if (state.map.completionist.markerAssetStatusByTypeCode.get(cleanedTypeCode) === 'missing') {
-    return;
-  }
-  state.map.completionist.markerAssetStatusByTypeCode.set(cleanedTypeCode, 'missing');
-  queueCompletionistMarkerRefresh();
-}
-
-function resolveCompletionistMarkerUrl(typeCode) {
-  const cleanedTypeCode = normalizeCompletionistCode(typeCode);
-  if (!cleanedTypeCode) {
-    return '';
-  }
-  const existingStatus = state.map.completionist.markerAssetStatusByTypeCode.get(cleanedTypeCode);
-  if (existingStatus === 'missing') {
-    return '';
-  }
-  const markerUrl = buildCompletionistMarkerUrl(cleanedTypeCode);
-  if (!existingStatus && typeof window.Image === 'function') {
-    state.map.completionist.markerAssetStatusByTypeCode.set(cleanedTypeCode, 'loading');
-    const image = new window.Image();
-    image.onload = () => {
-      state.map.completionist.markerAssetStatusByTypeCode.set(cleanedTypeCode, 'ready');
-    };
-    image.onerror = () => {
-      markCompletionistMarkerAssetMissing(cleanedTypeCode);
-    };
-    image.src = markerUrl;
-  }
-  return markerUrl;
-}
-
-if (typeof window !== 'undefined') {
-  window.__skyvizCompletionistMarkerError = markCompletionistMarkerAssetMissing;
-}
-
 function buildCompletionistMarkerHtml(match, isSelected = false) {
-  const fallbackLabel = escapeHtml((match.typeCode || match.registration || match.displayFlightLabel || 'FLT').slice(0, 3));
   const cleanedTypeCode = normalizeCompletionistCode(match.typeCode);
-  const markerUrl = resolveCompletionistMarkerUrl(cleanedTypeCode);
-  const rotation = Number.isFinite(match.track) ? Number(match.track) : 0;
+  const markerUrl = completionistMarkerAssetResolver.resolveMarkerUrl(cleanedTypeCode);
   const metrics = getCompletionistMarkerMetrics(isSelected);
-  return `
-    <div
-      class="completionist-flight-marker${isSelected ? ' is-selected' : ''}${markerUrl ? '' : ' is-fallback'}"
-      style="--completionist-marker-size:${metrics.markerSize}px;--completionist-marker-ring-inset:${metrics.markerRingInset}px;--completionist-marker-fallback-inset:${metrics.markerFallbackInset}px;"
-    >
-      ${markerUrl
-    ? `<img src="${markerUrl}" alt="" loading="lazy" data-type-code="${escapeHtml(cleanedTypeCode)}" style="transform: rotate(${rotation}deg);" onerror="window.__skyvizCompletionistMarkerError?.(this.dataset.typeCode); this.closest('.completionist-flight-marker')?.classList.add('is-fallback'); this.remove()">`
-    : ''}
-      <span class="completionist-flight-marker-fallback">${fallbackLabel}</span>
-    </div>
-  `;
+  return buildAircraftMarkerHtml({
+    typeCode: cleanedTypeCode,
+    markerUrl,
+    fallbackLabel: (match.typeCode || match.registration || match.displayFlightLabel || 'FLT').slice(0, 3),
+    resolverId: completionistMarkerAssetResolver.resolverId,
+    rotation: Number.isFinite(match.track) ? Number(match.track) : 0,
+    isSelected,
+    metrics,
+    rootClassName: 'completionist-flight-marker',
+    imageClassName: 'completionist-flight-marker-image',
+    fallbackClassName: 'completionist-flight-marker-fallback',
+    styleMap: {
+      '--completionist-marker-size': `${metrics.markerSize}px`,
+      '--completionist-marker-ring-inset': `${metrics.markerRingInset}px`,
+      '--completionist-marker-fallback-inset': `${metrics.markerFallbackInset}px`,
+    },
+  });
 }
 
 function buildCompletionistMarkerIcon(match, isSelected = false) {
   const metrics = getCompletionistMarkerMetrics(isSelected);
-  return window.L.divIcon({
-    className: 'completionist-flight-marker-shell',
+  return buildLeafletAircraftMarkerIcon({
+    leaflet: window.L,
+    metrics,
     html: buildCompletionistMarkerHtml(match, isSelected),
-    iconSize: [metrics.markerSize, metrics.markerSize],
-    iconAnchor: [Math.round(metrics.markerSize / 2), Math.round(metrics.markerSize / 2)],
-    popupAnchor: [0, -metrics.popupOffset],
+    shellClassName: 'completionist-flight-marker-shell',
   });
 }
 
@@ -8199,13 +8174,15 @@ function renderCompletionistLeafletMap(model) {
   elements.mapLegend.hidden = true;
   elements.mapLegend.innerHTML = '';
   const hasRenderedView = state.map.completionist.hasRenderedView;
+  const viewportInitialized = state.map.viewportInitialized;
   clearMapLayers();
   const visibleMatches = getVisibleCompletionistMatches();
   if (!visibleMatches.length) {
-    if (!hasRenderedView) {
+    if (!hasRenderedView && !viewportInitialized) {
       map.setView(MAP_BASE_VIEW.center, MAP_BASE_VIEW.zoom);
     }
     state.map.completionist.hasRenderedView = true;
+    state.map.viewportInitialized = true;
     requestAnimationFrame(() => {
       map.invalidateSize();
     });
@@ -8224,6 +8201,7 @@ function renderCompletionistLeafletMap(model) {
     marker.bindPopup(buildCompletionistPopup(match), {
       maxWidth: 340,
       className: 'completionist-popup-shell',
+      autoPan: false,
     });
     marker.on('click', () => {
       if (state.map.completionist.selectedFlightId === match.id) {
@@ -8247,30 +8225,14 @@ function renderCompletionistLeafletMap(model) {
   if (selectedMatch) {
     const selectedMarker = markersByFlightId.get(selectedMatch.id);
     if (selectedMarker) {
-      const destinationPoint = getCompletionistFocusedDestinationPoint(selectedMatch);
-      if (destinationPoint) {
-        const bounds = window.L.latLngBounds([
-          selectedMarker.getLatLng(),
-          [destinationPoint.lat, destinationPoint.lon],
-        ]);
-        if (bounds.isValid()) {
-          map.fitBounds(bounds.pad(0.18), {
-            animate: false,
-            maxZoom: Math.max(map.getZoom(), 5),
-          });
-        } else {
-          map.setView(selectedMarker.getLatLng(), Math.max(map.getZoom(), 4));
-        }
-      } else {
-        map.setView(selectedMarker.getLatLng(), Math.max(map.getZoom(), 4));
-      }
       selectedMarker.openPopup();
     }
-  } else if (!hasRenderedView) {
+  } else if (!hasRenderedView && !viewportInitialized) {
     fitCompletionistMatchesOnMap(visibleMatches);
   }
 
   state.map.completionist.hasRenderedView = true;
+  state.map.viewportInitialized = true;
   requestAnimationFrame(() => {
     map.invalidateSize();
   });
@@ -8309,7 +8271,10 @@ function renderLeafletMap(model) {
   state.map.missingLayer.addTo(map);
   state.map.capturedLayer.addTo(map);
   state.map.markerEntries = markerEntries;
-  map.setView(MAP_BASE_VIEW.center, MAP_BASE_VIEW.zoom);
+  if (!state.map.viewportInitialized) {
+    map.setView(MAP_BASE_VIEW.center, MAP_BASE_VIEW.zoom);
+  }
+  state.map.viewportInitialized = true;
   syncMapMarkerRadii();
   syncMapCodeLabels();
   elements.mapLegend.innerHTML = `
@@ -9600,6 +9565,7 @@ function renderDashboard(model, references = null) {
   if (references) {
     state.references = references;
   }
+  state.map.viewportInitialized = false;
   state.map.regionPointIndex = null;
   state.map.regionPointIndexModel = null;
   state.map.selectedRegion = null;
