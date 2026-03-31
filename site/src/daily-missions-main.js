@@ -1,4 +1,7 @@
-import { fetchDailyMissionsSnapshotData } from './data.js?v=20260324-daily-missions-3';
+import {
+  fetchDailyMissionsManifestData,
+  fetchDailyMissionsSnapshotData,
+} from './data.js?v=20260331-live-version-poll-1';
 import {
   buildAircraftMarkerHtml,
   buildLeafletAircraftMarkerIcon,
@@ -45,9 +48,11 @@ const TILE_ATTRIBUTION = '&copy; OpenStreetMap contributors &copy; CARTO';
 const COLORS = ['#0f3f70', '#168392', '#ec7f35'];
 const MULTI = '#7e9e4d';
 const MAP_CLUSTER_THRESHOLD = 80;
+const DAILY_MISSIONS_MANIFEST_POLL_SECONDS = 15;
 const VIEW = { center: [20, 0], zoom: 1.75 };
 const state = {
   board: null,
+  manifest: null,
   source: null,
   active: 'all',
   query: '',
@@ -118,6 +123,10 @@ const countdownLabel = (seconds) => {
   const rem = safe % 60;
   return hours ? `${hours}h ${minutes}m` : `${minutes}m ${String(rem).padStart(2, '0')}s`;
 };
+
+const boardVersion = (manifest) => sanitizeText(manifest?.version)
+  || sanitizeText(manifest?.snapshotPath)
+  || sanitizeText(manifest?.generatedAt);
 
 const missionFromUrl = () => sanitizeText(new URL(window.location.href).searchParams.get('mission'));
 const dateFromUrl = () => sanitizeText(new URL(window.location.href).searchParams.get('date'));
@@ -776,26 +785,40 @@ function render() {
   window.history.replaceState({}, '', url);
 }
 
-async function load(silent = false) {
+async function load(silent = false, options = {}) {
   if (state.loadPromise) {
     return state.loadPromise;
   }
+  const forceSnapshot = options.forceSnapshot === true;
   state.loadPromise = (async () => {
-    const hadBoard = Boolean(state.board);
-    const live = await fetchDailyMissionsSnapshotData();
-    state.board = normalizeBoard(live.payload, live.source);
-    state.source = live.source;
-    const requestedMission = missionFromUrl();
-    state.active = state.board.missionMap.has(requestedMission)
-      ? requestedMission
-      : (requestedMission === 'all' ? 'all' : (state.active === 'all' || state.board.missionMap.has(state.active) ? state.active : 'all'));
-    if (!state.viewportInitialized || !hadBoard) {
-      state.pendingViewportMode = 'initial';
+    const manifestData = await fetchDailyMissionsManifestData();
+    const nextVersion = boardVersion(manifestData.manifest);
+    const currentVersion = boardVersion(state.manifest);
+    const shouldFetchSnapshot = forceSnapshot
+      || !state.board
+      || !nextVersion
+      || nextVersion !== currentVersion;
+    if (shouldFetchSnapshot) {
+      const hadBoard = Boolean(state.board);
+      const live = await fetchDailyMissionsSnapshotData({ manifestData });
+      state.board = normalizeBoard(live.payload, live.source);
+      state.manifest = live.manifest;
+      state.source = live.source;
+      const requestedMission = missionFromUrl();
+      state.active = state.board.missionMap.has(requestedMission)
+        ? requestedMission
+        : (requestedMission === 'all' ? 'all' : (state.active === 'all' || state.board.missionMap.has(state.active) ? state.active : 'all'));
+      if (!state.viewportInitialized || !hadBoard) {
+        state.pendingViewportMode = 'initial';
+      }
+    } else {
+      state.manifest = manifestData.manifest;
+      state.source = manifestData.source;
     }
     if (!silent) {
-      state.message = live.source?.fallbackUsed ? 'Local daily-missions fixture was unavailable, so Skyviz fell back to the shared live board.' : '';
+      state.message = state.source?.fallbackUsed ? 'Local daily-missions fixture was unavailable, so Skyviz fell back to the shared live board.' : '';
     }
-    state.seconds = Math.max(0, Math.ceil(((Date.parse(state.board.generatedAt || 0) + ((Number(state.board.publishIntervalSeconds) || 300) * 1000)) - Date.now()) / 1000));
+    state.seconds = DAILY_MISSIONS_MANIFEST_POLL_SECONDS;
     render();
   })().finally(() => {
     state.loadPromise = null;
@@ -821,8 +844,8 @@ async function copyValue(value, label) {
   }, 2500);
 }
 
-el.refreshButton?.addEventListener('click', () => load());
-el.desktopRefreshButton?.addEventListener('click', () => load());
+el.refreshButton?.addEventListener('click', () => load(false, { forceSnapshot: true }));
+el.desktopRefreshButton?.addEventListener('click', () => load(false, { forceSnapshot: true }));
 el.search?.addEventListener('input', () => {
   state.query = sanitizeText(el.search.value);
   state.pendingSelectionFocus = null;

@@ -1,6 +1,7 @@
 import { renderBarList } from './charts.js';
 import {
   buildDashboardModel,
+  fetchCompletionistManifestData,
   fetchCompletionistSnapshotData,
   loadAirportGameData,
   loadAirportGameManifest,
@@ -8,7 +9,7 @@ import {
   loadReferenceData,
   loadReferenceManifest,
   parseUserCollection,
-} from './data.js?v=20260323-cloudflare-live-2';
+} from './data.js?v=20260331-live-version-poll-1';
 import {
   DAILY_GAME_NAME,
   buildAirportGuessComparison,
@@ -244,7 +245,7 @@ const MAP_HIGHLIGHT_EXTRA_RADIUS = 1.8;
 const MAP_CODE_LABEL_MIN_ZOOM = 6;
 const MAP_CODE_LABEL_MAX_COUNT = 140;
 const MAP_DRILL_LEVELS = Object.freeze(['continent', 'country', 'us-state']);
-const COMPLETIONIST_DEFAULT_BROWSER_REFRESH_SECONDS = 60;
+const COMPLETIONIST_MANIFEST_POLL_SECONDS = 15;
 const COMPLETIONIST_DEFAULT_SNAPSHOT_SECONDS = 300;
 const COMPLETIONIST_DEFAULT_STALE_SECONDS = 900;
 const COMPLETIONIST_SEARCH_DEBOUNCE_MS = 140;
@@ -446,7 +447,7 @@ const state = {
       dismissedModelKeys: new Set(),
       refreshTimer: null,
       searchTimer: null,
-      secondsUntilRefresh: COMPLETIONIST_DEFAULT_BROWSER_REFRESH_SECONDS,
+      secondsUntilRefresh: COMPLETIONIST_MANIFEST_POLL_SECONDS,
       requestToken: 0,
       layer: null,
       focusedDestinationLayer: null,
@@ -5337,7 +5338,7 @@ function resetCompletionistState({ preserveSnapshot = false } = {}) {
   state.map.completionist.selectedFlightId = '';
   state.map.completionist.dismissedAirportKeys = new Set();
   state.map.completionist.dismissedModelKeys = new Set();
-  state.map.completionist.secondsUntilRefresh = COMPLETIONIST_DEFAULT_BROWSER_REFRESH_SECONDS;
+  state.map.completionist.secondsUntilRefresh = COMPLETIONIST_MANIFEST_POLL_SECONDS;
   state.map.completionist.markersByFlightId = new Map();
   state.map.completionist.hasRenderedView = false;
   state.map.completionist.markerRefreshQueued = false;
@@ -5896,11 +5897,20 @@ function getCompletionistSnapshotGeneratedAtMillis() {
   return Number.isFinite(millis) ? millis : null;
 }
 
+function getCompletionistManifestVersion(manifest) {
+  const version = sanitizeText(manifest?.version);
+  if (version) {
+    return version;
+  }
+  const snapshotPath = sanitizeText(manifest?.snapshotPath);
+  if (snapshotPath) {
+    return snapshotPath;
+  }
+  return sanitizeText(manifest?.generatedAt);
+}
+
 function getCompletionistBrowserRefreshSeconds() {
-  return Math.max(
-    15,
-    Number(state.map.completionist.manifest?.uiRefreshIntervalSeconds) || COMPLETIONIST_DEFAULT_BROWSER_REFRESH_SECONDS,
-  );
+  return COMPLETIONIST_MANIFEST_POLL_SECONDS;
 }
 
 function getCompletionistSnapshotSeconds() {
@@ -7272,10 +7282,11 @@ function renderCompletionistFlightList(matches) {
   }).join('');
 }
 
-async function refreshCompletionistSnapshot() {
+async function refreshCompletionistSnapshot(options = {}) {
   if (!state.model || !state.references) {
     return;
   }
+  const forceSnapshot = options.forceSnapshot === true;
   const requestToken = state.map.completionist.requestToken + 1;
   state.map.completionist.requestToken = requestToken;
   state.map.completionist.loading = true;
@@ -7285,16 +7296,31 @@ async function refreshCompletionistSnapshot() {
     renderMapCompletionistPanel(state.model);
   }
   try {
-    const liveData = await fetchCompletionistSnapshotData();
+    const manifestData = await fetchCompletionistManifestData();
     if (state.map.completionist.requestToken !== requestToken) {
       return;
     }
-    state.map.completionist.source = liveData.source || null;
-    state.map.completionist.manifest = liveData.manifest;
-    state.map.completionist.snapshot = liveData.payload;
-    state.map.completionist.matches = buildCompletionistMatches(state.model, state.references, liveData.rows);
-    if (!getActiveCompletionistMatches().some((match) => match.id === state.map.completionist.selectedFlightId)) {
-      state.map.completionist.selectedFlightId = '';
+    const nextVersion = getCompletionistManifestVersion(manifestData.manifest);
+    const currentVersion = getCompletionistManifestVersion(state.map.completionist.manifest);
+    const shouldFetchSnapshot = forceSnapshot
+      || !state.map.completionist.snapshot
+      || !nextVersion
+      || nextVersion !== currentVersion;
+    if (shouldFetchSnapshot) {
+      const liveData = await fetchCompletionistSnapshotData({ manifestData });
+      if (state.map.completionist.requestToken !== requestToken) {
+        return;
+      }
+      state.map.completionist.source = liveData.source || null;
+      state.map.completionist.manifest = liveData.manifest;
+      state.map.completionist.snapshot = liveData.payload;
+      state.map.completionist.matches = buildCompletionistMatches(state.model, state.references, liveData.rows);
+      if (!getActiveCompletionistMatches().some((match) => match.id === state.map.completionist.selectedFlightId)) {
+        state.map.completionist.selectedFlightId = '';
+      }
+    } else {
+      state.map.completionist.source = manifestData.source || null;
+      state.map.completionist.manifest = manifestData.manifest;
     }
   } catch (error) {
     if (state.map.completionist.requestToken !== requestToken) {
@@ -9900,7 +9926,7 @@ function wireMapCompletionControls() {
   });
 
   elements.mapCompletionistRefreshButton?.addEventListener('click', () => {
-    void refreshCompletionistSnapshot();
+    void refreshCompletionistSnapshot({ forceSnapshot: true });
   });
 
   elements.mapCompletionistRestoreButton?.addEventListener('click', () => {

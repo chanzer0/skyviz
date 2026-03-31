@@ -286,10 +286,22 @@ export async function loadAirportGameData() {
   return airportGameState.dataPromise;
 }
 
-export async function fetchCompletionistSnapshotData() {
+export async function fetchCompletionistManifestData() {
   const source = await resolveCompletionistManifestSource();
   const manifestUrl = source.manifestUrl;
   const manifest = await fetchJson(manifestUrl);
+  return {
+    manifestUrl,
+    manifest,
+    source,
+  };
+}
+
+export async function fetchCompletionistSnapshotData(options = {}) {
+  const manifestData = options.manifestData || await fetchCompletionistManifestData();
+  const source = manifestData.source;
+  const manifestUrl = manifestData.manifestUrl;
+  const manifest = manifestData.manifest;
   const snapshotPath = resolveLiveDatasetPath(
     manifest?.snapshotPath || './completionist-snapshot.json',
     manifestUrl,
@@ -312,7 +324,7 @@ export async function fetchCompletionistSnapshotData() {
   };
 }
 
-export async function fetchDailyMissionsSnapshotData() {
+export async function fetchDailyMissionsManifestData() {
   const source = await resolveDailyMissionsManifestSource();
   let manifestUrl = source.manifestUrl;
   let manifest = await fetchJsonOptional(manifestUrl);
@@ -330,6 +342,22 @@ export async function fetchDailyMissionsSnapshotData() {
   if (!manifest) {
     throw new Error(`Failed to load ${source.manifestUrl}`);
   }
+  return {
+    manifestUrl,
+    manifest,
+    source: {
+      ...effectiveSource,
+      manifestUrl,
+      fallbackUsed,
+    },
+  };
+}
+
+export async function fetchDailyMissionsSnapshotData(options = {}) {
+  const manifestData = options.manifestData || await fetchDailyMissionsManifestData();
+  const manifestUrl = manifestData.manifestUrl;
+  const manifest = manifestData.manifest;
+  const source = manifestData.source;
   const snapshotPath = resolveLiveDatasetPath(
     manifest?.snapshotPath || './daily-missions-snapshot.json',
     manifestUrl,
@@ -340,10 +368,8 @@ export async function fetchDailyMissionsSnapshotData() {
     manifest,
     payload,
     source: {
-      ...effectiveSource,
-      manifestUrl,
+      ...source,
       snapshotUrl: snapshotPath,
-      fallbackUsed,
     },
   };
 }
