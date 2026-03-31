@@ -55,6 +55,11 @@ import {
   normalizeAircraftTypeCode,
 } from './aircraft-markers.js?v=20260325-aircraft-markers-1';
 import { escapeHtml, formatCompact, formatDateFromMillis, formatLabel, formatNumber, formatPercent, sanitizeText } from './format.js?v=20260321-completionist-2';
+import {
+  applyLiveRefreshStatus,
+  buildLiveRefreshStatus,
+  formatRefreshAbsoluteTime,
+} from './live-refresh.js';
 
 const elements = {
   bootLoader: document.querySelector('#boot-loader'),
@@ -111,8 +116,10 @@ const elements = {
   mapDrillProgress: document.querySelector('#map-drill-progress'),
   mapCompletionistPanel: document.querySelector('#map-completionist-panel'),
   mapCompletionistStatus: document.querySelector('#map-completionist-status'),
-  mapCompletionistRefresh: document.querySelector('#map-completionist-refresh'),
   mapCompletionistUpdated: document.querySelector('#map-completionist-updated'),
+  mapCompletionistStatusCard: document.querySelector('#map-completionist-status-card'),
+  mapCompletionistStatusPrimary: document.querySelector('#map-completionist-status-primary'),
+  mapCompletionistStatusSecondary: document.querySelector('#map-completionist-status-secondary'),
   mapCompletionistSearch: document.querySelector('#map-completionist-search'),
   mapCompletionistSort: document.querySelector('#map-completionist-sort'),
   mapCompletionistFilterBar: document.querySelector('#map-completionist-filter-bar'),
@@ -5258,9 +5265,18 @@ function clearDashboardPanels() {
   elements.mapLegend.innerHTML = '';
   elements.mapAirportKpi.textContent = '';
   elements.mapCompletionistStatus.textContent = '';
-  elements.mapCompletionistRefresh.textContent = '--';
   elements.mapCompletionistUpdated.textContent = '--';
   elements.mapCompletionistStatus.title = '';
+  applyLiveRefreshStatus({
+    card: elements.mapCompletionistStatusCard,
+    primary: elements.mapCompletionistStatusPrimary,
+    secondary: elements.mapCompletionistStatusSecondary,
+  }, buildLiveRefreshStatus({
+    nextCheckSeconds: state.map.completionist.secondsUntilRefresh,
+    staleAfterSeconds: getCompletionistStaleSeconds(),
+    loading: false,
+    hasData: false,
+  }));
   if (elements.mapCompletionistSearch) {
     elements.mapCompletionistSearch.value = '';
   }
@@ -5927,20 +5943,6 @@ function getCompletionistStaleSeconds() {
   );
 }
 
-function formatShortDuration(totalSeconds) {
-  const seconds = Math.max(0, Math.round(Number(totalSeconds) || 0));
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const remainingSeconds = seconds % 60;
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m ${remainingSeconds}s`;
-  }
-  return `${remainingSeconds}s`;
-}
-
 function formatRelativeAgeFromMillis(ageMillis) {
   const safeMillis = Math.max(0, Number(ageMillis) || 0);
   const seconds = Math.round(safeMillis / 1000);
@@ -5957,16 +5959,7 @@ function formatRelativeAgeFromMillis(ageMillis) {
 }
 
 function formatCompletionistTimestamp(value) {
-  const millis = Date.parse(value || '');
-  if (!Number.isFinite(millis)) {
-    return '--';
-  }
-  return new Date(millis).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  return formatRefreshAbsoluteTime(value) || '--';
 }
 
 function buildCompletionistAirportDisplay(airport, fallbackCode = '') {
@@ -7011,27 +7004,15 @@ function focusCompletionistFlight(model, flightId, options = {}) {
   }
 }
 
-function buildCompletionistStatusMessage(generatedAtMillis, snapshotAgeMillis, isStale) {
-  if (state.map.completionist.loading && !state.map.completionist.snapshot) {
-    return 'Refreshing now. Waiting for the first shared snapshot.';
-  }
-  if (state.map.completionist.error && !state.map.completionist.snapshot) {
-    return `Refresh unavailable. ${state.map.completionist.error}`;
-  }
-  if (!state.map.completionist.snapshot) {
-    return 'Waiting for the first shared snapshot.';
-  }
-  const refreshLabel = state.map.completionist.loading
-    ? 'Refreshing now'
-    : `Refresh in ${formatShortDuration(state.map.completionist.secondsUntilRefresh)}`;
-  const snapshotLabel = generatedAtMillis
-    ? `Snapshot ${formatRelativeAgeFromMillis(snapshotAgeMillis)}${isStale ? ' (stale)' : ''}`
-    : 'Snapshot pending';
-  const parts = [refreshLabel, snapshotLabel];
-  if (state.map.completionist.error) {
-    parts.push('Last refresh failed');
-  }
-  return `${parts.join('. ')}.`;
+function buildCompletionistStatusMessage() {
+  return buildLiveRefreshStatus({
+    generatedAtMillis: getCompletionistSnapshotGeneratedAtMillis(),
+    nextCheckSeconds: state.map.completionist.secondsUntilRefresh,
+    staleAfterSeconds: getCompletionistStaleSeconds(),
+    loading: state.map.completionist.loading,
+    hasData: Boolean(state.map.completionist.snapshot),
+    error: state.map.completionist.error,
+  }).primary;
 }
 
 function buildCompletionistSourceSummaryText() {
@@ -7169,6 +7150,18 @@ function renderMapCompletionistPanel(model) {
   elements.mapCompletionistStatus.title = state.map.completionist.manifest?.generatedAt
     ? formatCompletionistTimestamp(state.map.completionist.manifest.generatedAt)
     : '';
+  applyLiveRefreshStatus({
+    card: elements.mapCompletionistStatusCard,
+    primary: elements.mapCompletionistStatusPrimary,
+    secondary: elements.mapCompletionistStatusSecondary,
+  }, buildLiveRefreshStatus({
+    generatedAtMillis,
+    nextCheckSeconds: state.map.completionist.secondsUntilRefresh,
+    staleAfterSeconds: getCompletionistStaleSeconds(),
+    loading: state.map.completionist.loading,
+    hasData: Boolean(state.map.completionist.snapshot),
+    error: state.map.completionist.error,
+  }));
   if (elements.mapCompletionistSearch) {
     elements.mapCompletionistSearch.value = state.map.completionist.query;
     elements.mapCompletionistSearch.disabled = !model;

@@ -11,6 +11,7 @@ import {
   normalizeAircraftTypeCode,
 } from './aircraft-markers.js?v=20260325-aircraft-markers-1';
 import { escapeHtml, formatCompact, formatNumber, sanitizeText } from './format.js?v=20260324-daily-missions-2';
+import { applyLiveRefreshStatus, buildLiveRefreshStatus } from './live-refresh.js';
 
 const $ = (selector) => document.querySelector(selector);
 const el = {
@@ -19,14 +20,12 @@ const el = {
   summary: $('#mission-board-summary'),
   desktopTitle: $('#mission-desktop-title'),
   desktopSummary: $('#mission-desktop-summary'),
-  updated: $('#mission-updated-value'),
-  refresh: $('#mission-refresh-value'),
-  flights: $('#mission-flights-value'),
-  source: $('#mission-source-value'),
-  desktopUpdated: $('#mission-desktop-updated'),
-  desktopRefresh: $('#mission-desktop-refresh'),
-  desktopFlights: $('#mission-desktop-flights'),
-  desktopSource: $('#mission-desktop-source'),
+  refreshCard: $('#mission-refresh-card'),
+  refreshPrimary: $('#mission-refresh-primary'),
+  refreshSecondary: $('#mission-refresh-secondary'),
+  desktopRefreshCard: $('#mission-desktop-refresh-card'),
+  desktopRefreshPrimary: $('#mission-desktop-refresh-primary'),
+  desktopRefreshSecondary: $('#mission-desktop-refresh-secondary'),
   banner: $('#mission-banner'),
   toolbar: $('#mission-toolbar-summary'),
   desktopToolbar: $('#mission-desktop-toolbar'),
@@ -37,8 +36,6 @@ const el = {
   selectedFlight: $('#mission-selected-flight'),
   listMeta: $('#mission-list-meta'),
   list: $('#mission-flight-list'),
-  refreshButton: $('#mission-refresh-button'),
-  desktopRefreshButton: $('#mission-desktop-refresh-button'),
   map: $('#mission-map'),
   mapEmpty: $('#mission-map-empty'),
 };
@@ -71,6 +68,7 @@ const state = {
   markerAssetStatusByTypeCode: new Map(),
   markerRefreshQueued: false,
   message: '',
+  refreshError: '',
   loadPromise: null,
 };
 
@@ -95,33 +93,11 @@ const friendlyDate = (dateKey) => {
   return Number.isNaN(date.getTime()) ? 'Daily Missions' : `${months[date.getUTCMonth()]} ${date.getUTCDate()}${ordinal(date.getUTCDate())}`;
 };
 
-const timeLabel = (value) => {
-  const timestamp = Date.parse(value || '');
-  return Number.isFinite(timestamp)
-    ? new Date(timestamp).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      timeZone: 'UTC',
-      timeZoneName: 'short',
-    })
-    : '--';
-};
-
 const ageLabel = (lastSeenAt) => {
   const delta = Math.max(0, Math.floor(Date.now() / 1000) - Math.floor(Number(lastSeenAt) || 0));
   if (delta < 60) return `${delta}s ago`;
   if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
   return `${Math.floor(delta / 3600)}h ago`;
-};
-
-const countdownLabel = (seconds) => {
-  const safe = Math.max(0, Math.floor(Number(seconds) || 0));
-  const hours = Math.floor(safe / 3600);
-  const minutes = Math.floor((safe % 3600) / 60);
-  const rem = safe % 60;
-  return hours ? `${hours}h ${minutes}m` : `${minutes}m ${String(rem).padStart(2, '0')}s`;
 };
 
 const boardVersion = (manifest) => sanitizeText(manifest?.version)
@@ -606,49 +582,46 @@ function renderRailHeader() {
   if (el.desktopSummary) {
     el.desktopSummary.textContent = summary;
   }
-  const updated = timeLabel(state.board.generatedAt);
-  const refresh = countdownLabel(state.seconds);
-  const flights = formatNumber(state.board.rowCount || 0);
-  const sourceText = sanitizeText(state.source?.role) ? `${source} | ${sanitizeText(state.source.role)}` : source;
-  el.updated.textContent = updated;
-  el.refresh.textContent = refresh;
-  el.flights.textContent = flights;
-  el.source.textContent = sourceText;
-  if (el.desktopUpdated) {
-    el.desktopUpdated.textContent = updated;
-  }
-  if (el.desktopRefresh) {
-    el.desktopRefresh.textContent = refresh;
-  }
-  if (el.desktopFlights) {
-    el.desktopFlights.textContent = flights;
-  }
-  if (el.desktopSource) {
-    el.desktopSource.textContent = sourceText;
-  }
+  const refreshStatus = buildLiveRefreshStatus({
+    generatedAt: state.board?.generatedAt,
+    nextCheckSeconds: state.seconds,
+    staleAfterSeconds: Number(state.board?.staleAfterSeconds) || 900,
+    loading: Boolean(state.loadPromise),
+    hasData: Boolean(state.board),
+    error: state.refreshError,
+  });
+  applyLiveRefreshStatus({
+    card: el.refreshCard,
+    primary: el.refreshPrimary,
+    secondary: el.refreshSecondary,
+  }, refreshStatus);
+  applyLiveRefreshStatus({
+    card: el.desktopRefreshCard,
+    primary: el.desktopRefreshPrimary,
+    secondary: el.desktopRefreshSecondary,
+  }, refreshStatus);
   document.title = `${friendlyDate(state.board.missionDate)} Daily Missions | Skyviz`;
 }
 
 function renderBanner() {
-  const stale = Date.now() - Date.parse(state.board?.generatedAt || 0) > (Number(state.board?.staleAfterSeconds) || 900) * 1000;
-  const copy = state.message || (stale ? 'Mission feed is stale.' : '');
+  const copy = state.message || '';
   el.banner.hidden = !copy;
   el.banner.textContent = copy;
-  el.banner.dataset.tone = stale ? 'warning' : 'quiet';
+  el.banner.dataset.tone = /^unable|failed/i.test(copy) ? 'warning' : 'quiet';
 }
 
 function renderSelector() {
   const totalMissionMatches = (state.board.missions || []).reduce((sum, mission) => sum + mission.matchCount, 0);
   const html = [
     `
-    <button class="mission-selector-card mission-selector-card--all${state.active === 'all' ? ' is-active' : ''}" type="button" data-mission="all" aria-pressed="${state.active === 'all' ? 'true' : 'false'}">
+    <button class="mission-selector-card mission-selector-card--all${state.active === 'all' ? ' is-active' : ''}" type="button" data-mission="all" aria-pressed="${state.active === 'all' ? 'true' : 'false'}" title="Whole mission board">
       <span class="mission-selector-card-index">All missions</span>
       <strong class="mission-selector-card-title">Whole mission board</strong>
       <span class="mission-selector-card-meta">${formatCompact(totalMissionMatches)} mission matches across ${formatNumber(state.board.rowCount || 0)} flights</span>
     </button>`,
     ...state.board.missions.map((mission) => `
-      <button class="mission-selector-card${mission.key === state.active ? ' is-active' : ''}" type="button" data-mission="${escapeHtml(mission.key)}" aria-pressed="${mission.key === state.active ? 'true' : 'false'}">
-        <span class="mission-selector-card-index" style="--mission-accent:${COLORS[(mission.ordinal - 1) % COLORS.length]}">Mission ${mission.ordinal}</span>
+      <button class="mission-selector-card${mission.key === state.active ? ' is-active' : ''}" type="button" data-mission="${escapeHtml(mission.key)}" aria-pressed="${mission.key === state.active ? 'true' : 'false'}" title="${escapeHtml(mission.title)}">
+        <span class="mission-selector-card-index" style="--mission-accent:${COLORS[(mission.ordinal - 1) % COLORS.length]}">M${mission.ordinal}</span>
         <strong class="mission-selector-card-title">${escapeHtml(mission.title)}</strong>
         <span class="mission-selector-card-meta">${mission.truncated ? `${formatNumber(mission.displayedMatchCount)} shown of ${formatCompact(mission.matchCount)}` : `${formatNumber(mission.matchCount)} live matches`}</span>
       </button>`),
@@ -791,35 +764,48 @@ async function load(silent = false, options = {}) {
   }
   const forceSnapshot = options.forceSnapshot === true;
   state.loadPromise = (async () => {
-    const manifestData = await fetchDailyMissionsManifestData();
-    const nextVersion = boardVersion(manifestData.manifest);
-    const currentVersion = boardVersion(state.manifest);
-    const shouldFetchSnapshot = forceSnapshot
-      || !state.board
-      || !nextVersion
-      || nextVersion !== currentVersion;
-    if (shouldFetchSnapshot) {
-      const hadBoard = Boolean(state.board);
-      const live = await fetchDailyMissionsSnapshotData({ manifestData });
-      state.board = normalizeBoard(live.payload, live.source);
-      state.manifest = live.manifest;
-      state.source = live.source;
-      const requestedMission = missionFromUrl();
-      state.active = state.board.missionMap.has(requestedMission)
-        ? requestedMission
-        : (requestedMission === 'all' ? 'all' : (state.active === 'all' || state.board.missionMap.has(state.active) ? state.active : 'all'));
-      if (!state.viewportInitialized || !hadBoard) {
-        state.pendingViewportMode = 'initial';
+    if (state.board) {
+      render();
+    }
+    try {
+      const manifestData = await fetchDailyMissionsManifestData();
+      const nextVersion = boardVersion(manifestData.manifest);
+      const currentVersion = boardVersion(state.manifest);
+      const shouldFetchSnapshot = forceSnapshot
+        || !state.board
+        || !nextVersion
+        || nextVersion !== currentVersion;
+      if (shouldFetchSnapshot) {
+        const hadBoard = Boolean(state.board);
+        const live = await fetchDailyMissionsSnapshotData({ manifestData });
+        state.board = normalizeBoard(live.payload, live.source);
+        state.manifest = live.manifest;
+        state.source = live.source;
+        const requestedMission = missionFromUrl();
+        state.active = state.board.missionMap.has(requestedMission)
+          ? requestedMission
+          : (requestedMission === 'all' ? 'all' : (state.active === 'all' || state.board.missionMap.has(state.active) ? state.active : 'all'));
+        if (!state.viewportInitialized || !hadBoard) {
+          state.pendingViewportMode = 'initial';
+        }
+      } else {
+        state.manifest = manifestData.manifest;
+        state.source = manifestData.source;
       }
-    } else {
-      state.manifest = manifestData.manifest;
-      state.source = manifestData.source;
+      state.refreshError = '';
+      if (!silent) {
+        state.message = state.source?.fallbackUsed ? 'Local daily-missions fixture was unavailable, so Skyviz fell back to the shared live board.' : '';
+      }
+      state.seconds = DAILY_MISSIONS_MANIFEST_POLL_SECONDS;
+      render();
+    } catch (error) {
+      state.refreshError = error instanceof Error ? error.message : 'Unable to refresh the mission board.';
+      if (state.board) {
+        render();
+        return state.board;
+      }
+      throw error;
     }
-    if (!silent) {
-      state.message = state.source?.fallbackUsed ? 'Local daily-missions fixture was unavailable, so Skyviz fell back to the shared live board.' : '';
-    }
-    state.seconds = DAILY_MISSIONS_MANIFEST_POLL_SECONDS;
-    render();
   })().finally(() => {
     state.loadPromise = null;
   });
@@ -844,8 +830,6 @@ async function copyValue(value, label) {
   }, 2500);
 }
 
-el.refreshButton?.addEventListener('click', () => load(false, { forceSnapshot: true }));
-el.desktopRefreshButton?.addEventListener('click', () => load(false, { forceSnapshot: true }));
 el.search?.addEventListener('input', () => {
   state.query = sanitizeText(el.search.value);
   state.pendingSelectionFocus = null;

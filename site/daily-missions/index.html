@@ -41,8 +41,8 @@
       crossorigin=""
     >
     <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
-    <link rel="stylesheet" href="../styles.css?v=20260325-daily-missions-aircraft-1">
-    <link rel="stylesheet" href="./styles.css?v=20260325-daily-missions-aircraft-1">
+    <link rel="stylesheet" href="../styles.css?v=20260331-refresh-ui-1">
+    <link rel="stylesheet" href="./styles.css?v=20260331-daily-topbar-3">
   </head>
   <body class="daily-missions-page-body">
     <a class="skip-link" href="#daily-missions-main">Skip to mission board</a>
@@ -56,22 +56,24 @@
                 <p class="eyebrow">Skyviz Live</p>
                 <h1 id="mission-desktop-title">Daily Missions</h1>
                 <p id="mission-desktop-summary" class="daily-missions-summary">Loading the current mission board...</p>
+                <div
+                  id="mission-desktop-refresh-card"
+                  class="daily-missions-topbar-refresh-inline"
+                  data-tone="loading"
+                  aria-live="polite"
+                >
+                  <p class="daily-missions-topbar-refresh-primary" id="mission-desktop-refresh-primary">Waiting for the first update.</p>
+                  <p class="daily-missions-topbar-refresh-secondary" id="mission-desktop-refresh-secondary">Checking for the first shared update now.</p>
+                </div>
               </div>
             </div>
-            <div class="daily-missions-topbar-meta" aria-live="polite">
-              <article class="daily-missions-meta-card"><span class="daily-missions-meta-label">Updated</span><strong id="mission-desktop-updated" class="daily-missions-meta-value">--</strong></article>
-              <article class="daily-missions-meta-card"><span class="daily-missions-meta-label">Next refresh</span><strong id="mission-desktop-refresh" class="daily-missions-meta-value">--</strong></article>
-              <article class="daily-missions-meta-card"><span class="daily-missions-meta-label">Flights</span><strong id="mission-desktop-flights" class="daily-missions-meta-value">--</strong></article>
-              <article class="daily-missions-meta-card"><span class="daily-missions-meta-label">Feed</span><strong id="mission-desktop-source" class="daily-missions-meta-value">--</strong></article>
+            <div class="daily-missions-topbar-selector-stack" aria-labelledby="mission-desktop-scope-heading">
+              <div class="daily-missions-section-head">
+                <span class="daily-missions-section-label" id="mission-desktop-scope-heading">Mission filters</span>
+                <span id="mission-desktop-toolbar" class="daily-missions-section-meta">Loading current scope...</span>
+              </div>
+              <div id="mission-desktop-selector" class="daily-missions-selector daily-missions-selector--topbar" data-mission-selector role="list"></div>
             </div>
-            <button id="mission-desktop-refresh-button" class="daily-missions-primary-action" type="button">Refresh now</button>
-          </div>
-          <div class="daily-missions-topbar-scopes" aria-labelledby="mission-desktop-scope-heading">
-            <div class="daily-missions-section-head">
-              <span class="daily-missions-section-label" id="mission-desktop-scope-heading">Mission filters</span>
-              <span id="mission-desktop-toolbar" class="daily-missions-section-meta">Loading current scope...</span>
-            </div>
-            <div id="mission-desktop-selector" class="daily-missions-selector daily-missions-selector--topbar" data-mission-selector role="list"></div>
           </div>
         </section>
 
@@ -93,7 +95,6 @@
                   <h2 id="mission-board-title">Daily Missions</h2>
                   <p id="mission-board-summary" class="daily-missions-summary">Loading the current mission board...</p>
                 </div>
-                <button id="mission-refresh-button" class="daily-missions-primary-action" type="button">Refresh now</button>
                 <div class="daily-missions-section-head">
                   <span class="daily-missions-section-label">Mission filters</span>
                   <span id="mission-toolbar-summary" class="daily-missions-section-meta">Loading current scope...</span>
@@ -103,10 +104,16 @@
 
               <section class="daily-missions-rail-section daily-missions-rail-meta" aria-live="polite">
                 <div class="daily-missions-meta-grid">
-                  <article class="daily-missions-meta-card"><span class="daily-missions-meta-label">Updated</span><strong id="mission-updated-value" class="daily-missions-meta-value">--</strong></article>
-                  <article class="daily-missions-meta-card"><span class="daily-missions-meta-label">Next refresh</span><strong id="mission-refresh-value" class="daily-missions-meta-value">--</strong></article>
-                  <article class="daily-missions-meta-card"><span class="daily-missions-meta-label">Flights</span><strong id="mission-flights-value" class="daily-missions-meta-value">--</strong></article>
-                  <article class="daily-missions-meta-card"><span class="daily-missions-meta-label">Feed</span><strong id="mission-source-value" class="daily-missions-meta-value">--</strong></article>
+                  <article
+                    id="mission-refresh-card"
+                    class="daily-missions-meta-card live-refresh-status-card live-refresh-status-card--wide"
+                    data-tone="loading"
+                  >
+                    <div class="live-refresh-status">
+                      <p class="live-refresh-status-primary" id="mission-refresh-primary">Waiting for the first update.</p>
+                      <p class="live-refresh-status-secondary" id="mission-refresh-secondary">Checking for the first shared update now.</p>
+                    </div>
+                  </article>
                 </div>
                 <p id="mission-banner" class="daily-missions-banner" hidden></p>
               </section>
@@ -203,6 +210,6 @@
       src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"
       crossorigin=""
     ></script>
-    <script type="module" src="../src/daily-missions-main.js?v=20260331-live-version-poll-1"></script>
+    <script type="module" src="../src/daily-missions-main.js?v=20260331-daily-topbar-3"></script>
   </body>
 </html>

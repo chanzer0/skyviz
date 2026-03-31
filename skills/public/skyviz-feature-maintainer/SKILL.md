@@ -15,11 +15,14 @@ Use this skill for normal product and maintenance work in this repository. It ke
 2. Review `docs/golden-principles.md` before making cross-cutting changes.
 3. Read [references/code-map.md](references/code-map.md) to find the runtime surface you are changing.
 4. Use [references/change-checklists.md](references/change-checklists.md) for follow-through after you know the change type.
-5. Before any Cloudflare write operation, run `python scripts/check_cloudflare_account.py` and confirm Wrangler is on `seansailer28@gmail.com` / `172da47da00e3b33810d2e9c73c9a0b9`.
-6. Make the smallest coherent change that keeps browser-local processing and GitHub Pages deployment intact unless the task explicitly changes those constraints.
-7. Update docs, scripts, and workflow artifacts in the same pass when behavior changes.
-8. For completionist source changes, keep `site/data/runtime-config.json` explicit about `activeSource` vs `shadowSource`, and prefer `python scripts/compare_completionist_sources.py` before flipping production reads.
-9. Run the offline checks. For visual bug work, reproduce in Playwright before edits and confirm in Playwright after edits; for local real-data browser validation, refresh the repo-root fixture with `python scripts/export_skycards_user.py` if it is missing or stale, then start `python scripts/serve_local_preview.py` and use `?devLoad=skycards_user` or manual upload, never the built-in example deck; report when browser validation was not possible.
+5. Before starting local preview, Playwright, or any other long-running local process, check whether the intended port is already occupied and avoid adding another listener on top of an existing server.
+6. Before any Cloudflare write operation, run `python scripts/check_cloudflare_account.py` and confirm Wrangler is on `seansailer28@gmail.com` / `172da47da00e3b33810d2e9c73c9a0b9`.
+7. Make the smallest coherent change that keeps browser-local processing and GitHub Pages deployment intact unless the task explicitly changes those constraints.
+8. Update docs, scripts, and workflow artifacts in the same pass when behavior changes.
+9. For completionist source changes, keep `site/data/runtime-config.json` explicit about `activeSource` vs `shadowSource`, and prefer `python scripts/compare_completionist_sources.py` before flipping production reads.
+10. Run the offline checks. For visual bug work, reproduce in Playwright before edits and confirm in Playwright after edits; for local real-data browser validation, refresh the repo-root fixture with `python scripts/export_skycards_user.py` if it is missing or stale, then start `python scripts/serve_local_preview.py` and use `?devLoad=skycards_user` or manual upload, never the built-in example deck; report when browser validation was not possible.
+   If `serve_local_preview.py` exits with a reachability-check failure, treat that as a port conflict or split-loopback problem and free the conflicting listener or rerun with `--port` before browser validation.
+11. Clean up any preview servers, ad hoc HTTP servers, or browser automation processes you started for the task unless the user explicitly asked to keep them running.
 
 ## Default rules
 

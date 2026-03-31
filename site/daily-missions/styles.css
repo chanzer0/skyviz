@@ -29,8 +29,8 @@
 
 .daily-missions-topbar {
   position: relative;
-  gap: 0.84rem;
-  padding: 0.88rem 0.96rem 0.94rem;
+  gap: 0.56rem;
+  padding: 0.78rem 0.92rem 0.84rem;
   overflow: hidden;
   border-color: rgba(12, 49, 78, 0.24);
   background:
@@ -72,8 +72,8 @@
 
 .daily-missions-topbar-main {
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(320px, 1fr) auto;
-  gap: 0.8rem;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.42fr);
+  gap: 0.72rem;
   align-items: start;
 }
 
@@ -85,7 +85,7 @@
 
 .daily-missions-topbar-copy {
   display: grid;
-  gap: 0.08rem;
+  gap: 0.1rem;
 }
 
 .daily-missions-topbar #mission-desktop-title {
@@ -103,10 +103,44 @@
   max-width: 38rem;
 }
 
-.daily-missions-topbar-meta {
+.daily-missions-topbar-refresh-inline {
   display: grid;
-  gap: 0.38rem;
-  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+  gap: 0.02rem;
+  max-width: 36rem;
+  margin-top: 0.1rem;
+}
+
+.daily-missions-topbar-refresh-primary,
+.daily-missions-topbar-refresh-secondary {
+  margin: 0;
+  line-height: 1.28;
+}
+
+.daily-missions-topbar-refresh-primary {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: rgba(242, 248, 255, 0.92);
+}
+
+.daily-missions-topbar-refresh-secondary {
+  font-size: 0.68rem;
+  color: rgba(220, 236, 252, 0.74);
+}
+
+.daily-missions-topbar-refresh-inline[data-tone='warning'] .daily-missions-topbar-refresh-primary,
+.daily-missions-topbar-refresh-inline[data-tone='warning'] .daily-missions-topbar-refresh-secondary {
+  color: #ffe4b7;
+}
+
+.daily-missions-topbar-refresh-inline[data-tone='error'] .daily-missions-topbar-refresh-primary,
+.daily-missions-topbar-refresh-inline[data-tone='error'] .daily-missions-topbar-refresh-secondary {
+  color: #ffd1b4;
+}
+
+.daily-missions-topbar-selector-stack {
+  display: grid;
+  gap: 0.32rem;
+  min-width: 0;
 }
 
 .daily-missions-topbar .eyebrow {
@@ -123,32 +157,17 @@
   color: #fff;
 }
 
-.daily-missions-topbar .daily-missions-meta-card {
-  background: rgba(242, 248, 255, 0.1);
-  border-color: rgba(188, 221, 248, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
-}
-
 .daily-missions-topbar .daily-missions-meta-label,
 .daily-missions-topbar .daily-missions-section-label,
 .daily-missions-topbar .daily-missions-section-meta {
   color: rgba(225, 239, 255, 0.74);
 }
 
-.daily-missions-topbar .daily-missions-meta-value {
-  color: #f6fbff;
-}
-
-.daily-missions-topbar-scopes {
-  display: grid;
-  gap: 0.44rem;
-}
-
-.daily-missions-topbar-scopes .daily-missions-section-head {
+.daily-missions-topbar-selector-stack .daily-missions-section-head {
   align-items: center;
 }
 
-.daily-missions-topbar-scopes .daily-missions-section-meta {
+.daily-missions-topbar-selector-stack .daily-missions-section-meta {
   color: rgba(235, 246, 255, 0.82);
 }
 
@@ -314,7 +333,6 @@
   grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
 }
 
-.daily-missions-primary-action,
 .mission-copy-button,
 .mission-flight-link {
   display: inline-flex;
@@ -330,27 +348,14 @@
   cursor: pointer;
 }
 
-.daily-missions-primary-action {
-  width: 100%;
-  min-height: 2.45rem;
-  border: 1px solid rgba(15, 63, 112, 0.18);
-  padding: 0.42rem 0.86rem;
-  color: #10233a;
-  background: linear-gradient(135deg, #f4c88d, #ffebc6);
-}
-
-.daily-missions-topbar .daily-missions-primary-action {
-  width: auto;
-  min-width: 10.5rem;
-  min-height: 2.35rem;
-  align-self: center;
-  box-shadow: 0 16px 30px rgba(5, 18, 30, 0.24);
-}
-
 .daily-missions-meta-grid {
   display: grid;
   gap: 0.48rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.daily-missions-meta-grid .live-refresh-status-card--wide {
+  grid-column: 1 / -1;
 }
 
 .daily-missions-meta-card {
@@ -411,6 +416,10 @@
   scrollbar-width: none;
 }
 
+.daily-missions-selector--topbar {
+  grid-auto-columns: minmax(138px, 1fr);
+}
+
 .daily-missions-selector::-webkit-scrollbar {
   display: none;
 }
@@ -459,6 +468,9 @@
 
 .daily-missions-topbar .mission-selector-card {
   border-color: rgba(188, 221, 248, 0.18);
+  gap: 0.16rem;
+  padding: 0.48rem 0.56rem;
+  border-radius: 14px;
   background:
     radial-gradient(circle at top right, rgba(255, 255, 255, 0.08), transparent 42%),
     rgba(244, 249, 255, 0.08);
@@ -486,8 +498,23 @@
   color: rgba(244, 249, 255, 0.9);
 }
 
+.daily-missions-topbar .mission-selector-card-index {
+  min-height: 1.34rem;
+  padding: 0.08rem 0.42rem;
+  font-size: 0.56rem;
+}
+
+.daily-missions-topbar .mission-selector-card-title {
+  font-size: 0.82rem;
+  line-height: 1.16;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
 .daily-missions-topbar .mission-selector-card-meta {
-  color: rgba(235, 246, 255, 0.78);
+  display: none;
 }
 
 .daily-missions-selected-flight {
@@ -943,6 +970,16 @@
   .daily-missions-rail-top,
   .daily-missions-rail-meta {
     display: none;
+  }
+}
+
+@media (max-width: 1380px) {
+  .daily-missions-topbar-main {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.26fr);
+  }
+
+  .daily-missions-selector--topbar {
+    grid-auto-columns: minmax(128px, 1fr);
   }
 }
 

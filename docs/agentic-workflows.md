@@ -14,17 +14,20 @@ This repository is meant to be maintained by agents and humans using the same re
 
 1. Read `docs/index.md` and the relevant architecture or workflow docs.
 2. Use the closest repo-local skill when one applies.
-3. Make the smallest coherent change that satisfies the task.
-4. Before any Cloudflare write operation, run `python scripts/check_cloudflare_account.py` and confirm Wrangler is on `seansailer28@gmail.com` / `172da47da00e3b33810d2e9c73c9a0b9`.
-5. Update docs, scripts, and workflow artifacts in the same pass when behavior changes.
-6. Run the offline checks and report any live validation that was not possible.
-7. Record durable architectural or workflow decisions in `docs/decisions/` when the reasoning will matter later.
+3. Before starting any local preview server, browser harness, or other long-running dev process, check whether the target port is already in use and avoid stacking a new listener onto an occupied port.
+4. Make the smallest coherent change that satisfies the task.
+5. Before any Cloudflare write operation, run `python scripts/check_cloudflare_account.py` and confirm Wrangler is on `seansailer28@gmail.com` / `172da47da00e3b33810d2e9c73c9a0b9`.
+6. Update docs, scripts, and workflow artifacts in the same pass when behavior changes.
+7. Run the offline checks and report any live validation that was not possible.
+8. Clean up any long-running local servers or browser automation processes started for the task unless the user explicitly asks to keep them running.
+9. Record durable architectural or workflow decisions in `docs/decisions/` when the reasoning will matter later.
 
 ## Visual bug validation
 
 - Reproduce the bug in Playwright before changing code.
 - Re-run the same Playwright flow after edits to confirm the fix.
 - Start local browser validation with `python scripts/serve_local_preview.py`.
+- If `serve_local_preview.py` exits immediately with a reachability-check failure, free the conflicting local listener on that port or rerun with `--port` before attempting browser validation.
 - When a real collection is needed for UI validation, use the repo-root `skycards_user.json` fixture (`http://localhost:4173/?devLoad=skycards_user` or manual upload) and do not use the built-in example deck.
 - If that repo-root fixture is missing or stale, refresh it locally with `python scripts/export_skycards_user.py` using the gitignored `.env.skycards.local` file instead of pasting credentials into chat or shell history.
 - Capture Playwright evidence (snapshot and/or screenshot) when possible.

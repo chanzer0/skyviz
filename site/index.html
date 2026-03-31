@@ -42,7 +42,7 @@
       crossorigin=""
     >
     <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
-    <link rel="stylesheet" href="./styles.css?v=20260324-daily-missions-2">
+    <link rel="stylesheet" href="./styles.css?v=20260331-refresh-ui-1">
   </head>
   <body>
     <a class="skip-link" href="#dashboard">Skip to dashboard</a>
@@ -436,11 +436,19 @@
                     </button>
                   </div>
                 </div>
-                <div class="map-completionist-summary-strip">
-                  <p class="panel-kpi-line map-completionist-status-line" id="map-completionist-status"></p>
-                  <div class="map-completionist-inline-stats" aria-hidden="true" hidden>
-                    <strong id="map-completionist-refresh">--</strong>
-                    <strong id="map-completionist-updated">--</strong>
+                <div
+                  class="map-completionist-summary-strip live-refresh-status-card"
+                  id="map-completionist-status-card"
+                  aria-live="polite"
+                  data-tone="loading"
+                >
+                  <div class="live-refresh-status">
+                    <p class="live-refresh-status-primary" id="map-completionist-status-primary">Waiting for the first update.</p>
+                    <p class="live-refresh-status-secondary" id="map-completionist-status-secondary">Checking for the first shared update now.</p>
+                  </div>
+                  <div class="sr-only" aria-hidden="true">
+                    <span id="map-completionist-status"></span>
+                    <span id="map-completionist-updated"></span>
                   </div>
                 </div>
                 <div class="map-completionist-toolbar">
@@ -958,7 +966,7 @@
       type="module"
       src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.1.0/model-viewer.min.js"
     ></script>
-    <script type="module" src="./src/main.js?v=20260331-live-version-poll-1"></script>
+    <script type="module" src="./src/main.js?v=20260331-refresh-ui-1"></script>
   </body>
 </html>
 
