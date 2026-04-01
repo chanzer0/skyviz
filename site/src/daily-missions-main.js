@@ -31,7 +31,6 @@ const el = {
   desktopToolbar: $('#mission-desktop-toolbar'),
   search: $('#mission-search'),
   sort: $('#mission-sort'),
-  mapDetail: $('#mission-map-detail'),
   intel: $('#mission-intel'),
   selectedFlight: $('#mission-selected-flight'),
   listMeta: $('#mission-list-meta'),
@@ -44,7 +43,6 @@ const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png
 const TILE_ATTRIBUTION = '&copy; OpenStreetMap contributors &copy; CARTO';
 const COLORS = ['#0f3f70', '#168392', '#ec7f35'];
 const MULTI = '#7e9e4d';
-const MAP_CLUSTER_THRESHOLD = 80;
 const DAILY_MISSIONS_MANIFEST_POLL_SECONDS = 15;
 const VIEW = { center: [20, 0], zoom: 1.75 };
 const state = {
@@ -54,9 +52,7 @@ const state = {
   active: 'all',
   query: '',
   sort: 'freshest',
-  mapDetail: 'popup',
   selected: '',
-  openPopupFlightId: '',
   pendingSelectionFocus: null,
   pendingViewportMode: 'initial',
   viewportInitialized: false,
@@ -270,33 +266,36 @@ function missionMarkerAccentColor(flight) {
   return state.active === 'all' && ordinals.length > 1 ? MULTI : missionColor(activeOrdinal);
 }
 
-function buildMissionMarkerBadgeStack(flight) {
-  const ordinals = (flight.matchedMissionOrdinals || []).slice(0, 3);
-  if (!ordinals.length) {
-    return '';
-  }
-  return `
-    <div class="mission-aircraft-marker-badge-stack" aria-hidden="true">
-      ${ordinals.map((ordinalValue) => `
-        <span class="mission-aircraft-marker-badge" style="--mission-accent:${missionColor(ordinalValue)}">${escapeHtml(String(ordinalValue))}</span>
-      `).join('')}
-    </div>
-  `;
-}
-
 function buildSelectedMarkerCallout(flight) {
-  if (state.mapDetail !== 'selected' || flight.id !== state.selected) {
+  if (flight.id !== state.selected) {
     return '';
   }
-  const title = [flight.registration, flight.typeCode].filter(Boolean).join(' | ') || buildAircraftSummary(flight);
-  const meta = [
-    Number.isFinite(flight.speed) ? `${Math.round(flight.speed)} kt` : 'Speed n/a',
-    Number.isFinite(flight.altitude) ? `${formatNumber(Math.round(flight.altitude))} ft` : 'Altitude n/a',
-  ].join(' | ');
+  const fr24Url = sanitizeText(flight.fr24Url);
+  const telemetryLine = [
+    Number.isFinite(flight.speed) ? `${Math.round(flight.speed)} kt` : '',
+    Number.isFinite(flight.altitude) ? `${formatNumber(Math.round(flight.altitude))} ft` : '',
+  ].filter(Boolean).join(' • ');
+  const registrationLabel = flight.registration || 'No reg';
   return `
-    <div class="mission-aircraft-marker-callout" aria-hidden="true">
-      <strong class="mission-aircraft-marker-callout-title">${escapeHtml(title)}</strong>
-      <span class="mission-aircraft-marker-callout-meta">${escapeHtml(meta)}</span>
+    <div class="mission-aircraft-marker-callout" role="group" aria-label="${escapeHtml(`Selected telemetry for ${flight.callsign}`)}">
+      <div class="mission-aircraft-marker-callout-main">
+        <strong class="mission-aircraft-marker-callout-title">${escapeHtml(buildAircraftSummary(flight))}</strong>
+        <span class="mission-aircraft-marker-callout-registration">${escapeHtml(registrationLabel)}</span>
+      </div>
+      ${(telemetryLine || fr24Url) ? `
+        <div class="mission-aircraft-marker-callout-side">
+          ${telemetryLine ? `<span class="mission-aircraft-marker-callout-telemetry">${escapeHtml(telemetryLine)}</span>` : ''}
+          ${fr24Url ? `
+            <a
+              class="mission-aircraft-marker-callout-link"
+              data-mission-marker-link
+              href="${escapeHtml(fr24Url)}"
+              target="_blank"
+              rel="noopener noreferrer"
+            >FR24</a>
+          ` : ''}
+        </div>
+      ` : ''}
     </div>
   `;
 }
@@ -332,7 +331,7 @@ function buildMissionMarkerHtml(flight, isSelected = false, metrics = getMission
     rootClassName: 'mission-aircraft-marker',
     imageClassName: 'mission-aircraft-marker-image',
     fallbackClassName: 'mission-aircraft-marker-fallback',
-    overlayHtml: `${buildMissionMarkerBadgeStack(flight)}${buildSelectedMarkerCallout(flight)}`,
+    overlayHtml: buildSelectedMarkerCallout(flight),
     styleMap: {
       '--mission-marker-accent': missionMarkerAccentColor(flight),
     },
@@ -376,33 +375,6 @@ function updateMissionMarkerIcons() {
   });
 }
 
-function buildMapPopup(flight) {
-  return `
-    <div class="mission-map-popup">
-      <div class="mission-map-popup-head">
-        <div class="mission-map-popup-copy">
-          <span class="daily-missions-selected-kicker">Live flight</span>
-          <strong class="mission-map-popup-title">${escapeHtml(flight.callsign)}</strong>
-          <p class="mission-map-popup-support">${escapeHtml(buildAircraftSummary(flight))}</p>
-        </div>
-        <div class="mission-flight-badges">${buildMissionBadges(flight.matchedMissionOrdinals || [])}</div>
-      </div>
-      <p class="mission-map-popup-route">${escapeHtml(flight.displayRouteLabel)}</p>
-      <div class="mission-map-popup-metrics">
-        ${buildMetricPills(buildFlightTelemetryMetrics(flight, {
-    includeRegistration: true,
-    includeTypeCode: true,
-    includeHeading: true,
-    includeAge: true,
-  }))}
-      </div>
-      <div class="mission-map-popup-actions">
-        <a class="mission-flight-link" href="${escapeHtml(flight.fr24Url || '#')}" target="_blank" rel="noopener noreferrer">Open in FR24</a>
-      </div>
-    </div>
-  `;
-}
-
 function ensureMap() {
   if (state.map || !window.L || !el.map) return state.map;
   state.map = window.L.map(el.map, {
@@ -415,35 +387,21 @@ function ensureMap() {
   state.map.on('zoomend', () => {
     updateMissionMarkerIcons();
   });
+  state.map.on('click', (event) => {
+    const target = event.originalEvent?.target;
+    if (target instanceof Element && target.closest('.leaflet-marker-icon')) {
+      return;
+    }
+    if (!state.selected) {
+      return;
+    }
+    state.selected = '';
+    state.pendingSelectionFocus = null;
+    renderSelectedFlight();
+    renderList();
+    renderMap();
+  });
   return state.map;
-}
-
-function clusterColor(markers) {
-  const ordinals = new Set();
-  markers.forEach((marker) => {
-    const missionOrdinals = Array.isArray(marker.options?.missionOrdinals) ? marker.options.missionOrdinals : [];
-    missionOrdinals.forEach((ordinalValue) => {
-      if (Number.isFinite(ordinalValue)) {
-        ordinals.add(ordinalValue);
-      }
-    });
-  });
-  if (state.active === 'all' && ordinals.size > 1) {
-    return MULTI;
-  }
-  const ordinalValue = activeMission()?.ordinal || ordinals.values().next().value || 1;
-  return COLORS[(ordinalValue - 1) % COLORS.length];
-}
-
-function clusterIcon(cluster) {
-  const markers = cluster.getAllChildMarkers();
-  const color = clusterColor(markers);
-  return window.L.divIcon({
-    className: '',
-    html: `<div class="mission-map-cluster" style="--mission-marker-color:${color}"><span>${escapeHtml(formatCompact(markers.length))}</span></div>`,
-    iconSize: [44, 44],
-    iconAnchor: [22, 22],
-  });
 }
 
 function renderMap() {
@@ -453,22 +411,12 @@ function renderMap() {
     el.mapEmpty.textContent = 'Leaflet failed to load.';
     return;
   }
-  const previouslyOpenPopupFlightId = state.openPopupFlightId;
-  map.closePopup();
   if (state.layer) map.removeLayer(state.layer);
   state.layer = null;
   state.markers = new Map();
   const flights = visibleFlights().filter((flight) => Number.isFinite(flight.lat) && Number.isFinite(flight.lon));
-  const useClusters = flights.length >= MAP_CLUSTER_THRESHOLD && typeof window.L.markerClusterGroup === 'function';
-  const visibleFlightIds = new Set(flights.map((flight) => flight.id));
   el.mapEmpty.hidden = flights.length > 0;
   el.mapEmpty.textContent = flights.length ? '' : 'No live matches are visible for the current mission filter.';
-  if (visibleFlightIds.has(previouslyOpenPopupFlightId)) {
-    state.openPopupFlightId = previouslyOpenPopupFlightId;
-  }
-  if (!visibleFlightIds.has(state.openPopupFlightId)) {
-    state.openPopupFlightId = '';
-  }
   if (!flights.length) {
     state.pendingSelectionFocus = null;
     if (state.pendingViewportMode || !state.viewportInitialized) {
@@ -485,25 +433,10 @@ function renderMap() {
       missionOrdinals: flight.matchedMissionOrdinals || [],
       zIndexOffset: flight.id === state.selected ? 1200 : 0,
     });
-    marker.bindPopup(buildMapPopup(flight), {
-      maxWidth: 340,
-      className: 'mission-map-popup-shell',
-      autoPan: false,
-    });
-    marker.on('popupopen', () => {
-      state.openPopupFlightId = flight.id;
-    });
-    marker.on('popupclose', () => {
-      if (state.openPopupFlightId === flight.id) {
-        state.openPopupFlightId = '';
-      }
-    });
     marker.on('click', () => {
       state.selected = flight.id;
-      state.openPopupFlightId = flight.id;
       state.pendingSelectionFocus = {
         pan: false,
-        openPopup: true,
       };
       renderSelectedFlight();
       renderList();
@@ -512,15 +445,7 @@ function renderMap() {
     state.markers.set(flight.id, marker);
     return marker;
   });
-  state.layer = useClusters
-    ? window.L.markerClusterGroup({
-      showCoverageOnHover: false,
-      spiderfyOnMaxZoom: true,
-      maxClusterRadius: 42,
-      disableClusteringAtZoom: 7,
-      iconCreateFunction: clusterIcon,
-    })
-    : window.L.layerGroup(markers);
+  state.layer = window.L.layerGroup(markers);
   markers.forEach((marker) => state.layer.addLayer(marker));
   state.layer.addTo(map);
   if (state.pendingSelectionFocus && state.selected && state.markers.has(state.selected)) {
@@ -530,24 +455,14 @@ function renderMap() {
       if (selectionFocus.pan !== false) {
         map.setView(marker.getLatLng(), Math.max(map.getZoom(), 5));
       }
-      if (selectionFocus.openPopup !== false) {
-        marker.openPopup();
-      }
     };
     state.pendingSelectionFocus = null;
     state.pendingViewportMode = '';
     state.viewportInitialized = true;
-    if (selectionFocus.pan !== false && useClusters && typeof state.layer.zoomToShowLayer === 'function') {
-      state.layer.zoomToShowLayer(marker, focusSelectedMarker);
-      return;
-    }
     focusSelectedMarker();
     return;
   }
   state.pendingSelectionFocus = null;
-  if (state.openPopupFlightId && state.markers.has(state.openPopupFlightId)) {
-    state.markers.get(state.openPopupFlightId).openPopup();
-  }
   if (!state.pendingViewportMode) {
     state.viewportInitialized = true;
     return;
@@ -687,7 +602,7 @@ function renderSelectedFlight() {
 function renderList() {
   const flights = visibleFlights();
   if (!flights.some((flight) => flight.id === state.selected)) {
-    state.selected = flights[0]?.id || '';
+    state.selected = '';
   }
   updateScopeChrome(flights);
   el.list.innerHTML = flights.length ? flights.map((flight) => {
@@ -742,9 +657,6 @@ function renderIntel() {
 }
 
 function render() {
-  if (el.mapDetail) {
-    el.mapDetail.value = state.mapDetail;
-  }
   renderRailHeader();
   renderBanner();
   renderSelector();
@@ -830,6 +742,36 @@ async function copyValue(value, label) {
   }, 2500);
 }
 
+function stopMissionMarkerLinkPropagation(event) {
+  const markerLink = event.target instanceof Element
+    ? event.target.closest('[data-mission-marker-link]')
+    : null;
+  if (!markerLink) {
+    return;
+  }
+  event.stopPropagation();
+}
+
+function clearSelectedFlightFromMap(event) {
+  const target = event.target instanceof Element ? event.target : null;
+  if (target?.closest('.leaflet-marker-icon, [data-mission-marker-link]')) {
+    return;
+  }
+  if (!state.selected) {
+    return;
+  }
+  state.selected = '';
+  state.pendingSelectionFocus = null;
+  renderSelectedFlight();
+  renderList();
+  renderMap();
+}
+
+['pointerdown', 'mousedown', 'click', 'dblclick'].forEach((eventName) => {
+  el.map?.addEventListener(eventName, stopMissionMarkerLinkPropagation, true);
+});
+el.map?.addEventListener('click', clearSelectedFlightFromMap, true);
+
 el.search?.addEventListener('input', () => {
   state.query = sanitizeText(el.search.value);
   state.pendingSelectionFocus = null;
@@ -844,17 +786,12 @@ el.sort?.addEventListener('change', () => {
   renderSelectedFlight();
   renderMap();
 });
-el.mapDetail?.addEventListener('change', () => {
-  state.mapDetail = sanitizeText(el.mapDetail.value) === 'selected' ? 'selected' : 'popup';
-  renderMap();
-});
 el.selectors.forEach((selectorRoot) => {
   selectorRoot.addEventListener('click', (event) => {
     const button = event.target instanceof Element ? event.target.closest('button[data-mission]') : null;
     if (!button) return;
     state.active = sanitizeText(button.getAttribute('data-mission')) || 'all';
     state.selected = '';
-    state.openPopupFlightId = '';
     state.pendingSelectionFocus = null;
     state.pendingViewportMode = 'scope';
     render();
@@ -869,10 +806,8 @@ el.list?.addEventListener('click', (event) => {
   const button = event.target instanceof Element ? event.target.closest('button[data-flight]') : null;
   if (!button) return;
   state.selected = sanitizeText(button.getAttribute('data-flight'));
-  state.openPopupFlightId = state.selected;
   state.pendingSelectionFocus = {
     pan: true,
-    openPopup: true,
   };
   renderSelectedFlight();
   renderList();

@@ -755,165 +755,115 @@
   display: grid;
 }
 
-.mission-aircraft-marker-badge-stack {
-  position: absolute;
-  top: -0.28rem;
-  right: -0.36rem;
-  display: flex;
-  align-items: center;
-  pointer-events: none;
-}
-
-.mission-aircraft-marker-badge + .mission-aircraft-marker-badge {
-  margin-left: -0.2rem;
-}
-
-.mission-aircraft-marker-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1rem;
-  min-height: 1rem;
-  padding: 0 0.24rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.92);
-  background: var(--mission-accent, #0f3f70);
-  color: #fff;
-  font-size: 0.54rem;
-  font-weight: 800;
-  line-height: 1;
-  box-shadow:
-    0 8px 16px rgba(15, 43, 64, 0.18),
-    0 0 0 2px rgba(255, 255, 255, 0.95);
-}
-
 .mission-aircraft-marker-callout {
+  --mission-callout-accent: color-mix(in srgb, var(--mission-marker-accent, #0f3f70) 68%, #8fd4ff 32%);
   position: absolute;
-  left: calc(100% + 0.2rem);
+  left: calc(100% + 0.28rem);
   top: 50%;
   display: grid;
-  gap: 0.08rem;
-  min-width: 7.9rem;
-  padding: 0.38rem 0.46rem;
-  border-radius: 12px;
-  border: 1px solid rgba(15, 63, 112, 0.18);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.42rem;
+  min-width: 10.8rem;
+  max-width: 12.8rem;
+  min-height: 2.15rem;
+  padding: 0.32rem 0.42rem 0.34rem 0.62rem;
+  border-radius: 14px;
+  border: 1px solid rgba(210, 221, 230, 0.18);
   background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.98), rgba(245, 249, 252, 0.95));
-  box-shadow: 0 14px 28px rgba(15, 43, 64, 0.18);
+    linear-gradient(120deg, rgba(18, 24, 30, 0.97), rgba(24, 31, 38, 0.95) 58%, rgba(30, 38, 46, 0.92)),
+    radial-gradient(circle at top left, rgba(245, 249, 252, 0.08), transparent 42%);
+  box-shadow:
+    0 14px 24px rgba(6, 18, 30, 0.24),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
   transform: translateY(-50%);
   pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+}
+
+.mission-aircraft-marker-callout::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0.2rem;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--mission-callout-accent) 72%, #ffffff 28%), var(--mission-callout-accent));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--mission-callout-accent) 50%, transparent);
+}
+
+.mission-aircraft-marker-callout::before {
+  content: '';
+  position: absolute;
+  left: -0.2rem;
+  top: 50%;
+  width: 0.46rem;
+  height: 0.46rem;
+  border-left: 1px solid rgba(210, 221, 230, 0.16);
+  border-bottom: 1px solid rgba(210, 221, 230, 0.16);
+  background: rgba(21, 28, 34, 0.97);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.mission-aircraft-marker-callout-main {
+  display: grid;
+  gap: 0.06rem;
+  min-width: 0;
 }
 
 .mission-aircraft-marker-callout-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   font-size: 0.62rem;
   font-weight: 800;
-  letter-spacing: 0.05em;
-  line-height: 1.2;
-  color: rgba(18, 33, 53, 0.9);
+  line-height: 1.08;
+  letter-spacing: 0.01em;
+  color: rgba(247, 251, 255, 0.98);
+  text-wrap: balance;
 }
 
-.mission-aircraft-marker-callout-meta {
+.mission-aircraft-marker-callout-registration {
   font-size: 0.58rem;
-  line-height: 1.2;
-  color: rgba(18, 33, 53, 0.68);
-}
-
-.mission-map-popup {
-  display: grid;
-  gap: 0.46rem;
-  min-width: 250px;
-}
-
-.mission-map-popup-shell .leaflet-popup-content-wrapper {
-  border-radius: 18px;
-  box-shadow: 0 18px 34px rgba(15, 43, 64, 0.18);
-}
-
-.mission-map-popup-shell .leaflet-popup-content {
-  margin: 0;
-  padding: 0.76rem 0.82rem 0.82rem;
-}
-
-.mission-map-popup-shell .leaflet-popup-tip-container {
-  margin-top: -1px;
-}
-
-.mission-map-popup-shell .leaflet-popup-close-button {
-  color: rgba(18, 33, 53, 0.58);
-  padding: 0.38rem 0.42rem 0 0;
-}
-
-.mission-map-popup-shell .leaflet-popup-close-button:hover,
-.mission-map-popup-shell .leaflet-popup-close-button:focus-visible {
-  color: var(--ink-900);
-}
-
-.mission-map-popup-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.mission-map-popup-copy {
-  display: grid;
-  gap: 0.1rem;
-}
-
-.mission-map-popup-title {
-  font-size: 1rem;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  color: var(--ink-950);
-}
-
-.mission-map-popup-support,
-.mission-map-popup-route {
-  margin: 0;
-  color: rgba(18, 33, 53, 0.7);
-  line-height: 1.35;
-}
-
-.mission-map-popup-route {
   font-weight: 700;
-  color: rgba(18, 33, 53, 0.84);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(214, 225, 234, 0.82);
 }
 
-.mission-map-popup-metrics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.28rem;
-}
-
-.mission-map-popup-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.mission-map-cluster {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
+.mission-aircraft-marker-callout-side {
   display: grid;
-  place-items: center;
-  background:
-    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.24), transparent 42%),
-    var(--mission-marker-color, #0f3f70);
-  color: #fff;
-  font-size: 0.78rem;
-  font-weight: 700;
-  box-shadow:
-    0 0 0 4px rgba(255, 255, 255, 0.95),
-    0 16px 28px rgba(15, 43, 64, 0.24);
+  justify-items: end;
+  gap: 0.12rem;
+  padding-left: 0.42rem;
+  border-left: 1px solid rgba(215, 226, 235, 0.1);
 }
 
-.marker-cluster,
-.marker-cluster div,
-.marker-cluster-small,
-.marker-cluster-medium,
-.marker-cluster-large {
-  background: transparent;
-  border: 0;
+.mission-aircraft-marker-callout-telemetry {
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(211, 222, 231, 0.72);
+  white-space: nowrap;
+}
+
+.mission-aircraft-marker-callout-link {
+  color: #7fd4ff;
+  font-size: 0.52rem;
+  font-weight: 700;
+  text-decoration: none;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  pointer-events: auto;
+}
+
+.mission-aircraft-marker-callout-link:hover,
+.mission-aircraft-marker-callout-link:focus-visible {
+  color: #d2f1ff;
+  text-decoration: underline;
 }
 
 .daily-missions-sr-only {
@@ -1036,8 +986,15 @@
   .mission-aircraft-marker-callout {
     left: 50%;
     top: calc(100% + 0.24rem);
-    min-width: 7rem;
+    min-width: 9.8rem;
+    max-width: min(12rem, calc(100vw - 1.25rem));
     transform: translateX(-50%);
+  }
+
+  .mission-aircraft-marker-callout::before {
+    left: 50%;
+    top: -0.22rem;
+    transform: translateX(-50%) rotate(135deg);
   }
 
   .daily-missions-selected-actions,
