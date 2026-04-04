@@ -31,8 +31,8 @@
       crossorigin=""
     >
     <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
-    <link rel="stylesheet" href="../styles.css?v=20260331-refresh-ui-1">
-    <link rel="stylesheet" href="./styles.css?v=20260401-daily-marker-popover-5">
+    <link rel="stylesheet" href="../styles.css?v=20260404-map-slider-resize-1">
+    <link rel="stylesheet" href="./styles.css?v=20260404-map-slider-resize-1">
   </head>
   <body class="daily-missions-page-body">
     <a class="skip-link" href="#daily-missions-main">Skip to mission board</a>
@@ -67,9 +67,32 @@
           </div>
         </section>
 
-        <section class="daily-missions-workspace" aria-label="Daily mission workspace">
-          <article class="panel daily-missions-map-panel" aria-labelledby="mission-map-heading">
+        <section id="daily-missions-workspace" class="daily-missions-workspace" aria-label="Daily mission workspace">
+          <article id="daily-missions-map-panel" class="panel daily-missions-map-panel" aria-labelledby="mission-map-heading">
             <h1 id="mission-map-heading" class="daily-missions-sr-only">Daily Missions map</h1>
+            <div class="section-head compact daily-missions-map-head">
+              <div>
+                <p class="eyebrow">Map</p>
+                <h3>Live mission map</h3>
+              </div>
+              <div id="mission-map-resize-controls" class="map-resize-controls" hidden>
+                <label id="mission-map-width-control" class="map-resize-control" for="mission-map-width-input">
+                  <span class="map-resize-control-label">Width</span>
+                  <span class="map-resize-control-row">
+                    <input id="mission-map-width-input" class="map-resize-range" type="range" min="0" max="0" step="16" value="0">
+                    <output id="mission-map-width-output" class="map-resize-value" for="mission-map-width-input">Auto</output>
+                  </span>
+                </label>
+                <label id="mission-map-height-control" class="map-resize-control" for="mission-map-height-input">
+                  <span class="map-resize-control-label">Height</span>
+                  <span class="map-resize-control-row">
+                    <input id="mission-map-height-input" class="map-resize-range" type="range" min="0" max="0" step="16" value="0">
+                    <output id="mission-map-height-output" class="map-resize-value" for="mission-map-height-input">Auto</output>
+                  </span>
+                </label>
+                <button id="mission-map-size-reset" class="region-action-button map-resize-reset" type="button" hidden disabled>Reset</button>
+              </div>
+            </div>
             <div class="daily-missions-map-shell">
               <div id="mission-map" class="leaflet-map daily-missions-map" aria-label="Daily missions live map"></div>
               <div id="mission-map-empty" class="daily-missions-map-empty" hidden></div>
@@ -189,6 +212,6 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
-    <script type="module" src="../src/daily-missions-main.js?v=20260401-daily-marker-popover-6"></script>
+    <script type="module" src="../src/daily-missions-main.js?v=20260404-map-slider-resize-3"></script>
   </body>
 </html>

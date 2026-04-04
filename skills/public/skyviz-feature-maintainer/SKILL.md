@@ -15,14 +15,15 @@ Use this skill for normal product and maintenance work in this repository. It ke
 2. Review `docs/golden-principles.md` before making cross-cutting changes.
 3. Read [references/code-map.md](references/code-map.md) to find the runtime surface you are changing.
 4. Use [references/change-checklists.md](references/change-checklists.md) for follow-through after you know the change type.
-5. Before starting local preview, Playwright, or any other long-running local process, check whether the intended port is already occupied and avoid adding another listener on top of an existing server.
+5. Before starting local preview, Playwright, or any other long-running local process, check whether the intended port is already occupied and avoid adding another listener on top of an existing server. For the normal browser-validation port `4173`, first look for an existing Python server and reuse it if found instead of starting another preview server.
 6. Before any Cloudflare write operation, run `python scripts/check_cloudflare_account.py` and confirm Wrangler is on `seansailer28@gmail.com` / `172da47da00e3b33810d2e9c73c9a0b9`.
 7. Make the smallest coherent change that keeps browser-local processing and GitHub Pages deployment intact unless the task explicitly changes those constraints.
 8. Update docs, scripts, and workflow artifacts in the same pass when behavior changes.
 9. For completionist source changes, keep `site/data/runtime-config.json` explicit about `activeSource` vs `shadowSource`, and prefer `python scripts/compare_completionist_sources.py` before flipping production reads.
 10. Run the offline checks. For visual bug work, reproduce in Playwright before edits and confirm in Playwright after edits; for local real-data browser validation, refresh the repo-root fixture with `python scripts/export_skycards_user.py` if it is missing or stale, then start `python scripts/serve_local_preview.py` and use `?devLoad=skycards_user` or manual upload, never the built-in example deck; report when browser validation was not possible.
    If `serve_local_preview.py` exits with a reachability-check failure, treat that as a port conflict or split-loopback problem and free the conflicting listener or rerun with `--port` before browser validation.
-11. Clean up any preview servers, ad hoc HTTP servers, or browser automation processes you started for the task unless the user explicitly asked to keep them running.
+   The preferred shared `4173` server is `python scripts/serve_local_preview.py` so `?devLoad=skycards_user` stays available. When reusing an existing `4173` server, inspect whether it is the repo preview server or a generic static server; if it is generic, skip helper-route retries and use manual upload immediately unless the user explicitly asked to normalize the shared preview server itself. In Codex desktop sessions, prefer the built-in Playwright browser tools first when they are available. When `js_repl` is available, prefer it for persistent iterative browser checks once the initial browser session is open. If terminal browser work is still needed, prefer the global `playwright-cli` binary and treat the `npx` form as fallback-only. Reuse one named Playwright session for the whole task, and when selectors are already known prefer one scripted `run-code --filename` verification pass over many tiny CLI commands.
+11. Clean up any preview servers, ad hoc HTTP servers, or browser automation processes you started for the task unless the user explicitly asked to keep them running. Do not stop a pre-existing Python server on port `4173` unless the user explicitly asks for that.
 
 ## Default rules
 
@@ -41,7 +42,7 @@ Use this skill for normal product and maintenance work in this repository. It ke
 - Private fixture refresh: `python scripts/export_skycards_user.py`
 - Preview server for browser validation: `python scripts/serve_local_preview.py`
 - Visual bug check: reproduce with Playwright before edits and confirm with Playwright after edits.
-- For real-data browser validation, use the repo-root `skycards_user.json` fixture (`http://localhost:4173/?devLoad=skycards_user` or manual upload) and do not use the built-in example deck unless the task explicitly targets the sample flow.
+- For real-data browser validation, first check for an existing Python server on `http://localhost:4173/` and reuse it when available. If there is no reusable `4173` Python server, start `python scripts/serve_local_preview.py` yourself, use the repo-root `skycards_user.json` fixture (`http://localhost:4173/?devLoad=skycards_user` or manual upload), and do not use the built-in example deck unless the task explicitly targets the sample flow.
 - Use a browser pass when UI changes are meaningful and the environment supports it.
 
 ## References

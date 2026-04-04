@@ -181,18 +181,28 @@
 
 .daily-missions-map-panel {
   position: relative;
+  display: flex;
+  flex-direction: column;
   padding: 0.62rem;
   min-height: 0;
   overflow: hidden;
 }
 
+.daily-missions-map-head {
+  align-items: flex-start;
+  margin-bottom: 0.62rem;
+}
+
 .daily-missions-map-shell {
   position: relative;
-  height: 100%;
+  display: flex;
+  flex: 1 1 auto;
+  height: auto;
   min-height: 0;
 }
 
 .daily-missions-map {
+  flex: 1 1 auto;
   height: 100%;
   min-height: 0;
   border: 1px solid rgba(20, 45, 70, 0.12);
@@ -258,6 +268,22 @@
   overflow-y: auto;
   min-height: 0;
   scrollbar-gutter: stable;
+}
+
+.daily-missions-app.has-map-size-override {
+  height: auto;
+  min-height: calc(100dvh - 1rem);
+  grid-template-rows: auto auto;
+  overflow: visible;
+}
+
+.daily-missions-app.has-map-size-override .daily-missions-workspace {
+  height: var(--daily-missions-workspace-height, auto);
+  min-height: var(--daily-missions-workspace-height, auto);
+}
+
+.daily-missions-app.has-map-size-override .daily-missions-rail {
+  max-height: var(--daily-missions-workspace-height, none);
 }
 
 .daily-missions-rail-section {
@@ -913,6 +939,10 @@
     height: auto;
     max-height: none;
     min-height: 0;
+  }
+
+  .daily-missions-map-panel .map-resize-controls {
+    display: none !important;
   }
 }
 

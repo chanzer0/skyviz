@@ -60,6 +60,7 @@ import {
   buildLiveRefreshStatus,
   formatRefreshAbsoluteTime,
 } from './live-refresh.js';
+import { createDesktopMapResizer } from './map-sizing.js?v=20260404-map-slider-resize-3';
 
 const elements = {
   bootLoader: document.querySelector('#boot-loader'),
@@ -93,15 +94,25 @@ const elements = {
   dataToolsCollectionSummary: document.querySelector('#data-tools-collection-summary'),
   dataToolsUpload: document.querySelector('#data-tools-upload'),
   dataToolsClear: document.querySelector('#data-tools-clear'),
+  pageShell: document.querySelector('#page-top'),
   mapTabPanel: document.querySelector('#tab-map'),
   aircraftTabPanel: document.querySelector('#tab-aircraft'),
   dailyTabPanel: document.querySelector('#navdle'),
   cardleTabPanel: document.querySelector('#cardle'),
   mapLayout: document.querySelector('#map-layout'),
+  mapPanel: document.querySelector('#map-panel'),
   mapSide: document.querySelector('#map-side'),
   mapCanvas: document.querySelector('#map-canvas'),
   mapLegend: document.querySelector('#map-legend'),
   mapAirportKpi: document.querySelector('#map-airport-kpi'),
+  mapResizeControls: document.querySelector('#map-resize-controls'),
+  mapSizeReset: document.querySelector('#map-size-reset'),
+  mapWidthControl: document.querySelector('#map-width-control'),
+  mapWidthInput: document.querySelector('#map-width-input'),
+  mapWidthOutput: document.querySelector('#map-width-output'),
+  mapHeightControl: document.querySelector('#map-height-control'),
+  mapHeightInput: document.querySelector('#map-height-input'),
+  mapHeightOutput: document.querySelector('#map-height-output'),
   mapCompletionistToggle: document.querySelector('#map-completionist-toggle'),
   mapDrillPanel: document.querySelector('#map-drill-panel'),
   mapDrillEyebrow: document.querySelector('#map-drill-eyebrow'),
@@ -226,6 +237,12 @@ const PERSISTED_UPLOAD_DB_NAME = 'skyviz.persistedUploadStorage.v1';
 const PERSISTED_UPLOAD_DB_VERSION = 1;
 const PERSISTED_UPLOAD_STORE_NAME = 'uploads';
 const PERSISTED_UPLOAD_RECORD_KEY = 'current';
+const DASHBOARD_MAP_RESIZER_KEY = 'skyviz.dashboardMapResizer.v2';
+const PAGE_SHELL_BASE_MAX_WIDTH = 1500;
+const PAGE_SHELL_DESKTOP_INSET_REM = 1.5;
+const DASHBOARD_MAP_MIN_WIDTH = 420;
+const DASHBOARD_MAP_DEFAULT_SPLIT = Object.freeze({ primary: 1, secondary: 1 });
+const DASHBOARD_COMPLETIONIST_SPLIT = Object.freeze({ primary: 1.65, secondary: 0.78 });
 const MANUAL_REGISTRATION_MAPPINGS_KEY = 'skyviz.manualRegistrationMappings.v1';
 const MANUAL_REGISTRATION_MAPPINGS_EXPORT_SCHEMA = 'skyviz.manualRegistrationMappings.v1';
 const DAILY_GAME_HISTORY_KEY = 'skyviz.dailyAirportHistory.v1';
@@ -562,6 +579,8 @@ const state = {
     pendingCardleInputFocus: false,
   },
 };
+
+let dashboardMapResizer = null;
 
 const completionistMarkerAssetResolver = createAircraftMarkerAssetResolver({
   assetStatusByTypeCode: state.map.completionist.markerAssetStatusByTypeCode,
@@ -2251,6 +2270,221 @@ function invalidateLeafletMap(map) {
   } catch {
     // Leaflet can throw if the container was removed during a rerender.
   }
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getLayoutGapPx(element) {
+  if (!(element instanceof HTMLElement)) {
+    return 0;
+  }
+  const styles = window.getComputedStyle(element);
+  return Number.parseFloat(styles.columnGap || styles.gap || '0') || 0;
+}
+
+function queueDashboardMapInvalidate() {
+  requestAnimationFrame(() => {
+    invalidateLeafletMap(state.map.instance);
+  });
+}
+
+function getDesktopPageShellMaxWidthPx() {
+  const rootFontSize = Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize || '16') || 16;
+  return Math.max(0, window.innerWidth - (rootFontSize * PAGE_SHELL_DESKTOP_INSET_REM));
+}
+
+function getSplitColumnWidths(totalWidth, gap, primaryRatio, secondaryRatio) {
+  const availableWidth = Math.max(0, totalWidth - gap);
+  const ratioTotal = primaryRatio + secondaryRatio || 1;
+  const primaryWidth = availableWidth * (primaryRatio / ratioTotal);
+  return {
+    primaryWidth,
+    secondaryWidth: Math.max(0, availableWidth - primaryWidth),
+  };
+}
+
+function getDashboardSideMinWidth() {
+  return isCompletionistModeEnabled() ? 300 : 320;
+}
+
+function getDashboardMapSplitRatios() {
+  return isCompletionistModeEnabled() ? DASHBOARD_COMPLETIONIST_SPLIT : DASHBOARD_MAP_DEFAULT_SPLIT;
+}
+
+function getDashboardShellWidthBounds() {
+  const maxWidth = getDesktopPageShellMaxWidthPx();
+  return {
+    baseWidth: Math.min(PAGE_SHELL_BASE_MAX_WIDTH, maxWidth),
+    maxWidth,
+  };
+}
+
+function getDashboardDefaultMapWidths() {
+  const { baseWidth, maxWidth } = getDashboardShellWidthBounds();
+  const gap = getLayoutGapPx(elements.mapLayout);
+  const ratios = getDashboardMapSplitRatios();
+  const split = getSplitColumnWidths(baseWidth, gap, ratios.primary, ratios.secondary);
+  return {
+    baseShellWidth: baseWidth,
+    defaultMapWidth: split.primaryWidth,
+    defaultSideWidth: split.secondaryWidth,
+    gap,
+    maxShellWidth: maxWidth,
+  };
+}
+
+function getDashboardMapWidthBounds() {
+  const { maxShellWidth, gap } = getDashboardDefaultMapWidths();
+  const sideMinWidth = getDashboardSideMinWidth();
+  const min = DASHBOARD_MAP_MIN_WIDTH;
+  const max = Math.max(min, maxShellWidth - gap - sideMinWidth);
+  return {
+    min: Math.min(min, max),
+    max: Math.max(min, max),
+  };
+}
+
+function measureDashboardMapWidth() {
+  const panelWidth = Number(elements.mapPanel?.getBoundingClientRect().width) || 0;
+  if (panelWidth > 0) {
+    return panelWidth;
+  }
+  return getDashboardDefaultMapWidths().defaultMapWidth || DASHBOARD_MAP_MIN_WIDTH;
+}
+
+function applyDashboardMapWidthOverride(width) {
+  if (!(elements.mapLayout instanceof HTMLElement) || !(elements.pageShell instanceof HTMLElement)) {
+    return;
+  }
+  const {
+    baseShellWidth,
+    defaultMapWidth,
+    gap,
+    maxShellWidth,
+  } = getDashboardDefaultMapWidths();
+  const bounds = getDashboardMapWidthBounds();
+  const resolvedWidth = Math.round(clampNumber(width, bounds.min, bounds.max));
+  const shellExpansion = Math.min(
+    Math.max(0, resolvedWidth - defaultMapWidth),
+    Math.max(0, maxShellWidth - baseShellWidth),
+  );
+  const sideMinWidth = getDashboardSideMinWidth();
+  const shellWidth = Math.round(baseShellWidth + shellExpansion);
+  elements.pageShell.style.setProperty('--page-shell-max-width', `${shellWidth}px`);
+  elements.mapLayout.style.gridTemplateColumns = `minmax(0, ${resolvedWidth}px) minmax(${sideMinWidth}px, 1fr)`;
+  queueDashboardMapInvalidate();
+}
+
+function clearDashboardMapWidthOverride() {
+  if (!(elements.mapLayout instanceof HTMLElement) || !(elements.pageShell instanceof HTMLElement)) {
+    return;
+  }
+  elements.pageShell.style.removeProperty('--page-shell-max-width');
+  elements.mapLayout.style.removeProperty('grid-template-columns');
+  queueDashboardMapInvalidate();
+}
+
+function getDashboardMapHeightBounds() {
+  return {
+    min: 340,
+    max: Math.max(520, Math.min(window.innerHeight - 180, 920)),
+  };
+}
+
+function measureDashboardMapHeight() {
+  const height = elements.mapCanvas?.getBoundingClientRect().height || 0;
+  if (height > 0) {
+    return height;
+  }
+  return Math.min(window.innerHeight * 0.7, 560);
+}
+
+function getDashboardMapChromeHeight() {
+  const panelHeight = elements.mapPanel?.getBoundingClientRect().height || 0;
+  const mapHeight = elements.mapCanvas?.getBoundingClientRect().height || 0;
+  if (panelHeight > mapHeight) {
+    return panelHeight - mapHeight;
+  }
+  return 140;
+}
+
+function applyDashboardMapHeightOverride(height) {
+  if (!(elements.mapCanvas instanceof HTMLElement) || !(elements.mapLayout instanceof HTMLElement)) {
+    return;
+  }
+  const bounds = getDashboardMapHeightBounds();
+  const resolvedHeight = Math.round(clampNumber(height, bounds.min, bounds.max));
+  const layoutHeight = Math.round(resolvedHeight + getDashboardMapChromeHeight());
+  elements.mapCanvas.style.height = `${resolvedHeight}px`;
+  elements.mapLayout.style.height = `${layoutHeight}px`;
+  elements.mapLayout.style.minHeight = `${layoutHeight}px`;
+  queueDashboardMapInvalidate();
+}
+
+function clearDashboardMapHeightOverride() {
+  if (!(elements.mapCanvas instanceof HTMLElement) || !(elements.mapLayout instanceof HTMLElement)) {
+    return;
+  }
+  elements.mapCanvas.style.removeProperty('height');
+  elements.mapLayout.style.removeProperty('height');
+  elements.mapLayout.style.removeProperty('min-height');
+  queueDashboardMapInvalidate();
+}
+
+function initializeDashboardMapResizer() {
+  if (
+    dashboardMapResizer
+    || !(elements.mapWidthInput instanceof HTMLInputElement)
+    || !(elements.mapHeightInput instanceof HTMLInputElement)
+  ) {
+    return;
+  }
+  dashboardMapResizer = createDesktopMapResizer({
+    storageKey: DASHBOARD_MAP_RESIZER_KEY,
+    desktopQuery: '(min-width: 1025px)',
+    controlsShell: elements.mapResizeControls,
+    resetButton: elements.mapSizeReset,
+    fields: {
+      width: {
+        container: elements.mapWidthControl,
+        input: elements.mapWidthInput,
+        output: elements.mapWidthOutput,
+        accessibleLabel: 'Map width',
+        applyOnInput: false,
+        min: () => getDashboardMapWidthBounds().min,
+        max: () => getDashboardMapWidthBounds().max,
+        measure: measureDashboardMapWidth,
+        apply: applyDashboardMapWidthOverride,
+        clear: clearDashboardMapWidthOverride,
+        isAvailable: () => Boolean(state.model) && !elements.dashboard?.hidden && state.activeTab === 'map' && !elements.mapTabPanel?.hidden,
+        step: 16,
+        formatValue: (value) => `${Math.round(value)}px`,
+      },
+      height: {
+        container: elements.mapHeightControl,
+        input: elements.mapHeightInput,
+        output: elements.mapHeightOutput,
+        accessibleLabel: 'Map height',
+        min: () => getDashboardMapHeightBounds().min,
+        max: () => getDashboardMapHeightBounds().max,
+        measure: measureDashboardMapHeight,
+        apply: applyDashboardMapHeightOverride,
+        clear: clearDashboardMapHeightOverride,
+        isAvailable: () => Boolean(state.model) && !elements.dashboard?.hidden && state.activeTab === 'map' && !elements.mapTabPanel?.hidden,
+        step: 16,
+        formatValue: (value) => `${Math.round(value)}px`,
+      },
+    },
+  });
+}
+
+function syncDashboardMapResizer() {
+  if (!dashboardMapResizer) {
+    initializeDashboardMapResizer();
+  }
+  dashboardMapResizer?.syncAll();
 }
 
 function syncCardleHotspotMap(challenge, session) {
@@ -5733,6 +5967,7 @@ function setActiveTab(tabId, options = {}) {
   elements.cardleTabPanel.hidden = !isCardle;
   elements.mapTabPanel.hidden = !isMap;
   elements.aircraftTabPanel.hidden = !isAircraft;
+  syncDashboardMapResizer();
   syncCompletionistPolling({ refreshIfNeeded: isMap });
   if (options.skipAutoEnsure) {
     return;
@@ -8335,6 +8570,7 @@ function renderMapProgressPanels(model) {
 
 function renderMapTab(model) {
   syncMapModePanels();
+  syncDashboardMapResizer();
   renderMapKpis(model);
   if (isCompletionistModeEnabled()) {
     if (!getSelectedCompletionistMatch()) {
@@ -8342,10 +8578,16 @@ function renderMapTab(model) {
     }
     renderMapCompletionistPanel(model);
     renderCompletionistLeafletMap(model);
+    requestAnimationFrame(() => {
+      syncDashboardMapResizer();
+    });
     return;
   }
   renderMapProgressPanels(model);
   renderLeafletMap(model);
+  requestAnimationFrame(() => {
+    syncDashboardMapResizer();
+  });
 }
 
 function renderAircraftOverviewPanel(model) {
@@ -10957,6 +11199,7 @@ function wireAircraftControls() {
 
   window.addEventListener('resize', () => {
     queueDailyHelpPanelPositionSync();
+    syncDashboardMapResizer();
     if (!state.model) {
       if (state.activeTab === 'cardle' && state.cardle.map.instance) {
         invalidateLeafletMap(state.cardle.map.instance);
@@ -10978,6 +11221,7 @@ async function bootstrap() {
   wireBanner();
   wireTabs();
   wireDataTools();
+  initializeDashboardMapResizer();
   wireMapCompletionControls();
   wireDailyGame();
   wireCardleGame();

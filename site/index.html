@@ -42,7 +42,7 @@
       crossorigin=""
     >
     <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
-    <link rel="stylesheet" href="./styles.css?v=20260331-refresh-ui-1">
+    <link rel="stylesheet" href="./styles.css?v=20260404-map-slider-resize-1">
   </head>
   <body>
     <a class="skip-link" href="#dashboard">Skip to dashboard</a>
@@ -344,25 +344,46 @@
           aria-labelledby="tab-map-button"
         >
           <div id="map-layout" class="map-layout">
-            <article class="panel map-panel">
+            <article id="map-panel" class="panel map-panel">
               <div class="section-head compact map-panel-head">
                 <div>
                   <p class="eyebrow">Map</p>
                   <h3>Airport capture map</h3>
                 </div>
-                <label class="data-tools-toggle map-mode-toggle">
-                  <span class="data-tools-toggle-copy">
-                    <span class="data-tools-toggle-title">Completionist mode</span>
-                    <span class="data-tools-toggle-note">Use the shared live snapshot to hunt missing destinations and new cards.</span>
-                  </span>
-                  <input id="map-completionist-toggle" class="data-tools-toggle-input" type="checkbox">
-                  <span class="data-tools-toggle-switch" aria-hidden="true">
-                    <span class="data-tools-toggle-knob"></span>
-                  </span>
-                </label>
+                <div class="map-panel-head-actions">
+                  <label class="data-tools-toggle map-mode-toggle">
+                    <span class="data-tools-toggle-copy">
+                      <span class="data-tools-toggle-title">Completionist mode</span>
+                      <span class="data-tools-toggle-note">Use the shared live snapshot to hunt missing destinations and new cards.</span>
+                    </span>
+                    <input id="map-completionist-toggle" class="data-tools-toggle-input" type="checkbox">
+                    <span class="data-tools-toggle-switch" aria-hidden="true">
+                      <span class="data-tools-toggle-knob"></span>
+                    </span>
+                  </label>
+                  <div id="map-resize-controls" class="map-resize-controls" hidden>
+                    <label id="map-width-control" class="map-resize-control" for="map-width-input">
+                      <span class="map-resize-control-label">Width</span>
+                      <span class="map-resize-control-row">
+                        <input id="map-width-input" class="map-resize-range" type="range" min="0" max="0" step="16" value="0">
+                        <output id="map-width-output" class="map-resize-value" for="map-width-input">Auto</output>
+                      </span>
+                    </label>
+                    <label id="map-height-control" class="map-resize-control" for="map-height-input">
+                      <span class="map-resize-control-label">Height</span>
+                      <span class="map-resize-control-row">
+                        <input id="map-height-input" class="map-resize-range" type="range" min="0" max="0" step="16" value="0">
+                        <output id="map-height-output" class="map-resize-value" for="map-height-input">Auto</output>
+                      </span>
+                    </label>
+                    <button id="map-size-reset" class="region-action-button map-resize-reset" type="button" hidden disabled>Reset</button>
+                  </div>
+                </div>
               </div>
               <p class="panel-kpi-line" id="map-airport-kpi"></p>
-              <div id="map-canvas" class="leaflet-map" aria-label="Airport capture map"></div>
+              <div class="map-resize-shell">
+                <div id="map-canvas" class="leaflet-map" aria-label="Airport capture map"></div>
+              </div>
               <div id="map-legend" class="map-legend"></div>
             </article>
 
@@ -966,7 +987,7 @@
       type="module"
       src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.1.0/model-viewer.min.js"
     ></script>
-    <script type="module" src="./src/main.js?v=20260331-refresh-ui-1"></script>
+    <script type="module" src="./src/main.js?v=20260404-map-slider-resize-3"></script>
   </body>
 </html>
 

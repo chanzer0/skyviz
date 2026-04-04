@@ -12,9 +12,14 @@ import {
 } from './aircraft-markers.js?v=20260325-aircraft-markers-1';
 import { escapeHtml, formatCompact, formatNumber, sanitizeText } from './format.js?v=20260324-daily-missions-2';
 import { applyLiveRefreshStatus, buildLiveRefreshStatus } from './live-refresh.js';
+import { createDesktopMapResizer } from './map-sizing.js?v=20260404-map-slider-resize-3';
 
 const $ = (selector) => document.querySelector(selector);
 const el = {
+  app: $('#daily-missions-main'),
+  pageShell: $('#page-top'),
+  workspace: $('#daily-missions-workspace'),
+  mapPanel: $('#daily-missions-map-panel'),
   selectors: [...document.querySelectorAll('[data-mission-selector]')],
   title: $('#mission-board-title'),
   summary: $('#mission-board-summary'),
@@ -37,6 +42,14 @@ const el = {
   list: $('#mission-flight-list'),
   map: $('#mission-map'),
   mapEmpty: $('#mission-map-empty'),
+  mapResizeControls: $('#mission-map-resize-controls'),
+  mapSizeReset: $('#mission-map-size-reset'),
+  mapWidthControl: $('#mission-map-width-control'),
+  mapWidthInput: $('#mission-map-width-input'),
+  mapWidthOutput: $('#mission-map-width-output'),
+  mapHeightControl: $('#mission-map-height-control'),
+  mapHeightInput: $('#mission-map-height-input'),
+  mapHeightOutput: $('#mission-map-height-output'),
 };
 
 const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
@@ -44,6 +57,11 @@ const TILE_ATTRIBUTION = '&copy; OpenStreetMap contributors &copy; CARTO';
 const COLORS = ['#0f3f70', '#168392', '#ec7f35'];
 const MULTI = '#7e9e4d';
 const DAILY_MISSIONS_MANIFEST_POLL_SECONDS = 15;
+const DAILY_MISSIONS_MAP_RESIZER_KEY = 'skyviz.dailyMissionsMapResizer.v2';
+const PAGE_SHELL_BASE_MAX_WIDTH = 1500;
+const PAGE_SHELL_DESKTOP_INSET_REM = 1.5;
+const DAILY_MISSIONS_MAP_MIN_WIDTH = 520;
+const DAILY_MISSIONS_WORKSPACE_SPLIT = Object.freeze({ primary: 2.12, secondary: 0.94 });
 const VIEW = { center: [20, 0], zoom: 1.75 };
 const state = {
   board: null,
@@ -67,6 +85,207 @@ const state = {
   refreshError: '',
   loadPromise: null,
 };
+
+let missionMapResizer = null;
+
+function clampNumber(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getLayoutGapPx(element) {
+  if (!(element instanceof HTMLElement)) {
+    return 0;
+  }
+  const styles = window.getComputedStyle(element);
+  return Number.parseFloat(styles.columnGap || styles.gap || '0') || 0;
+}
+
+function queueMissionMapInvalidate() {
+  requestAnimationFrame(() => {
+    try {
+      state.map?.invalidateSize?.();
+    } catch {
+      // Leaflet can throw when the container swaps during a rerender.
+    }
+  });
+}
+
+function getDesktopPageShellMaxWidthPx() {
+  const rootFontSize = Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize || '16') || 16;
+  return Math.max(0, window.innerWidth - (rootFontSize * PAGE_SHELL_DESKTOP_INSET_REM));
+}
+
+function getSplitColumnWidths(totalWidth, gap, primaryRatio, secondaryRatio) {
+  const availableWidth = Math.max(0, totalWidth - gap);
+  const ratioTotal = primaryRatio + secondaryRatio || 1;
+  const primaryWidth = availableWidth * (primaryRatio / ratioTotal);
+  return {
+    primaryWidth,
+    secondaryWidth: Math.max(0, availableWidth - primaryWidth),
+  };
+}
+
+function getMissionShellWidthBounds() {
+  const maxWidth = getDesktopPageShellMaxWidthPx();
+  return {
+    baseWidth: Math.min(PAGE_SHELL_BASE_MAX_WIDTH, maxWidth),
+    maxWidth,
+  };
+}
+
+function getMissionDefaultMapWidths() {
+  const { baseWidth, maxWidth } = getMissionShellWidthBounds();
+  const gap = getLayoutGapPx(el.workspace);
+  const split = getSplitColumnWidths(
+    baseWidth,
+    gap,
+    DAILY_MISSIONS_WORKSPACE_SPLIT.primary,
+    DAILY_MISSIONS_WORKSPACE_SPLIT.secondary,
+  );
+  return {
+    baseShellWidth: baseWidth,
+    defaultMapWidth: split.primaryWidth,
+    gap,
+    maxShellWidth: maxWidth,
+  };
+}
+
+function getMissionMapWidthBounds() {
+  const { gap, maxShellWidth } = getMissionDefaultMapWidths();
+  const railMinWidth = 360;
+  const min = DAILY_MISSIONS_MAP_MIN_WIDTH;
+  const max = Math.max(min, maxShellWidth - gap - railMinWidth);
+  return {
+    min: Math.min(min, max),
+    max: Math.max(min, max),
+  };
+}
+
+function measureMissionMapWidth() {
+  const panelWidth = Number(el.mapPanel?.getBoundingClientRect().width) || 0;
+  if (panelWidth > 0) {
+    return panelWidth;
+  }
+  return getMissionDefaultMapWidths().defaultMapWidth || DAILY_MISSIONS_MAP_MIN_WIDTH;
+}
+
+function applyMissionMapWidthOverride(width) {
+  if (!(el.pageShell instanceof HTMLElement) || !(el.workspace instanceof HTMLElement)) {
+    return;
+  }
+  const {
+    baseShellWidth,
+    defaultMapWidth,
+    maxShellWidth,
+  } = getMissionDefaultMapWidths();
+  const bounds = getMissionMapWidthBounds();
+  const railMinWidth = 360;
+  const resolvedWidth = Math.round(clampNumber(width, bounds.min, bounds.max));
+  const shellExpansion = Math.min(
+    Math.max(0, resolvedWidth - defaultMapWidth),
+    Math.max(0, maxShellWidth - baseShellWidth),
+  );
+  const shellWidth = Math.round(baseShellWidth + shellExpansion);
+  el.pageShell.style.setProperty('--page-shell-max-width', `${shellWidth}px`);
+  el.workspace.style.gridTemplateColumns = `minmax(0, ${resolvedWidth}px) minmax(${railMinWidth}px, 1fr)`;
+  queueMissionMapInvalidate();
+}
+
+function clearMissionMapWidthOverride() {
+  if (!(el.pageShell instanceof HTMLElement) || !(el.workspace instanceof HTMLElement)) {
+    return;
+  }
+  el.pageShell.style.removeProperty('--page-shell-max-width');
+  el.workspace.style.removeProperty('grid-template-columns');
+  queueMissionMapInvalidate();
+}
+
+function getMissionMapHeightBounds() {
+  return {
+    min: 440,
+    max: Math.max(720, Math.min(window.innerHeight + 220, 1280)),
+  };
+}
+
+function measureMissionMapHeight() {
+  const height = el.workspace?.getBoundingClientRect().height || 0;
+  if (height > 0) {
+    return height;
+  }
+  return Math.max(window.innerHeight - 220, 620);
+}
+
+function applyMissionMapHeightOverride(height) {
+  if (!(el.app instanceof HTMLElement)) {
+    return;
+  }
+  const bounds = getMissionMapHeightBounds();
+  const resolvedHeight = Math.round(clampNumber(height, bounds.min, bounds.max));
+  el.app.classList.add('has-map-size-override');
+  el.app.style.setProperty('--daily-missions-workspace-height', `${resolvedHeight}px`);
+  queueMissionMapInvalidate();
+}
+
+function clearMissionMapHeightOverride() {
+  if (!(el.app instanceof HTMLElement)) {
+    return;
+  }
+  el.app.classList.remove('has-map-size-override');
+  el.app.style.removeProperty('--daily-missions-workspace-height');
+  queueMissionMapInvalidate();
+}
+
+function initializeMissionMapResizer() {
+  if (
+    missionMapResizer
+    || !(el.mapWidthInput instanceof HTMLInputElement)
+    || !(el.mapHeightInput instanceof HTMLInputElement)
+  ) {
+    return;
+  }
+  missionMapResizer = createDesktopMapResizer({
+    storageKey: DAILY_MISSIONS_MAP_RESIZER_KEY,
+    desktopQuery: '(min-width: 1181px)',
+    controlsShell: el.mapResizeControls,
+    resetButton: el.mapSizeReset,
+    fields: {
+      width: {
+        container: el.mapWidthControl,
+        input: el.mapWidthInput,
+        output: el.mapWidthOutput,
+        accessibleLabel: 'Mission map width',
+        applyOnInput: false,
+        min: () => getMissionMapWidthBounds().min,
+        max: () => getMissionMapWidthBounds().max,
+        measure: measureMissionMapWidth,
+        apply: applyMissionMapWidthOverride,
+        clear: clearMissionMapWidthOverride,
+        step: 16,
+        formatValue: (value) => `${Math.round(value)}px`,
+      },
+      height: {
+        container: el.mapHeightControl,
+        input: el.mapHeightInput,
+        output: el.mapHeightOutput,
+        accessibleLabel: 'Mission map height',
+        min: () => getMissionMapHeightBounds().min,
+        max: () => getMissionMapHeightBounds().max,
+        measure: measureMissionMapHeight,
+        apply: applyMissionMapHeightOverride,
+        clear: clearMissionMapHeightOverride,
+        step: 16,
+        formatValue: (value) => `${Math.round(value)}px`,
+      },
+    },
+  });
+}
+
+function syncMissionMapResizer() {
+  if (!missionMapResizer) {
+    initializeMissionMapResizer();
+  }
+  missionMapResizer?.syncAll();
+}
 
 const missionMarkerAssetResolver = createAircraftMarkerAssetResolver({
   assetStatusByTypeCode: state.markerAssetStatusByTypeCode,
@@ -657,6 +876,7 @@ function renderIntel() {
 }
 
 function render() {
+  syncMissionMapResizer();
   renderRailHeader();
   renderBanner();
   renderSelector();
@@ -814,6 +1034,11 @@ el.list?.addEventListener('click', (event) => {
   renderMap();
 });
 
+window.addEventListener('resize', () => {
+  syncMissionMapResizer();
+  queueMissionMapInvalidate();
+});
+
 state.timer = window.setInterval(() => {
   if (!state.board) return;
   state.seconds = Math.max(0, state.seconds - 1);
@@ -826,6 +1051,9 @@ state.timer = window.setInterval(() => {
     });
   }
 }, 1000);
+
+initializeMissionMapResizer();
+syncMissionMapResizer();
 
 load().catch((error) => {
   state.message = error instanceof Error ? error.message : 'Unable to load the mission board.';
