@@ -1,7 +1,10 @@
 import {
+  buildCompletedAirportCoveragePoints,
   fetchDailyMissionsManifestData,
   fetchDailyMissionsSnapshotData,
-} from './data.js?v=20260331-live-version-poll-1';
+  loadAirportReferenceData,
+  parseUserCollection,
+} from './data.js?v=20260404-daily-missions-coverage-1';
 import {
   buildAircraftMarkerHtml,
   buildLeafletAircraftMarkerIcon,
@@ -42,6 +45,10 @@ const el = {
   list: $('#mission-flight-list'),
   map: $('#mission-map'),
   mapEmpty: $('#mission-map-empty'),
+  coveragePanel: $('#mission-coverage-panel'),
+  coverageMessage: $('#mission-coverage-message'),
+  coverageUploadButton: $('#mission-coverage-upload-button'),
+  coverageInput: $('#mission-coverage-input'),
   mapResizeControls: $('#mission-map-resize-controls'),
   mapSizeReset: $('#mission-map-size-reset'),
   mapWidthControl: $('#mission-map-width-control'),
@@ -57,6 +64,24 @@ const TILE_ATTRIBUTION = '&copy; OpenStreetMap contributors &copy; CARTO';
 const COLORS = ['#0f3f70', '#168392', '#ec7f35'];
 const MULTI = '#7e9e4d';
 const DAILY_MISSIONS_MANIFEST_POLL_SECONDS = 15;
+const DAILY_MISSIONS_COVERAGE_PANE = 'dailyMissionsCoveragePane';
+const DAILY_MISSIONS_COVERAGE_COLOR = '#2f7dff';
+const DAILY_MISSIONS_COVERAGE_RADIUS_SPECS = Object.freeze([
+  Object.freeze({
+    radiusMeters: 200000,
+    opacity: 0.28,
+    fillOpacity: 0.09,
+    weight: 1.3,
+  }),
+  Object.freeze({
+    radiusMeters: 100000,
+    opacity: 0.48,
+    fillOpacity: 0.18,
+    weight: 1.5,
+  }),
+]);
+const DAILY_MISSIONS_COVERAGE_PROMPT = 'Load your skycards_user.json file to view flights within your unlocked airport radii if you do not already have one uploaded here.';
+const DAILY_MISSIONS_COVERAGE_ERROR_PREFIX = 'Unable to load skycards_user.json:';
 const DAILY_MISSIONS_MAP_RESIZER_KEY = 'skyviz.dailyMissionsMapResizer.v2';
 const PAGE_SHELL_BASE_MAX_WIDTH = 1500;
 const PAGE_SHELL_DESKTOP_INSET_REM = 1.5;
@@ -79,6 +104,13 @@ const state = {
   map: null,
   layer: null,
   markers: new Map(),
+  coverage: {
+    fileName: '',
+    pendingFileName: '',
+    points: [],
+    layer: null,
+    loading: false,
+  },
   markerAssetStatusByTypeCode: new Map(),
   markerRefreshQueued: false,
   message: '',
@@ -108,6 +140,39 @@ function queueMissionMapInvalidate() {
       // Leaflet can throw when the container swaps during a rerender.
     }
   });
+}
+
+function getMissionCoverageAirportPoints() {
+  return (state.coverage.points || []).filter((point) => Number.isFinite(point?.lat) && Number.isFinite(point?.lon));
+}
+
+function renderCoverageStatus() {
+  if (!(el.coveragePanel instanceof HTMLElement) || !(el.coverageMessage instanceof HTMLElement)) {
+    return;
+  }
+  let copy = DAILY_MISSIONS_COVERAGE_PROMPT;
+  let tone = 'idle';
+  if (state.coverage.loading) {
+    const fileName = state.coverage.pendingFileName || state.coverage.fileName || 'skycards_user.json';
+    copy = `Loading weekly airport radii from ${fileName}...`;
+    tone = 'loading';
+  } else if (state.coverage.fileName) {
+    if (state.coverage.points.length) {
+      const airportLabel = state.coverage.points.length === 1 ? 'airport' : 'airports';
+      copy = `Showing 100 km and 200 km blue radii from ${formatNumber(state.coverage.points.length)} completed ${airportLabel} in ${state.coverage.fileName}.`;
+      tone = 'active';
+    } else {
+      copy = `${state.coverage.fileName} is loaded, but no completed-airport radii could be resolved from completedAirportIds.`;
+      tone = 'quiet';
+    }
+  }
+  el.coveragePanel.dataset.tone = tone;
+  el.coveragePanel.classList.toggle('is-active', tone === 'active');
+  el.coverageMessage.textContent = copy;
+  if (el.coverageUploadButton instanceof HTMLButtonElement) {
+    el.coverageUploadButton.disabled = state.coverage.loading;
+    el.coverageUploadButton.textContent = state.coverage.fileName ? 'Replace skycards_user.json' : 'Load skycards_user.json';
+  }
 }
 
 function getDesktopPageShellMaxWidthPx() {
@@ -602,6 +667,9 @@ function ensureMap() {
     zoomSnap: 0.25,
     preferCanvas: true,
   });
+  const coveragePane = state.map.getPane(DAILY_MISSIONS_COVERAGE_PANE) || state.map.createPane(DAILY_MISSIONS_COVERAGE_PANE);
+  coveragePane.style.zIndex = '605';
+  coveragePane.style.pointerEvents = 'none';
   window.L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: 18 }).addTo(state.map);
   state.map.on('zoomend', () => {
     updateMissionMarkerIcons();
@@ -623,6 +691,40 @@ function ensureMap() {
   return state.map;
 }
 
+function syncMissionCoverageLayer() {
+  if (state.map && state.coverage.layer) {
+    state.map.removeLayer(state.coverage.layer);
+  }
+  state.coverage.layer = null;
+  if (!state.map || !window.L) {
+    return null;
+  }
+  const points = getMissionCoverageAirportPoints();
+  if (!points.length) {
+    return null;
+  }
+  const layers = [];
+  points.forEach((point) => {
+    DAILY_MISSIONS_COVERAGE_RADIUS_SPECS.forEach(({ radiusMeters, opacity, fillOpacity, weight }) => {
+      layers.push(window.L.circle([point.lat, point.lon], {
+        pane: DAILY_MISSIONS_COVERAGE_PANE,
+        radius: radiusMeters,
+        stroke: true,
+        color: DAILY_MISSIONS_COVERAGE_COLOR,
+        opacity,
+        weight,
+        fillColor: DAILY_MISSIONS_COVERAGE_COLOR,
+        fillOpacity,
+        interactive: false,
+        bubblingMouseEvents: false,
+      }));
+    });
+  });
+  state.coverage.layer = window.L.layerGroup(layers);
+  state.coverage.layer.addTo(state.map);
+  return state.coverage.layer;
+}
+
 function renderMap() {
   const map = ensureMap();
   if (!map) {
@@ -633,6 +735,7 @@ function renderMap() {
   if (state.layer) map.removeLayer(state.layer);
   state.layer = null;
   state.markers = new Map();
+  syncMissionCoverageLayer();
   const flights = visibleFlights().filter((flight) => Number.isFinite(flight.lat) && Number.isFinite(flight.lon));
   el.mapEmpty.hidden = flights.length > 0;
   el.mapEmpty.textContent = flights.length ? '' : 'No live matches are visible for the current mission filter.';
@@ -879,6 +982,7 @@ function render() {
   syncMissionMapResizer();
   renderRailHeader();
   renderBanner();
+  renderCoverageStatus();
   renderSelector();
   renderList();
   renderSelectedFlight();
@@ -942,6 +1046,38 @@ async function load(silent = false, options = {}) {
     state.loadPromise = null;
   });
   return state.loadPromise;
+}
+
+async function loadCoverageFromFile(file) {
+  if (!(file instanceof File)) {
+    return;
+  }
+  const pendingFileName = sanitizeText(file.name) || 'skycards_user.json';
+  state.coverage.loading = true;
+  state.coverage.pendingFileName = pendingFileName;
+  renderCoverageStatus();
+  try {
+    const text = await file.text();
+    const payload = parseUserCollection(text, pendingFileName);
+    const airportReferences = await loadAirportReferenceData();
+    state.coverage.fileName = pendingFileName;
+    state.coverage.points = buildCompletedAirportCoveragePoints(payload, airportReferences);
+    if (typeof state.message === 'string' && state.message.startsWith(DAILY_MISSIONS_COVERAGE_ERROR_PREFIX)) {
+      state.message = '';
+      renderBanner();
+    }
+  } catch (error) {
+    state.message = `${DAILY_MISSIONS_COVERAGE_ERROR_PREFIX} ${error instanceof Error ? error.message : 'Unknown error.'}`;
+    renderBanner();
+  } finally {
+    state.coverage.loading = false;
+    state.coverage.pendingFileName = '';
+    renderCoverageStatus();
+    renderMap();
+    if (el.coverageInput instanceof HTMLInputElement) {
+      el.coverageInput.value = '';
+    }
+  }
 }
 
 async function copyValue(value, label) {
@@ -1033,6 +1169,19 @@ el.list?.addEventListener('click', (event) => {
   renderList();
   renderMap();
 });
+el.coverageUploadButton?.addEventListener('click', () => {
+  if (state.coverage.loading) {
+    return;
+  }
+  el.coverageInput?.click();
+});
+el.coverageInput?.addEventListener('change', () => {
+  const file = el.coverageInput?.files?.[0];
+  if (!file) {
+    return;
+  }
+  void loadCoverageFromFile(file);
+});
 
 window.addEventListener('resize', () => {
   syncMissionMapResizer();
@@ -1054,6 +1203,7 @@ state.timer = window.setInterval(() => {
 
 initializeMissionMapResizer();
 syncMissionMapResizer();
+renderCoverageStatus();
 
 load().catch((error) => {
   state.message = error instanceof Error ? error.message : 'Unable to load the mission board.';

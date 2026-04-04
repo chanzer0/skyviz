@@ -9,7 +9,7 @@ import {
   loadReferenceData,
   loadReferenceManifest,
   parseUserCollection,
-} from './data.js?v=20260331-live-version-poll-1';
+} from './data.js?v=20260404-daily-missions-coverage-1';
 import {
   DAILY_GAME_NAME,
   buildAirportGuessComparison,
@@ -273,6 +273,22 @@ const COMPLETIONIST_MANIFEST_POLL_SECONDS = 15;
 const COMPLETIONIST_DEFAULT_SNAPSHOT_SECONDS = 300;
 const COMPLETIONIST_DEFAULT_STALE_SECONDS = 900;
 const COMPLETIONIST_SEARCH_DEBOUNCE_MS = 140;
+const COMPLETIONIST_COVERAGE_PANE = 'completionistCoveragePane';
+const COMPLETIONIST_UNLOCKED_AIRPORT_COLOR = '#2f7dff';
+const COMPLETIONIST_UNLOCKED_AIRPORT_RADIUS_SPECS = Object.freeze([
+  Object.freeze({
+    radiusMeters: 200000,
+    opacity: 0.28,
+    fillOpacity: 0.09,
+    weight: 1.3,
+  }),
+  Object.freeze({
+    radiusMeters: 100000,
+    opacity: 0.48,
+    fillOpacity: 0.18,
+    weight: 1.5,
+  }),
+]);
 const COMPLETIONIST_SOURCE_ROLE_LABELS = Object.freeze({
   active: 'active source',
   shadow: 'shadow source',
@@ -474,6 +490,7 @@ const state = {
       secondsUntilRefresh: COMPLETIONIST_MANIFEST_POLL_SECONDS,
       requestToken: 0,
       layer: null,
+      unlockedAirportCoverageLayer: null,
       focusedDestinationLayer: null,
       markersByFlightId: new Map(),
       hasRenderedView: false,
@@ -8311,6 +8328,9 @@ function ensureMapInstance() {
     zoomControl: true,
     preferCanvas: true,
   });
+  const coveragePane = map.getPane(COMPLETIONIST_COVERAGE_PANE) || map.createPane(COMPLETIONIST_COVERAGE_PANE);
+  coveragePane.style.zIndex = '605';
+  coveragePane.style.pointerEvents = 'none';
   window.L.tileLayer(LEAFLET_TILE_URL, {
     attribution: LEAFLET_TILE_ATTRIBUTION,
   }).addTo(map);
@@ -8349,6 +8369,10 @@ function clearMapLayers() {
     state.map.instance.removeLayer(state.map.completionist.layer);
   }
   state.map.completionist.layer = null;
+  if (state.map.instance && state.map.completionist.unlockedAirportCoverageLayer) {
+    state.map.instance.removeLayer(state.map.completionist.unlockedAirportCoverageLayer);
+  }
+  state.map.completionist.unlockedAirportCoverageLayer = null;
   if (state.map.instance && state.map.completionist.focusedDestinationLayer) {
     state.map.instance.removeLayer(state.map.completionist.focusedDestinationLayer);
   }
@@ -8372,6 +8396,46 @@ function buildAirportPopup(point) {
     ${escapeHtml(point.name)}<br>
     ${links}
   `;
+}
+
+function getCompletionistCoverageAirportPoints(model = state.model) {
+  return (model?.map?.completionistCoverageAirportPoints || [])
+    .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
+}
+
+function syncCompletionistUnlockedAirportCoverageLayer(model = state.model) {
+  if (state.map.instance && state.map.completionist.unlockedAirportCoverageLayer) {
+    state.map.instance.removeLayer(state.map.completionist.unlockedAirportCoverageLayer);
+  }
+  state.map.completionist.unlockedAirportCoverageLayer = null;
+  if (!state.map.instance || !window.L || !isCompletionistModeEnabled()) {
+    return null;
+  }
+  const points = getCompletionistCoverageAirportPoints(model);
+  if (!points.length) {
+    return null;
+  }
+  const layers = [];
+  points.forEach((point) => {
+    COMPLETIONIST_UNLOCKED_AIRPORT_RADIUS_SPECS.forEach(({ radiusMeters, opacity, fillOpacity, weight }) => {
+      layers.push(window.L.circle([point.lat, point.lon], {
+        renderer: state.map.renderer,
+        pane: COMPLETIONIST_COVERAGE_PANE,
+        radius: radiusMeters,
+        stroke: true,
+        color: COMPLETIONIST_UNLOCKED_AIRPORT_COLOR,
+        opacity,
+        weight,
+        fillColor: COMPLETIONIST_UNLOCKED_AIRPORT_COLOR,
+        fillOpacity,
+        interactive: false,
+        bubblingMouseEvents: false,
+      }));
+    });
+  });
+  state.map.completionist.unlockedAirportCoverageLayer = window.L.layerGroup(layers);
+  state.map.completionist.unlockedAirportCoverageLayer.addTo(state.map.instance);
+  return state.map.completionist.unlockedAirportCoverageLayer;
 }
 
 function getCompletionistFocusedDestinationPoint(match = getSelectedCompletionistMatch()) {
@@ -8430,6 +8494,7 @@ function renderCompletionistLeafletMap(model) {
   const hasRenderedView = state.map.completionist.hasRenderedView;
   const viewportInitialized = state.map.viewportInitialized;
   clearMapLayers();
+  syncCompletionistUnlockedAirportCoverageLayer(model);
   const visibleMatches = getVisibleCompletionistMatches();
   if (!visibleMatches.length) {
     if (!hasRenderedView && !viewportInitialized) {

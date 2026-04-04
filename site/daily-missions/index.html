@@ -6,18 +6,18 @@
     <title>Daily Missions | Skyviz</title>
     <meta
       name="description"
-      content="Open the live Skyviz daily mission board with a map-first layout, compact mission filters, copyable FR24 finder values, and synchronized flight listings."
+      content="Open the live Skyviz daily mission board with a map-first layout, compact mission filters, copyable FR24 finder values, synchronized flight listings, and optional weekly airport radii from your skycards_user.json."
     >
     <meta name="robots" content="index,follow,max-image-preview:large">
     <link rel="canonical" href="https://chanzer0.github.io/skyviz/daily-missions/">
     <meta property="og:type" content="website">
     <meta property="og:title" content="Daily Missions | Skyviz">
-    <meta property="og:description" content="Track the live Skycards daily missions on a dedicated Skyviz map and synchronized flight board.">
+    <meta property="og:description" content="Track the live Skycards daily missions on a dedicated Skyviz map and optionally overlay your weekly airport radii from skycards_user.json.">
     <meta property="og:url" content="https://chanzer0.github.io/skyviz/daily-missions/">
     <meta property="og:site_name" content="Skyviz">
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="Daily Missions | Skyviz">
-    <meta name="twitter:description" content="Track the live Skycards daily missions on a dedicated Skyviz map and synchronized flight board.">
+    <meta name="twitter:description" content="Track the live Skycards daily missions on a dedicated Skyviz map and optionally overlay your weekly airport radii from skycards_user.json.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -32,7 +32,7 @@
     >
     <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
     <link rel="stylesheet" href="../styles.css?v=20260404-map-slider-resize-1">
-    <link rel="stylesheet" href="./styles.css?v=20260404-map-slider-resize-1">
+    <link rel="stylesheet" href="./styles.css?v=20260404-daily-missions-coverage-1">
   </head>
   <body class="daily-missions-page-body">
     <a class="skip-link" href="#daily-missions-main">Skip to mission board</a>
@@ -91,6 +91,18 @@
                   </span>
                 </label>
                 <button id="mission-map-size-reset" class="region-action-button map-resize-reset" type="button" hidden disabled>Reset</button>
+              </div>
+            </div>
+            <div id="mission-coverage-panel" class="daily-missions-coverage-panel" data-tone="idle" aria-live="polite">
+              <div class="daily-missions-coverage-copy">
+                <p class="daily-missions-coverage-label">Weekly airport radii</p>
+                <p id="mission-coverage-message" class="daily-missions-coverage-message">
+                  Load your skycards_user.json file to view flights within your unlocked airport radii if you do not already have one uploaded here.
+                </p>
+              </div>
+              <div class="daily-missions-coverage-actions">
+                <button id="mission-coverage-upload-button" class="region-action-button" type="button">Load skycards_user.json</button>
+                <input id="mission-coverage-input" type="file" accept=".json,application/json" hidden>
               </div>
             </div>
             <div class="daily-missions-map-shell">
@@ -197,7 +209,7 @@
           </nav>
           <section class="site-footer-block">
             <h2 class="site-footer-heading">Privacy</h2>
-            <p class="site-footer-copy">This page reads the shared delayed mission artifact only. It does not upload your data or require an account.</p>
+            <p class="site-footer-copy">This page reads the shared delayed mission artifact, and any optional skycards_user.json upload stays in this browser only. It does not require an account.</p>
           </section>
         </div>
         <div class="site-footer-meta">
@@ -212,6 +224,6 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
-    <script type="module" src="../src/daily-missions-main.js?v=20260404-map-slider-resize-3"></script>
+    <script type="module" src="../src/daily-missions-main.js?v=20260404-daily-missions-coverage-1"></script>
   </body>
 </html>

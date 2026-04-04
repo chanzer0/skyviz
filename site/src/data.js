@@ -137,6 +137,7 @@ const referenceState = {
   manifestPromise: null,
   dataPromise: null,
   cardleDataPromise: null,
+  airportDataPromise: null,
 };
 const airportGameState = {
   manifestPromise: null,
@@ -250,6 +251,27 @@ export async function loadCardleReferenceData() {
     });
   }
   return referenceState.cardleDataPromise;
+}
+
+export async function loadAirportReferenceData() {
+  if (!referenceState.airportDataPromise) {
+    referenceState.airportDataPromise = loadReferenceManifest().then(async (manifest) => {
+      const airportsPayload = await fetchJson(getManifestDatasetPath(manifest, 'airports', './data/reference/airports.json'));
+      const airportRows = asArray(airportsPayload.rows);
+      const allAirports = airportRows.map((row) => buildAirportRef(row));
+      return {
+        manifest,
+        airportsPayload,
+        allAirports,
+        airportsById: new Map(allAirports.map((row) => [row.id, row])),
+        airportsByCode: buildAirportCodeIndex(allAirports),
+      };
+    }).catch((error) => {
+      referenceState.airportDataPromise = null;
+      throw error;
+    });
+  }
+  return referenceState.airportDataPromise;
 }
 
 export async function loadAirportGameManifest() {
@@ -1504,6 +1526,25 @@ export function parseUserCollection(text, fileName = 'upload') {
   return payload;
 }
 
+export function buildCompletedAirportCoveragePoints(payload, references) {
+  const airportsById = references?.airportsById instanceof Map ? references.airportsById : new Map();
+  const completedAirportIds = new Set();
+  for (const rawId of asArray(payload?.completedAirportIds)) {
+    const id = String(rawId);
+    if (!id || completedAirportIds.has(id)) {
+      continue;
+    }
+    completedAirportIds.add(id);
+  }
+  return Array.from(completedAirportIds)
+    .map((id) => airportsById.get(id))
+    .filter((airport) => Number.isFinite(airport?.lat) && Number.isFinite(airport?.lon))
+    .map((airport) => ({
+      ...airport,
+      label: `${airport.icao || airport.iata || airport.id} - ${airport.name}`,
+    }));
+}
+
 export function buildDashboardModel(payload, references, options = {}) {
   const cards = asArray(payload.cards).map((card, index) => {
     const model = references.modelsById.get(normalizeCode(card.modelId));
@@ -1556,6 +1597,7 @@ export function buildDashboardModel(payload, references, options = {}) {
   const caughtRegistrationCounts = buildCaughtRegistrationModelCounts(payload, references, {
     manualRegistrationMappings: options.manualRegistrationMappings,
   });
+  const completionistCoverageAirportPoints = buildCompletedAirportCoveragePoints(payload, references);
 
   const distinctModelIds = unique(cards.map((card) => card.modelId).filter(Boolean));
   const capturedAirportIds = new Set();
@@ -1869,6 +1911,7 @@ export function buildDashboardModel(payload, references, options = {}) {
     },
     map: {
       airportPoints,
+      completionistCoverageAirportPoints,
       capturedAirports: capturedAirports.length,
       totalAirports: allAirports.length,
       missingAirports: Math.max(allAirports.length - capturedAirports.length, 0),
