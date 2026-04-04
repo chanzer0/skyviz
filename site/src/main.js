@@ -60,7 +60,7 @@ import {
   buildLiveRefreshStatus,
   formatRefreshAbsoluteTime,
 } from './live-refresh.js';
-import { createDesktopMapResizer } from './map-sizing.js?v=20260404-map-slider-resize-3';
+import { createDesktopMapResizer } from './map-sizing.js?v=20260404-map-completionist-defaults-1';
 
 const elements = {
   bootLoader: document.querySelector('#boot-loader'),
@@ -242,7 +242,10 @@ const SKYVIZ_UPLOAD_META_SCHEMA_VERSION = 1;
 const DASHBOARD_MAP_RESIZER_KEY = 'skyviz.dashboardMapResizer.v2';
 const PAGE_SHELL_BASE_MAX_WIDTH = 1500;
 const PAGE_SHELL_DESKTOP_INSET_REM = 1.5;
+const DASHBOARD_MAP_RESIZER_QUERY = '(min-width: 761px)';
+const DASHBOARD_MAP_RESIZER_STEP = 16;
 const DASHBOARD_MAP_MIN_WIDTH = 420;
+const DASHBOARD_MAP_TABLET_MIN_WIDTH = 360;
 const DASHBOARD_MAP_DEFAULT_SPLIT = Object.freeze({ primary: 1, secondary: 1 });
 const DASHBOARD_COMPLETIONIST_SPLIT = Object.freeze({ primary: 1.65, secondary: 0.78 });
 const MANUAL_REGISTRATION_MAPPINGS_KEY = 'skyviz.manualRegistrationMappings.v1';
@@ -2328,6 +2331,43 @@ function getDashboardSideMinWidth() {
   return isCompletionistModeEnabled() ? 300 : 320;
 }
 
+function isTabletMapSizingMode() {
+  return window.matchMedia(DASHBOARD_MAP_RESIZER_QUERY).matches && window.innerWidth <= 1024;
+}
+
+function getDashboardMapMinWidth() {
+  if (isTabletMapSizingMode()) {
+    return DASHBOARD_MAP_TABLET_MIN_WIDTH;
+  }
+  return DASHBOARD_MAP_MIN_WIDTH;
+}
+
+function getDashboardStackedMapPanelWidth() {
+  const panelWidth = Number(elements.mapPanel?.getBoundingClientRect().width) || 0;
+  if (panelWidth > 0) {
+    return panelWidth;
+  }
+  const layoutWidth = Number(elements.mapLayout?.getBoundingClientRect().width) || 0;
+  if (layoutWidth > 0) {
+    return layoutWidth;
+  }
+  const shellWidth = Number(elements.pageShell?.getBoundingClientRect().width) || 0;
+  if (shellWidth > 0) {
+    return shellWidth;
+  }
+  return Math.max(getDashboardMapMinWidth(), window.innerWidth - 48);
+}
+
+function alignDashboardMapSliderMax(max, min) {
+  const step = DASHBOARD_MAP_RESIZER_STEP;
+  if (step <= 1) {
+    return max;
+  }
+  const span = Math.max(0, Math.round(max - min));
+  const alignedSpan = Math.floor(span / step) * step;
+  return Math.max(min, Math.round(min + alignedSpan));
+}
+
 function getDashboardMapSplitRatios() {
   return isCompletionistModeEnabled() ? DASHBOARD_COMPLETIONIST_SPLIT : DASHBOARD_MAP_DEFAULT_SPLIT;
 }
@@ -2355,10 +2395,18 @@ function getDashboardDefaultMapWidths() {
 }
 
 function getDashboardMapWidthBounds() {
+  if (isTabletMapSizingMode()) {
+    const min = getDashboardMapMinWidth();
+    const max = alignDashboardMapSliderMax(Math.max(min, Math.round(getDashboardStackedMapPanelWidth())), min);
+    return {
+      min: Math.min(min, max),
+      max,
+    };
+  }
   const { maxShellWidth, gap } = getDashboardDefaultMapWidths();
   const sideMinWidth = getDashboardSideMinWidth();
-  const min = DASHBOARD_MAP_MIN_WIDTH;
-  const max = Math.max(min, maxShellWidth - gap - sideMinWidth);
+  const min = getDashboardMapMinWidth();
+  const max = alignDashboardMapSliderMax(Math.max(min, maxShellWidth - gap - sideMinWidth), min);
   return {
     min: Math.min(min, max),
     max: Math.max(min, max),
@@ -2370,11 +2418,24 @@ function measureDashboardMapWidth() {
   if (panelWidth > 0) {
     return panelWidth;
   }
-  return getDashboardDefaultMapWidths().defaultMapWidth || DASHBOARD_MAP_MIN_WIDTH;
+  return getDashboardDefaultMapWidths().defaultMapWidth || getDashboardMapMinWidth();
 }
 
 function applyDashboardMapWidthOverride(width) {
   if (!(elements.mapLayout instanceof HTMLElement) || !(elements.pageShell instanceof HTMLElement)) {
+    return;
+  }
+  const bounds = getDashboardMapWidthBounds();
+  const resolvedWidth = Math.round(clampNumber(width, bounds.min, bounds.max));
+  if (isTabletMapSizingMode()) {
+    elements.pageShell.style.removeProperty('--page-shell-max-width');
+    elements.mapLayout.style.removeProperty('grid-template-columns');
+    if (elements.mapPanel instanceof HTMLElement) {
+      elements.mapPanel.style.width = '100%';
+      elements.mapPanel.style.maxWidth = `${resolvedWidth}px`;
+      elements.mapPanel.style.marginInline = 'auto';
+    }
+    queueDashboardMapInvalidate();
     return;
   }
   const {
@@ -2383,8 +2444,6 @@ function applyDashboardMapWidthOverride(width) {
     gap,
     maxShellWidth,
   } = getDashboardDefaultMapWidths();
-  const bounds = getDashboardMapWidthBounds();
-  const resolvedWidth = Math.round(clampNumber(width, bounds.min, bounds.max));
   const shellExpansion = Math.min(
     Math.max(0, resolvedWidth - defaultMapWidth),
     Math.max(0, maxShellWidth - baseShellWidth),
@@ -2402,13 +2461,19 @@ function clearDashboardMapWidthOverride() {
   }
   elements.pageShell.style.removeProperty('--page-shell-max-width');
   elements.mapLayout.style.removeProperty('grid-template-columns');
+  if (elements.mapPanel instanceof HTMLElement) {
+    elements.mapPanel.style.removeProperty('width');
+    elements.mapPanel.style.removeProperty('max-width');
+    elements.mapPanel.style.removeProperty('margin-inline');
+  }
   queueDashboardMapInvalidate();
 }
 
 function getDashboardMapHeightBounds() {
+  const min = 340;
   return {
-    min: 340,
-    max: Math.max(520, Math.min(window.innerHeight - 180, 920)),
+    min,
+    max: alignDashboardMapSliderMax(Math.max(520, Math.min(window.innerHeight - 180, 920)), min),
   };
 }
 
@@ -2462,7 +2527,7 @@ function initializeDashboardMapResizer() {
   }
   dashboardMapResizer = createDesktopMapResizer({
     storageKey: DASHBOARD_MAP_RESIZER_KEY,
-    desktopQuery: '(min-width: 1025px)',
+    desktopQuery: DASHBOARD_MAP_RESIZER_QUERY,
     controlsShell: elements.mapResizeControls,
     resetButton: elements.mapSizeReset,
     fields: {
@@ -2478,7 +2543,7 @@ function initializeDashboardMapResizer() {
         apply: applyDashboardMapWidthOverride,
         clear: clearDashboardMapWidthOverride,
         isAvailable: () => Boolean(state.model) && !elements.dashboard?.hidden && state.activeTab === 'map' && !elements.mapTabPanel?.hidden,
-        step: 16,
+        step: DASHBOARD_MAP_RESIZER_STEP,
         formatValue: (value) => `${Math.round(value)}px`,
       },
       height: {
@@ -2492,7 +2557,7 @@ function initializeDashboardMapResizer() {
         apply: applyDashboardMapHeightOverride,
         clear: clearDashboardMapHeightOverride,
         isAvailable: () => Boolean(state.model) && !elements.dashboard?.hidden && state.activeTab === 'map' && !elements.mapTabPanel?.hidden,
-        step: 16,
+        step: DASHBOARD_MAP_RESIZER_STEP,
         formatValue: (value) => `${Math.round(value)}px`,
       },
     },
@@ -2504,6 +2569,22 @@ function syncDashboardMapResizer() {
     initializeDashboardMapResizer();
   }
   dashboardMapResizer?.syncAll();
+}
+
+function applyCompletionistMapDefaultSizing() {
+  if (!state.model) {
+    return;
+  }
+  if (!dashboardMapResizer) {
+    initializeDashboardMapResizer();
+  }
+  if (!dashboardMapResizer?.setFieldValue) {
+    return;
+  }
+  const widthBounds = getDashboardMapWidthBounds();
+  const heightBounds = getDashboardMapHeightBounds();
+  dashboardMapResizer.setFieldValue('width', widthBounds.max, { persistValue: true });
+  dashboardMapResizer.setFieldValue('height', heightBounds.max, { persistValue: true });
 }
 
 function syncCardleHotspotMap(challenge, session) {
@@ -5715,6 +5796,7 @@ function clearDashboardPanels() {
   elements.mapLegend.hidden = false;
   elements.mapLegend.innerHTML = '';
   elements.mapAirportKpi.textContent = '';
+  elements.mapAirportKpi.hidden = false;
   elements.mapCompletionistStatus.textContent = '';
   elements.mapCompletionistUpdated.textContent = '--';
   elements.mapCompletionistStatus.title = '';
@@ -7835,25 +7917,12 @@ function syncCompletionistPolling(options = {}) {
 
 function renderMapKpis(model) {
   if (isCompletionistModeEnabled()) {
-    const { allCounts, searchCounts, visibleMatches } = getCompletionistViewState();
-    const generatedAtMillis = getCompletionistSnapshotGeneratedAtMillis();
-    const snapshotAgeMillis = generatedAtMillis ? Math.max(Date.now() - generatedAtMillis, 0) : null;
-    const staleSuffix = Number.isFinite(snapshotAgeMillis) && snapshotAgeMillis > (getCompletionistStaleSeconds() * 1000)
-      ? ' Snapshot is stale.'
-      : '';
-    const searchActive = getCompletionistSearchTokens().length > 0;
-    const scopeCounts = searchActive ? searchCounts : allCounts;
-    const scopeLabel = searchActive ? 'in search' : 'in snapshot';
-    const targetBreakdown = [
-      formatCompletionistTargetLabel('airport', scopeCounts.airport),
-      formatCompletionistTargetLabel('card', scopeCounts.card),
-    ].join(', ');
-    elements.mapAirportKpi.textContent = state.map.completionist.snapshot
-      ? `${formatCompletionistTargetLabel('all', scopeCounts.all)} ${scopeLabel}: ${targetBreakdown}. ${formatNumber(visibleMatches.length)} flights visible in the current target view.${staleSuffix}`
-      : 'Completionist mode compares the shared live snapshot against your local collection only in this browser.';
+    elements.mapAirportKpi.textContent = '';
+    elements.mapAirportKpi.hidden = true;
     return;
   }
   const airportPercent = formatPercent(model.summary.airportCaptureRate, 1);
+  elements.mapAirportKpi.hidden = false;
   elements.mapAirportKpi.textContent = `Unlocked ${formatNumber(model.map.capturedAirports)} / ${formatNumber(model.map.totalAirports)} airports (${airportPercent} complete).`;
 }
 
@@ -10472,7 +10541,16 @@ function wireMapCompletionControls() {
     if (!state.model) {
       return;
     }
+    if (state.map.completionist.enabled) {
+      applyCompletionistMapDefaultSizing();
+    }
     renderMapTab(state.model);
+    if (state.map.completionist.enabled) {
+      requestAnimationFrame(() => {
+        applyCompletionistMapDefaultSizing();
+        syncDashboardMapResizer();
+      });
+    }
     syncCompletionistPolling({ refreshIfNeeded: true });
   });
 

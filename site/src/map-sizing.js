@@ -327,6 +327,9 @@ export function createDesktopMapResizer({
       persist();
       syncAll();
     },
+    setFieldValue(key, nextValue, { persistValue = true } = {}) {
+      return applyLiveFieldValue(key, nextValue, { persistValue });
+    },
     hasStoredOverrides,
     syncAll,
   };
