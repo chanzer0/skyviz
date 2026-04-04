@@ -231,12 +231,14 @@ const AIRCRAFT_DETAIL_CAMERA_ORBIT = '0deg 75deg 115%';
 const AIRCRAFT_IMAGE_TIERS = ['paper', 'bronze', 'silver', 'gold', 'platinum', 'cyber'];
 const AIRCRAFT_XP_TIERS = new Set([...AIRCRAFT_IMAGE_TIERS, 'unknown']);
 const AIRCRAFT_IMAGE_SIZE_ORDER = ['md'];
+const SESSION_UPLOAD_KEY = 'skyviz.sessionUpload.v1';
 const PERSISTED_UPLOAD_KEY = 'skyviz.persistedUpload.v1';
 const PERSIST_PREFERENCE_KEY = 'skyviz.persistUploadPreference.v1';
 const PERSISTED_UPLOAD_DB_NAME = 'skyviz.persistedUploadStorage.v1';
 const PERSISTED_UPLOAD_DB_VERSION = 1;
 const PERSISTED_UPLOAD_STORE_NAME = 'uploads';
 const PERSISTED_UPLOAD_RECORD_KEY = 'current';
+const SKYVIZ_UPLOAD_META_SCHEMA_VERSION = 1;
 const DASHBOARD_MAP_RESIZER_KEY = 'skyviz.dashboardMapResizer.v2';
 const PAGE_SHELL_BASE_MAX_WIDTH = 1500;
 const PAGE_SHELL_DESKTOP_INSET_REM = 1.5;
@@ -3968,6 +3970,41 @@ function normalizePersistedUploadRecord(record) {
   };
 }
 
+function readSessionUpload() {
+  try {
+    return normalizePersistedUploadRecord(JSON.parse(window.sessionStorage.getItem(SESSION_UPLOAD_KEY) || 'null'));
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionUpload(upload) {
+  if (!upload?.text) {
+    return false;
+  }
+  try {
+    window.sessionStorage.setItem(
+      SESSION_UPLOAD_KEY,
+      JSON.stringify({
+        fileName: upload.fileName || 'upload.json',
+        text: upload.text,
+        savedAt: Date.now(),
+      }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearSessionUpload() {
+  try {
+    window.sessionStorage.removeItem(SESSION_UPLOAD_KEY);
+  } catch {
+    // no-op: storage may be unavailable or blocked
+  }
+}
+
 function clearPersistedUploadFromLocalStorage() {
   try {
     window.localStorage.removeItem(PERSISTED_UPLOAD_KEY);
@@ -4187,6 +4224,174 @@ async function writePersistedUpload(upload) {
   return false;
 }
 
+function normalizePersistedCompletionistAirportDismissKey(value) {
+  const rawValue = String(value || '').trim();
+  if (!rawValue) {
+    return '';
+  }
+  if (rawValue.startsWith('airport-code:')) {
+    const code = normalizeCompletionistCode(rawValue.slice('airport-code:'.length));
+    return code ? `airport-code:${code}` : '';
+  }
+  if (rawValue.startsWith('airport:')) {
+    const airportId = sanitizeText(rawValue.slice('airport:'.length));
+    return airportId ? `airport:${airportId}` : '';
+  }
+  const airportId = sanitizeText(rawValue);
+  return airportId ? `airport:${airportId}` : '';
+}
+
+function normalizePersistedCompletionistModelDismissKey(value) {
+  const rawValue = String(value || '').trim();
+  if (!rawValue) {
+    return '';
+  }
+  return getCompletionistModelDismissKey(
+    rawValue.startsWith('model:') ? rawValue.slice('model:'.length) : rawValue,
+  );
+}
+
+function normalizeCompletionistDismissKeyList(values, normalizeKey) {
+  const keys = new Set();
+  for (const value of Array.isArray(values) ? values : []) {
+    const normalizedKey = normalizeKey(value);
+    if (!normalizedKey) {
+      continue;
+    }
+    keys.add(normalizedKey);
+  }
+  return Array.from(keys).sort();
+}
+
+function buildCompletionistDismissalsFromPayload(payload) {
+  const completionistState = payload?.skyviz?.completionist;
+  return {
+    airportKeys: normalizeCompletionistDismissKeyList(
+      completionistState?.hiddenAirportKeys,
+      normalizePersistedCompletionistAirportDismissKey,
+    ),
+    modelKeys: normalizeCompletionistDismissKeyList(
+      completionistState?.hiddenModelKeys,
+      normalizePersistedCompletionistModelDismissKey,
+    ),
+  };
+}
+
+function buildCompletionistDismissalsFromState() {
+  return {
+    airportKeys: normalizeCompletionistDismissKeyList(
+      Array.from(state.map.completionist.dismissedAirportKeys || []),
+      normalizePersistedCompletionistAirportDismissKey,
+    ),
+    modelKeys: normalizeCompletionistDismissKeyList(
+      Array.from(state.map.completionist.dismissedModelKeys || []),
+      normalizePersistedCompletionistModelDismissKey,
+    ),
+  };
+}
+
+function serializeUserCollectionWithCompletionistDismissals(payload, dismissals = null) {
+  const airportKeys = normalizeCompletionistDismissKeyList(
+    dismissals?.airportKeys,
+    normalizePersistedCompletionistAirportDismissKey,
+  );
+  const modelKeys = normalizeCompletionistDismissKeyList(
+    dismissals?.modelKeys,
+    normalizePersistedCompletionistModelDismissKey,
+  );
+  const nextPayload = {
+    ...payload,
+  };
+  const nextSkyviz = payload?.skyviz && typeof payload.skyviz === 'object' && !Array.isArray(payload.skyviz)
+    ? { ...payload.skyviz }
+    : {};
+  const nextCompletionist = nextSkyviz.completionist && typeof nextSkyviz.completionist === 'object' && !Array.isArray(nextSkyviz.completionist)
+    ? { ...nextSkyviz.completionist }
+    : {};
+  if (airportKeys.length) {
+    nextCompletionist.hiddenAirportKeys = airportKeys;
+  } else {
+    delete nextCompletionist.hiddenAirportKeys;
+  }
+  if (modelKeys.length) {
+    nextCompletionist.hiddenModelKeys = modelKeys;
+  } else {
+    delete nextCompletionist.hiddenModelKeys;
+  }
+  if (Object.keys(nextCompletionist).length) {
+    nextSkyviz.schemaVersion = SKYVIZ_UPLOAD_META_SCHEMA_VERSION;
+    nextSkyviz.completionist = nextCompletionist;
+  } else {
+    delete nextSkyviz.completionist;
+    if (Object.keys(nextSkyviz).length === 1 && Number(nextSkyviz.schemaVersion) === SKYVIZ_UPLOAD_META_SCHEMA_VERSION) {
+      delete nextSkyviz.schemaVersion;
+    }
+  }
+  if (Object.keys(nextSkyviz).length) {
+    nextPayload.skyviz = nextSkyviz;
+  } else {
+    delete nextPayload.skyviz;
+  }
+  return JSON.stringify(nextPayload, null, 2);
+}
+
+async function syncCurrentUploadStorage() {
+  if (!state.upload.text) {
+    clearSessionUpload();
+    return {
+      sessionSaved: false,
+      persistedSaved: false,
+      persistEnabled: Boolean(elements.persistUpload.checked),
+    };
+  }
+  const sessionSaved = writeSessionUpload(state.upload);
+  if (!elements.persistUpload.checked) {
+    await clearPersistedUpload();
+    writePersistPreference(false);
+    syncDataToolsPanelState();
+    return {
+      sessionSaved,
+      persistedSaved: false,
+      persistEnabled: false,
+    };
+  }
+  const persistedSaved = await writePersistedUpload(state.upload);
+  if (!persistedSaved) {
+    setPersistPreferenceChecked(false);
+    await clearPersistedUpload();
+    writePersistPreference(false);
+    syncDataToolsPanelState();
+    return {
+      sessionSaved,
+      persistedSaved: false,
+      persistEnabled: true,
+    };
+  }
+  writePersistPreference(true);
+  syncDataToolsPanelState();
+  return {
+    sessionSaved,
+    persistedSaved: true,
+    persistEnabled: true,
+  };
+}
+
+async function syncCurrentUploadCompletionistDismissals() {
+  if (!state.upload.text) {
+    return {
+      sessionSaved: false,
+      persistedSaved: false,
+      persistEnabled: Boolean(elements.persistUpload.checked),
+    };
+  }
+  const payload = parseUserCollection(state.upload.text, state.upload.fileName || 'local upload');
+  state.upload.text = serializeUserCollectionWithCompletionistDismissals(
+    payload,
+    buildCompletionistDismissalsFromState(),
+  );
+  return syncCurrentUploadStorage();
+}
+
 function normalizeManualRegistration(value) {
   return String(value || '')
     .trim()
@@ -4320,26 +4525,17 @@ function rebuildDashboardModelFromCurrentUpload() {
 }
 
 async function persistCurrentUploadIfEnabled() {
-  if (!elements.persistUpload.checked) {
-    await clearPersistedUpload();
-    writePersistPreference(false);
-    syncDataToolsPanelState();
+  const storageResult = await syncCurrentUploadStorage();
+  if (!storageResult.persistEnabled) {
     return false;
   }
-  const saved = await writePersistedUpload(state.upload);
-  if (!saved) {
-    setPersistPreferenceChecked(false);
-    await clearPersistedUpload();
-    writePersistPreference(false);
-    syncDataToolsPanelState();
+  if (!storageResult.persistedSaved) {
     setBanner(
-      'Could not save to browser storage on this device. Your data is still private and in-memory only for this session.',
+      'Could not save to browser storage on this device. Your data is still private and available only in this browser session.',
       'warning',
     );
     return false;
   }
-  writePersistPreference(true);
-  syncDataToolsPanelState();
   return true;
 }
 
@@ -4374,9 +4570,9 @@ function describePersistPreferenceSummary() {
     return 'Local save is on. Your next successful upload will be stored only on this device.';
   }
   if (hasCurrentUpload) {
-    return 'Current dashboard is in memory only. Turn this on to keep a local copy after refresh.';
+    return 'Current dashboard is private to this browser session only. Turn this on to keep a local copy on this device after you close the browser.';
   }
-  return 'Local save is off. Nothing is stored on this device.';
+  return 'Local save is off. Nothing is stored on this device past the current browser session.';
 }
 
 function describeDataToolsCollectionSummary() {
@@ -4412,10 +4608,13 @@ async function handlePersistPreferenceChange(enabled) {
   writePersistPreference(enabled);
   if (!enabled) {
     await clearPersistedUpload();
+    if (state.upload.text) {
+      writeSessionUpload(state.upload);
+    }
     syncDataToolsPanelState();
     if (state.model) {
-      setUploadStatus('Current upload is private in-memory only for this session.');
-      setBanner('Local save disabled. Any saved upload has been removed from this device.', 'info');
+      setUploadStatus('Current upload is private to this browser session only.');
+      setBanner('Local save disabled. Any device-saved upload has been removed.', 'info');
     }
     return;
   }
@@ -4431,12 +4630,13 @@ async function handlePersistPreferenceChange(enabled) {
     writePersistPreference(false);
     syncDataToolsPanelState();
     setBanner(
-      'Could not save to browser storage on this device. Data remains private in-memory only.',
+      'Could not save to browser storage on this device. Data remains private to this browser session only.',
       'warning',
     );
     return;
   }
   syncDataToolsPanelState();
+  writeSessionUpload(state.upload);
   setUploadStatus('Current upload saved only on this device (browser storage).');
   setBanner('Upload saved locally on this device. Skyviz does not send your collection to a server.', 'info');
 }
@@ -5891,6 +6091,7 @@ async function resetToLanding({
   setDataToolsOpen(false);
   syncDashboardTabAvailability();
   renderLandingDailyCtas();
+  clearSessionUpload();
 
   if (clearPersisted) {
     await clearPersistedUpload();
@@ -5928,7 +6129,7 @@ function wireDataTools() {
       clearPersistPreference: true,
       clearManualMappings: true,
     });
-    setBanner('Cleared current dashboard and removed saved local data from this device.', 'info');
+    setBanner('Cleared the current dashboard and removed its browser-session and device-saved data.', 'info');
   });
 
   document.addEventListener('click', (event) => {
@@ -6486,7 +6687,7 @@ function buildCompletionistDismissSummaryText() {
   const hiddenLabel = parts.length > 1
     ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
     : parts[0];
-  return `Hidden this session: ${hiddenLabel}.`;
+  return `Hidden for this upload: ${hiddenLabel}.`;
 }
 
 function getSearchFilteredCompletionistMatches() {
@@ -7256,6 +7457,21 @@ function focusCompletionistFlight(model, flightId, options = {}) {
   }
 }
 
+function applyStoredCompletionistDismissals(dismissals = null) {
+  state.map.completionist.dismissedAirportKeys = new Set(
+    normalizeCompletionistDismissKeyList(
+      dismissals?.airportKeys,
+      normalizePersistedCompletionistAirportDismissKey,
+    ),
+  );
+  state.map.completionist.dismissedModelKeys = new Set(
+    normalizeCompletionistDismissKeyList(
+      dismissals?.modelKeys,
+      normalizePersistedCompletionistModelDismissKey,
+    ),
+  );
+}
+
 function buildCompletionistStatusMessage() {
   return buildLiveRefreshStatus({
     generatedAtMillis: getCompletionistSnapshotGeneratedAtMillis(),
@@ -7482,7 +7698,7 @@ function renderCompletionistFlightList(matches) {
       return '<div class="empty-copy">Enable Missing airport or New card to show live targets.</div>';
     }
     if (!getCompletionistSearchTokens().length && !getActiveCompletionistMatches().length && getCompletionistDismissedCounts().total) {
-      return '<div class="empty-copy">All current live matches are hidden for this browser session. Use Restore hidden to bring them back.</div>';
+      return '<div class="empty-copy">All current live matches are hidden for this upload. Use Restore hidden to bring them back.</div>';
     }
     return getCompletionistSearchTokens().length
       ? '<div class="empty-copy">No live flights match the current search and target filters.</div>'
@@ -9886,7 +10102,7 @@ function renderAircraftTab(model) {
   }
 }
 
-function renderDashboard(model, references = null) {
+function renderDashboard(model, references = null, options = {}) {
   state.model = model;
   if (references) {
     state.references = references;
@@ -9910,6 +10126,7 @@ function renderDashboard(model, references = null) {
   state.map.completionist.sort = 'airport-traffic';
   state.map.completionist.query = '';
   resetCompletionistState();
+  applyStoredCompletionistDismissals(options.completionistDismissals);
   resetMapDrillState();
   state.aircraft.query = '';
   state.aircraft.sortBy = 'xp';
@@ -9943,42 +10160,84 @@ function renderDashboard(model, references = null) {
   syncDataToolsPanelState();
 }
 
-async function tryLoadPersistedUpload(persistedUpload = null) {
-  if (!elements.persistUpload.checked) {
-    return;
-  }
-  const persisted = persistedUpload || await readPersistedUpload();
-  if (!persisted) {
-    return;
+async function tryRestoreStoredUpload(upload, options = {}) {
+  if (!upload?.text) {
+    return false;
   }
   setBanner('');
-  setUploadStatus(`Loading saved upload from this device (${persisted.fileName})...`);
+  setUploadStatus(options.loadingStatus || `Loading ${upload.fileName}...`);
   try {
-    const payload = parseUserCollection(persisted.text, persisted.fileName);
+    const payload = parseUserCollection(upload.text, upload.fileName);
     const references = await loadReferenceData();
     const model = buildDashboardModelWithManualMappings(payload, references);
-    state.upload.fileName = persisted.fileName;
-    state.upload.text = persisted.text;
-    renderDashboard(model, references);
-    setUploadStatus(`Loaded saved upload ${persisted.fileName} for ${model.user.name}. Stored only on this device.`);
-    setBanner('Loaded from browser storage on this device. Skyviz never sent your collection to a server.', 'info', {
-      autoDismissMs: 10000,
-    });
+    const completionistDismissals = buildCompletionistDismissalsFromPayload(payload);
+    state.upload.fileName = upload.fileName;
+    state.upload.text = serializeUserCollectionWithCompletionistDismissals(payload, completionistDismissals);
+    writeSessionUpload(state.upload);
+    renderDashboard(model, references, { completionistDismissals });
+    if (options.loadedStatus) {
+      setUploadStatus(options.loadedStatus(model, upload));
+    }
+    if (options.bannerText) {
+      setBanner(options.bannerText, 'info', {
+        autoDismissMs: 10000,
+      });
+    }
+    return true;
   } catch (error) {
-    await clearPersistedUpload();
-    setPersistPreferenceChecked(false);
-    writePersistPreference(false);
+    if (typeof options.clearStoredUpload === 'function') {
+      await options.clearStoredUpload();
+    }
+    if (options.clearPersistPreference) {
+      setPersistPreferenceChecked(false);
+      writePersistPreference(false);
+    }
     syncDataToolsPanelState();
     elements.dashboard.hidden = true;
     elements.landingView.hidden = false;
     setUploadStatus('Waiting for a collection export.');
     setBanner(
       error instanceof Error
-        ? `Saved local upload was invalid and removed: ${error.message}`
-        : 'Saved local upload was invalid and has been removed.',
+        ? `${options.invalidMessagePrefix || 'Saved upload was invalid and has been removed'}: ${error.message}`
+        : `${options.invalidMessagePrefix || 'Saved upload was invalid and has been removed'}.`,
       'warning',
     );
+    return false;
   }
+}
+
+async function tryLoadSessionUpload(sessionUpload = null) {
+  const session = sessionUpload || readSessionUpload();
+  if (!session) {
+    return false;
+  }
+  return tryRestoreStoredUpload(session, {
+    loadingStatus: `Restoring browser-session upload (${session.fileName})...`,
+    loadedStatus: (_model, upload) => `Restored ${upload.fileName} from this browser session.`,
+    bannerText: 'Restored the current browser-session dashboard. Skyviz never sent your collection to a server.',
+    clearStoredUpload: async () => {
+      clearSessionUpload();
+    },
+    invalidMessagePrefix: 'Saved browser-session upload was invalid and has been removed',
+  });
+}
+
+async function tryLoadPersistedUpload(persistedUpload = null) {
+  if (!elements.persistUpload.checked) {
+    return false;
+  }
+  const persisted = persistedUpload || await readPersistedUpload();
+  if (!persisted) {
+    return false;
+  }
+  return tryRestoreStoredUpload(persisted, {
+    loadingStatus: `Loading saved upload from this device (${persisted.fileName})...`,
+    loadedStatus: (model, upload) => `Loaded saved upload ${upload.fileName} for ${model.user.name}. Stored only on this device.`,
+    bannerText: 'Loaded from browser storage on this device. Skyviz never sent your collection to a server.',
+    clearStoredUpload: () => clearPersistedUpload(),
+    clearPersistPreference: true,
+    invalidMessagePrefix: 'Saved local upload was invalid and removed',
+  });
 }
 
 function beginDashboardLoadingState(statusMessage) {
@@ -10026,7 +10285,7 @@ async function handleFile(file) {
     setBootState(true, `Building dashboard for ${file.name}...`);
     const model = buildDashboardModelWithManualMappings(payload, references);
     state.upload.fileName = file.name;
-    state.upload.text = text;
+    state.upload.text = serializeUserCollectionWithCompletionistDismissals(payload);
     renderDashboard(model, references);
     loaded = true;
     const shouldPersist = Boolean(elements.persistUpload.checked);
@@ -10034,7 +10293,7 @@ async function handleFile(file) {
     setUploadStatus(
       persisted
         ? `Loaded ${file.name} for ${model.user.name}. Saved only on this device (browser storage).`
-        : `Loaded ${file.name} for ${model.user.name}. Not saved on this device.`,
+        : `Loaded ${file.name} for ${model.user.name}. Private to this browser session only.`,
     );
     if (!shouldPersist || persisted) {
       setBanner('');
@@ -10067,7 +10326,7 @@ async function handleExampleView() {
     setBootState(true, 'Building example dashboard...');
     const model = buildDashboardModelWithManualMappings(payload, references);
     state.upload.fileName = 'skyviz_try_now_user.json';
-    state.upload.text = text;
+    state.upload.text = serializeUserCollectionWithCompletionistDismissals(payload);
     renderDashboard(model, references);
     loaded = true;
     const shouldPersist = Boolean(elements.persistUpload.checked);
@@ -10075,7 +10334,7 @@ async function handleExampleView() {
     setUploadStatus(
       persisted
         ? 'Loaded example dashboard. Saved only on this device (browser storage).'
-        : 'Loaded example dashboard. Not saved on this device.',
+        : 'Loaded example dashboard. Private to this browser session only.',
     );
     if (!shouldPersist || persisted) {
       setBanner('Loaded sample deck: 20 airports + 20 popular aircraft models.', 'info', {
@@ -10114,7 +10373,7 @@ async function handleLocalPreviewRealDataAutoload() {
     setBootState(true, 'Building dashboard for repo-root skycards_user.json...');
     const model = buildDashboardModelWithManualMappings(payload, references);
     state.upload.fileName = 'skycards_user.json';
-    state.upload.text = text;
+    state.upload.text = serializeUserCollectionWithCompletionistDismissals(payload);
     renderDashboard(model, references);
     loaded = true;
     const shouldPersist = Boolean(elements.persistUpload.checked);
@@ -10122,7 +10381,7 @@ async function handleLocalPreviewRealDataAutoload() {
     setUploadStatus(
       persisted
         ? `Loaded repo-root skycards_user.json for ${model.user.name}. Saved only on this device (browser storage).`
-        : `Loaded repo-root skycards_user.json for ${model.user.name}. Not saved on this device.`,
+        : `Loaded repo-root skycards_user.json for ${model.user.name}. Private to this browser session only.`,
     );
     if (!shouldPersist || persisted) {
       setBanner('Loaded local real-data preview from the repo-root skycards_user.json fixture.', 'info', {
@@ -10176,7 +10435,7 @@ function wireUpload() {
 }
 
 function wireMapCompletionControls() {
-  function handleCompletionistDismissButton(button) {
+  async function handleCompletionistDismissButton(button) {
     const dismissKind = String(button.dataset.dismissKind || '').trim().toLowerCase();
     const dismissKey = String(button.dataset.dismissKey || '').trim();
     const dismissLabel = String(button.dataset.dismissLabel || '').trim() || 'target';
@@ -10189,7 +10448,15 @@ function wireMapCompletionControls() {
       state.map.completionist.dismissedModelKeys.add(dismissKey);
     }
     renderMapTab(state.model);
-    setBanner(`Hidden ${dismissLabel} from live completionist for this browser session.`, 'info', {
+    const storageResult = await syncCurrentUploadCompletionistDismissals();
+    if (storageResult.persistEnabled && !storageResult.persistedSaved) {
+      setBanner(
+        `Hidden ${dismissLabel} for this upload, but the device-local save could not be updated. The change is available only in this browser session.`,
+        'warning',
+      );
+      return true;
+    }
+    setBanner(`Hidden ${dismissLabel} from live completionist for this upload.`, 'info', {
       autoDismissMs: 5000,
     });
     return true;
@@ -10235,9 +10502,19 @@ function wireMapCompletionControls() {
     if (state.model) {
       renderMapTab(state.model);
     }
-    setBanner('Restored all hidden completionist targets for this browser session.', 'info', {
-      autoDismissMs: 5000,
-    });
+    void (async () => {
+      const storageResult = await syncCurrentUploadCompletionistDismissals();
+      if (storageResult.persistEnabled && !storageResult.persistedSaved) {
+        setBanner(
+          'Restored the hidden completionist targets for this upload, but the device-local save could not be updated. The change is available only in this browser session.',
+          'warning',
+        );
+        return;
+      }
+      setBanner('Restored all hidden completionist targets for this upload.', 'info', {
+        autoDismissMs: 5000,
+      });
+    })();
   });
 
   elements.mapCanvas?.addEventListener('click', (event) => {
@@ -10250,9 +10527,8 @@ function wireMapCompletionControls() {
     }
     const dismissButton = target.closest('button[data-action="dismiss-completionist-target"][data-dismiss-kind][data-dismiss-key]');
     if (dismissButton) {
-      if (handleCompletionistDismissButton(dismissButton)) {
-        event.preventDefault();
-      }
+      event.preventDefault();
+      void handleCompletionistDismissButton(dismissButton);
       return;
     }
     if (!target.closest('.leaflet-popup-close-button')) {
@@ -10442,7 +10718,8 @@ function wireMapCompletionControls() {
     }
     const dismissButton = target.closest('button[data-action="dismiss-completionist-target"][data-dismiss-kind][data-dismiss-key]');
     if (dismissButton) {
-      handleCompletionistDismissButton(dismissButton);
+      event.preventDefault();
+      void handleCompletionistDismissButton(dismissButton);
       return;
     }
     const button = target.closest('button[data-action="focus-completionist-flight"][data-flight-id]');
@@ -11309,16 +11586,20 @@ async function bootstrap() {
   renderLandingDailyCtas();
   updateManualMappingStorageMeta(null);
   setPersistPreferenceChecked(readPersistPreference());
+  const sessionUpload = readSessionUpload();
   const persistedUpload = await readPersistedUpload();
   syncDashboardTabAvailability();
   syncDataToolsPanelState();
   const shouldAutoLoadRealData = shouldAutoLoadLocalRealData();
+  const shouldRestoreSessionUpload = Boolean(sessionUpload);
   const shouldRestorePersistedUpload = elements.persistUpload.checked && Boolean(persistedUpload);
   setDataToolsOpen(false);
   setBootState(
     true,
     shouldAutoLoadRealData
       ? 'Loading repo-root skycards_user.json...'
+      : shouldRestoreSessionUpload
+        ? 'Checking for a saved browser session...'
       : shouldRestorePersistedUpload
         ? 'Checking for saved local data on this device...'
         : 'Preparing your private local workspace...',
@@ -11347,6 +11628,13 @@ async function bootstrap() {
     setReferenceStatus(`Reference snapshot: models ${modelDate}, airports ${airportDate}, client ${manifest?.clientVersion || 'unknown'}.`, 'ok');
     if (shouldAutoLoadRealData) {
       await handleLocalPreviewRealDataAutoload();
+    } else if (shouldRestoreSessionUpload) {
+      setBootState(true, 'Restoring the current browser session...');
+      const restoredSessionUpload = await tryLoadSessionUpload(sessionUpload);
+      if (!restoredSessionUpload && shouldRestorePersistedUpload) {
+        setBootState(true, 'Loading saved local data from this device...');
+        await tryLoadPersistedUpload(persistedUpload);
+      }
     } else if (shouldRestorePersistedUpload) {
       setBootState(true, 'Loading saved local data from this device...');
       await tryLoadPersistedUpload(persistedUpload);
